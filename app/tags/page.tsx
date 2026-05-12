@@ -1,12 +1,43 @@
 import DashboardLayout from "../../components/DashboardLayout";
-import PlaceholderPage from "../../components/PlaceholderPage";
+import TagsClient, { TagRow } from "../../components/TagsClient";
+import { db } from "../../db";
+import { projects } from "../../db/schema";
+import { eq } from "drizzle-orm";
+import { getActiveProjectId } from "../../lib/project-context";
+import { getTags } from "./actions";
 
-export default function Page() {
+export default async function TagsPage() {
+  const activeProjectId = await getActiveProjectId();
+
+  const [project] = await db
+    .select({ workspaceId: projects.workspaceId })
+    .from(projects)
+    .where(eq(projects.id, activeProjectId))
+    .limit(1);
+
+  const workspaceId = project?.workspaceId ?? "00000000-0000-0000-0000-000000000000";
+
+  // Fetch tags with real usage counts from promptTags JOIN
+  const projectTags = await getTags(activeProjectId);
+
+  const rows: TagRow[] = projectTags.map((t) => ({
+    id: t.id,
+    name: t.name,
+    slug: t.slug ?? null,
+    color: t.color,
+    category: t.category ?? null,
+    description: t.description ?? null,
+    usageCount: Number(t.usageCount),
+    createdAt: new Date(t.createdAt),
+    updatedAt: new Date(t.updatedAt),
+  }));
+
   return (
     <DashboardLayout currentPath="/tags">
-      <PlaceholderPage 
-        title="Tags & Taxonomy" 
-        description="Organize your prompts and insights using custom tags. Create a semantic hierarchy for better project management."
+      <TagsClient
+        initialTags={rows}
+        projectId={activeProjectId}
+        workspaceId={workspaceId}
       />
     </DashboardLayout>
   );

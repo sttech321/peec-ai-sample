@@ -5,25 +5,24 @@ import { prompts, topics } from "../../db/schema";
 import { revalidatePath } from "next/cache";
 import { inngest } from "../../inngest/client";
 import { getActiveProjectId, WORKSPACE } from "../../lib/project-context";
+import { runPipelineForAllEngines, type PipelineJob } from "../../lib/run-pipeline";
 
 export async function addPrompt(formData: FormData) {
   const query = formData.get("query") as string;
-  const workspaceId = WORKSPACE; 
-  
+  const workspaceId = WORKSPACE;
+
   if (!query || query.trim() === "") return;
 
-  // Get the currently active project
   const projectId = await getActiveProjectId();
 
-  // Ensure a default topic exists for this project
   let topic = await db.query.topics.findFirst({
-    where: (t, { eq }) => eq(t.projectId, projectId)
+    where: (t, { eq }) => eq(t.projectId, projectId),
   });
   if (!topic) {
     const insertedTopic = await db.insert(topics).values({
       workspaceId,
       projectId,
-      name: "General Topic"
+      name: "General Topic",
     }).returning();
     topic = insertedTopic[0];
   }
@@ -41,23 +40,43 @@ export async function addPrompt(formData: FormData) {
 }
 
 export async function runNow(promptId: string, query: string, selectedEngines?: string[]) {
-  const workspaceId = WORKSPACE; 
-  const engines = selectedEngines && selectedEngines.length > 0 ? selectedEngines : ["ChatGPT", "Claude", "Perplexity", "Gemini", "Groq"];
-  const events = [];
-  const runDate = new Date().toISOString(); // Full timestamp for manual runs to bypass daily idempotency
+  const workspaceId = WORKSPACE;
+  const engines = selectedEngines && selectedEngines.length > 0
+    ? selectedEngines
+    : ["ChatGPT", "Claude", "Perplexity", "Gemini", "Groq"];
 
-  for (const engine of engines) {
-    events.push({
-      name: "prompt.run",
-      data: {
-        workspaceId,
-        promptId,
-        engine,
-        runDate,
-        query
-      }
-    });
+  const runDate = new Date().toISOString();
+
+  const jobs: PipelineJob[] = engines.map((engine) => ({
+    workspaceId,
+    promptId,
+    engine,
+    runDate,
+    query,
+  }));
+
+  // Try Inngest first; fall back to direct inline execution when dev server is not running.
+  try {
+    const events = jobs.map((j) => ({
+      name: "prompt.run" as const,
+      data: j,
+    }));
+    await inngest.send(events);
+  } catch (err: unknown) {
+    const isConnErr =
+      err instanceof Error &&
+      ((err as NodeJS.ErrnoException).code === "ECONNREFUSED" ||
+        (err as NodeJS.ErrnoException).code === "ENOTFOUND" ||
+        err.message?.includes("fetch failed") ||
+        err.message?.includes("ECONNREFUSED"));
+
+    if (!isConnErr) throw err; // re-throw unexpected errors
+
+    console.warn(
+      "[runNow] Inngest dev server unreachable — running pipeline directly.",
+    );
+    await runPipelineForAllEngines(jobs);
+    revalidatePath("/");
+    revalidatePath("/prompts");
   }
-
-  await inngest.send(events);
 }
