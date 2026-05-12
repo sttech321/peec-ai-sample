@@ -1,0 +1,350 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Project Switcher + PEEC Sidebar Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Wrapper ─────────────────────────────────────────────────────────────── */
+.ps-wrapper {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+/* ── Trigger Button ──────────────────────────────────────────────────────── */
+.ps-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.ps-trigger:hover {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.1);
+}
+
+.ps-trigger-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #6366f1;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.ps-trigger-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ps-trigger-chevron {
+  color: #64748b;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.ps-chevron-open {
+  transform: rotate(180deg);
+}
+
+/* ── Dropdown ────────────────────────────────────────────────────────────── */
+.ps-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 240px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+  z-index: 200;
+  padding: 6px 0;
+  animation: psSlideIn 0.15s ease;
+  color: #1e293b;
+}
+
+@keyframes psSlideIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ps-dropdown-email {
+  padding: 8px 14px 6px;
+  font-size: 11px;
+  color: #94a3b8;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 4px;
+}
+
+/* ── Search ──────────────────────────────────────────────────────────────── */
+.ps-search-wrapper {
+  position: relative;
+  padding: 4px 10px;
+}
+
+.ps-search-icon {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+}
+
+.ps-search-input {
+  width: 100%;
+  padding: 6px 8px 6px 26px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #334155;
+  background: #fff;
+  outline: none;
+}
+
+.ps-search-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.1);
+}
+
+.ps-search-input::placeholder {
+  color: #94a3b8;
+}
+
+/* ── Project List ────────────────────────────────────────────────────────── */
+.ps-project-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px 6px;
+}
+
+.ps-project-list::-webkit-scrollbar { width: 4px; }
+.ps-project-list::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 2px;
+}
+
+.ps-project-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.1s;
+  text-align: left;
+}
+
+.ps-project-item:hover {
+  background: #f8fafc;
+}
+
+.ps-project-active {
+  background: #f0f0ff;
+  color: #4338ca;
+}
+
+.ps-project-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 9px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ps-project-active .ps-project-icon {
+  background: #c7d2fe;
+  color: #4338ca;
+}
+
+.ps-project-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ps-project-check {
+  color: #6366f1;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ps-empty {
+  padding: 12px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* ── Add Project ─────────────────────────────────────────────────────────── */
+.ps-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: calc(100% - 12px);
+  margin: 2px 6px;
+  padding: 7px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6366f1;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.ps-add-btn:hover {
+  background: #f0f0ff;
+}
+
+.ps-add-form {
+  padding: 6px 10px;
+  border-top: 1px solid #f1f5f9;
+  margin-top: 4px;
+}
+
+.ps-add-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #334155;
+  outline: none;
+  margin-bottom: 6px;
+}
+
+.ps-add-input:focus {
+  border-color: #6366f1;
+}
+
+.ps-add-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.ps-add-cancel {
+  padding: 4px 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.ps-add-submit {
+  padding: 4px 12px;
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ps-add-submit:hover {
+  background: #4f46e5;
+}
+
+/* ── Logout ──────────────────────────────────────────────────────────────── */
+.ps-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: calc(100% - 12px);
+  margin: 2px 6px;
+  padding: 7px 8px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid #f1f5f9;
+  border-radius: 0 0 6px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.ps-logout-btn:hover {
+  color: #ef4444;
+}
+
+/* ── Sidebar Section Labels ──────────────────────────────────────────────── */
+.sidebar-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 16px 12px 6px;
+}
+
+.sidebar-section-label:first-child {
+  padding-top: 8px;
+}
+
+/* ── Setup Progress ──────────────────────────────────────────────────────── */
+.sidebar-setup {
+  padding: 12px;
+  margin: 0 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.sidebar-setup-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-bottom: 4px;
+}
+
+.sidebar-setup-progress {
+  width: 100%;
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.sidebar-setup-bar {
+  height: 100%;
+  background: #6366f1;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.sidebar-setup-text {
+  font-size: 10px;
+  color: #64748b;
+}

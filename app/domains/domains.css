@@ -1,0 +1,52 @@
+/* ── Domains page extras ───────────────────────────────────────────── */
+.domains-table {
+  font-size: 12.5px;
+}
+
+.domains-th-rank {
+  width: 56px;
+  text-align: left !important;
+  color: #94a3b8 !important;
+}
+
+.domains-td-rank {
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  width: 56px;
+}
+
+.domains-th-source {
+  cursor: pointer;
+  user-select: none;
+}
+
+.domains-th-source:hover,
+.urls-table thead th.urls-th-num:hover {
+  color: #0f172a;
+}
+
+.urls-table thead th.urls-th-num {
+  cursor: pointer;
+  user-select: none;
+}
+
+.domains-sort-arrow {
+  display: inline-block;
+  vertical-align: middle;
+  opacity: 0.5;
+  margin-left: 2px;
+}
+
+.domains-td-source {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 240px;
+}
+
+.domains-source-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0f172a;
+}
