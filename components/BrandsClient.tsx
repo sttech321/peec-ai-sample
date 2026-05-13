@@ -1,349 +1,411 @@
 "use client";
 
-import React, { useState } from "react";
-import { 
-  Search, 
-  Plus, 
-  MoreHorizontal, 
-  Check, 
-  X,
-  ExternalLink,
-  ChevronDown,
-  Info
+import { useState, useMemo } from "react";
+import {
+  Search, Plus, MoreHorizontal, Check, X,
+  ExternalLink, ChevronDown, ChevronUp, Info,
 } from "lucide-react";
-
-import { 
-  deleteBrand, 
-  acceptSuggestion, 
-  rejectSuggestion,
-  createBrand
+import {
+  deleteBrand, acceptSuggestion, rejectSuggestion, createBrand,
 } from "../app/brands/actions";
 
-export default function BrandsClient({ 
-  initialBrands, 
-  initialSuggestions,
-  projectId,
-  workspaceId
-}: { 
-  initialBrands: any[], 
-  initialSuggestions: any[],
-  projectId: string,
-  workspaceId: string
-}) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [brands, setBrands] = useState(initialBrands);
-  const [suggestions, setSuggestions] = useState(initialSuggestions);
-  const [openDeleteMenu, setOpenDeleteMenu] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+// ─── Color palette (matches Peec AI brand colors) ──────────────────────────
+const PALETTE = [
+  "#f59e0b", "#3b82f6", "#eab308", "#f97316", "#ef4444",
+  "#8b5cf6", "#10b981", "#06b6d4", "#ec4899", "#6366f1",
+  "#84cc16", "#14b8a6", "#f43f5e", "#a855f7", "#0ea5e9",
+  "#d97706", "#7c3aed", "#059669", "#dc2626", "#2563eb",
+];
 
-  // Modal form state
-  const [newName, setNewName] = useState("");
-  const [newAliases, setNewAliases] = useState<string[]>([""]);
-  const [newDomains, setNewDomains] = useState<string[]>([""]);
+/** Stable color derived from a brand's UUID */
+function colorFromId(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = ((h << 5) - h) + id.charCodeAt(i);
+    h |= 0;
+  }
+  return PALETTE[Math.abs(h) % PALETTE.length];
+}
 
-  const filteredBrands = brands.filter(b => 
-    b.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    b.domains.some((d: string) => d.toLowerCase().includes(searchTerm.toLowerCase()))
+function initials(name: string): string {
+  return name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("");
+}
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+type SortField = "name" | "aliases" | "domains" | "mentions";
+type SortDir   = "asc" | "desc";
+
+interface Brand {
+  id: string;
+  name: string;
+  isOwn?: boolean;
+  aliases: string[];
+  domains: string[];
+  mentions?: number;
+}
+
+interface Suggestion {
+  id: string;
+  name: string;
+  domain?: string | null;
+  mentions?: number;
+}
+
+// ─── BrandAvatar ─────────────────────────────────────────────────────────────
+function BrandAvatar({ id, name, size = 22 }: { id: string; name: string; size?: number }) {
+  const color = colorFromId(id);
+  return (
+    <span
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: size, height: size, borderRadius: 6, background: color,
+        fontSize: 9, fontWeight: 700, color: "#fff", flexShrink: 0,
+        letterSpacing: 0,
+      }}
+    >
+      {initials(name)}
+    </span>
   );
+}
 
-  const handleDeleteBrand = async (id: string) => {
-    setBrands(prev => prev.filter(b => b.id !== id));
-    setOpenDeleteMenu(null);
+// ─── SortIcon ────────────────────────────────────────────────────────────────
+function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
+  const active = field === sortField;
+  const Icon   = active && sortDir === "asc" ? ChevronUp : ChevronDown;
+  return <Icon size={11} className={`bp-sort-icon${active ? " bp-sort-icon--active" : ""}`} />;
+}
+
+// ─── BrandRow ────────────────────────────────────────────────────────────────
+function BrandRow({ brand, openMenu, onMenu, onDelete }: {
+  brand: Brand;
+  openMenu: string | null;
+  onMenu: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const color = colorFromId(brand.id);
+  return (
+    <tr className="bp-row">
+      <td className="bp-td bp-td--color">
+        <span className="bp-dot" style={{ background: color }} />
+      </td>
+      <td className="bp-td">
+        <div className="bp-name-cell">
+          <BrandAvatar id={brand.id} name={brand.name} />
+          <span className="bp-name-text">{brand.name}</span>
+          {brand.isOwn && <span className="bp-badge-you">You</span>}
+        </div>
+      </td>
+      <td className="bp-td bp-td--muted">{brand.aliases?.join(", ") || "—"}</td>
+      <td className="bp-td bp-td--muted">{brand.domains?.join(", ") || "—"}</td>
+      <td className="bp-td bp-td--num">{(brand.mentions ?? 0).toLocaleString()}</td>
+      <td className="bp-td bp-td--actions">
+        <button
+          className="bp-more-btn"
+          onClick={(e) => { e.stopPropagation(); onMenu(brand.id); }}
+        >
+          <MoreHorizontal size={15} />
+        </button>
+        {openMenu === brand.id && (
+          <div className="bp-popover" onClick={(e) => e.stopPropagation()}>
+            <p className="bp-popover-text">
+              Permanently delete this brand and all associated data.
+            </p>
+            <button className="bp-btn-delete" onClick={() => onDelete(brand.id)}>
+              Delete brand
+            </button>
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+// ─── SuggestionCard ──────────────────────────────────────────────────────────
+function SuggestionCard({ s, onAccept, onReject }: {
+  s: Suggestion;
+  onAccept: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
+  return (
+    <div className="bp-sug-card">
+      <div className="bp-sug-top">
+        <span className="bp-sug-mentions">{(s.mentions ?? 0).toLocaleString()} mentions</span>
+        <div className="bp-sug-btns">
+          <button className="bp-sug-btn bp-sug-btn--reject" title="Reject" onClick={() => onReject(s.id)}>
+            <X size={11} />
+          </button>
+          <button className="bp-sug-btn bp-sug-btn--accept" title="Accept" onClick={() => onAccept(s.id)}>
+            <Check size={11} />
+          </button>
+        </div>
+      </div>
+      <div className="bp-sug-name-row">
+        <BrandAvatar id={s.id} name={s.name} size={20} />
+        <span className="bp-sug-name">{s.name}</span>
+      </div>
+      {s.domain && (
+        <div className="bp-sug-domain">
+          {s.domain}
+          <ExternalLink size={10} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main ────────────────────────────────────────────────────────────────────
+export default function BrandsClient({
+  initialBrands, initialSuggestions, projectId, workspaceId,
+}: {
+  initialBrands: Brand[];
+  initialSuggestions: Suggestion[];
+  projectId: string;
+  workspaceId: string;
+}) {
+  const [brands,      setBrands]      = useState<Brand[]>(initialBrands);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>(initialSuggestions);
+  const [search,      setSearch]      = useState("");
+  const [openMenu,    setOpenMenu]    = useState<string | null>(null);
+  const [modal,       setModal]       = useState(false);
+
+  const [sortField, setSortField] = useState<SortField>("mentions");
+  const [sortDir,   setSortDir]   = useState<SortDir>("desc");
+
+  // modal form
+  const [mName,    setMName]    = useState("");
+  const [mAliases, setMAliases] = useState([""]);
+  const [mDomains, setMDomains] = useState([""]);
+
+  // ── sort ──
+  const handleSort = (f: SortField) => {
+    if (sortField === f) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortField(f); setSortDir(f === "mentions" ? "desc" : "asc"); }
+  };
+
+  const rows = useMemo(() => {
+    const q = search.toLowerCase();
+    const filtered = brands.filter((b) =>
+      b.name.toLowerCase().includes(q) ||
+      b.domains?.some((d) => d.toLowerCase().includes(q)) ||
+      b.aliases?.some((a) => a.toLowerCase().includes(q))
+    );
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "name")    cmp = a.name.localeCompare(b.name);
+      if (sortField === "aliases") cmp = (a.aliases?.[0] ?? "").localeCompare(b.aliases?.[0] ?? "");
+      if (sortField === "domains") cmp = (a.domains?.[0] ?? "").localeCompare(b.domains?.[0] ?? "");
+      if (sortField === "mentions") cmp = (a.mentions ?? 0) - (b.mentions ?? 0);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [brands, search, sortField, sortDir]);
+
+  // ── handlers ──
+  const doDelete = async (id: string) => {
+    setBrands((p) => p.filter((b) => b.id !== id));
+    setOpenMenu(null);
     await deleteBrand(id);
   };
 
-  const handleCreateBrand = async () => {
-    if (!newName.trim()) return;
-    
+  const doCreate = async () => {
+    if (!mName.trim()) return;
     const data = {
-      projectId,
-      workspaceId,
-      name: newName.trim(),
-      aliases: newAliases.filter(a => a.trim() !== ""),
-      domains: newDomains.filter(d => d.trim() !== ""),
+      projectId, workspaceId,
+      name: mName.trim(),
+      aliases: mAliases.filter((a) => a.trim()),
+      domains: mDomains.filter((d) => d.trim()),
     };
-
-    // Optimistic update
-    setBrands(prev => [...prev, { ...data, id: Math.random().toString(), isOwn: false, mentions: 0 }]);
-    setIsModalOpen(false);
-    
-    // Reset form
-    setNewName("");
-    setNewAliases([""]);
-    setNewDomains([""]);
-
+    setBrands((p) => [...p, { ...data, id: crypto.randomUUID(), isOwn: false, mentions: 0 }]);
+    setModal(false); setMName(""); setMAliases([""]); setMDomains([""]);
     await createBrand(data);
   };
 
-  const handleAcceptSuggestion = async (id: string) => {
-    const suggestion = suggestions.find(s => s.id === id);
-    if (!suggestion) return;
-    
-    setSuggestions(prev => prev.filter(s => s.id !== id));
-    setBrands(prev => [...prev, {
-      ...suggestion,
-      id: Math.random().toString(),
-      isOwn: false,
-      aliases: [suggestion.name],
-      domains: suggestion.domain ? [suggestion.domain] : []
+  const doAccept = async (id: string) => {
+    const s = suggestions.find((x) => x.id === id);
+    if (!s) return;
+    setSuggestions((p) => p.filter((x) => x.id !== id));
+    setBrands((p) => [...p, {
+      id: crypto.randomUUID(), name: s.name, isOwn: false,
+      aliases: [s.name], domains: s.domain ? [s.domain] : [], mentions: s.mentions ?? 0,
     }]);
-
     await acceptSuggestion(id);
   };
 
-  const handleRejectSuggestion = async (id: string) => {
-    setSuggestions(prev => prev.filter(s => s.id !== id));
+  const doReject = async (id: string) => {
+    setSuggestions((p) => p.filter((x) => x.id !== id));
     await rejectSuggestion(id);
   };
 
+  // ── render ──
   return (
-    <div className="brands-container" onClick={() => setOpenDeleteMenu(null)}>
-      <div className="brands-main">
-        <div className="brands-header">
-          <h1 className="brands-title">Your brands <span>· {brands.length}</span></h1>
-          <div className="brands-actions">
-            <button className="btn-add-brand" onClick={() => setIsModalOpen(true)}>
-              <Plus size={16} />
-              Add brand
-            </button>
+    <div className="bp-page" onClick={() => setOpenMenu(null)}>
+
+      {/* ── Top bar (full-width) ── */}
+      <div className="bp-topbar">
+        <h1 className="bp-title">Your brands <span className="bp-title-count">· {brands.length}</span></h1>
+        <button className="bp-btn-add" onClick={() => setModal(true)}>
+          <Plus size={14} strokeWidth={2.5} />
+          Add brand
+        </button>
+      </div>
+
+      {/* ── Two-column body ── */}
+      <div className="bp-body">
+
+        {/* Left column: search + table */}
+        <div className="bp-main">
+          {/* Search */}
+          <div className="bp-search-wrap">
+            <Search size={13} className="bp-search-icon" />
+            <input
+              className="bp-search-input"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* Table */}
+          <div className="bp-table-wrap">
+            {brands.length === 0 ? (
+              <div className="bp-empty">
+                <div className="bp-empty-icon">
+                  <Search size={20} className="text-zinc-400" />
+                </div>
+                <h2 className="bp-empty-h">Track your first competitor</h2>
+                <p className="bp-empty-p">
+                  Add brands to track how often they appear in AI-generated answers
+                  vs. your own visibility.
+                </p>
+                <button className="bp-btn-add" onClick={() => setModal(true)}>
+                  <Plus size={14} /> Add brand
+                </button>
+              </div>
+            ) : (
+              <table className="bp-table">
+                <thead>
+                  <tr>
+                    <th className="bp-th bp-th--nosort" style={{ width: 44 }}>Brand color</th>
+                    <th className="bp-th" onClick={() => handleSort("name")}>
+                      Display name <SortIcon field="name" sortField={sortField} sortDir={sortDir} />
+                    </th>
+                    <th className="bp-th" onClick={() => handleSort("aliases")}>
+                      Tracked names <SortIcon field="aliases" sortField={sortField} sortDir={sortDir} />
+                    </th>
+                    <th className="bp-th" onClick={() => handleSort("domains")}>
+                      Domains <SortIcon field="domains" sortField={sortField} sortDir={sortDir} />
+                    </th>
+                    <th className="bp-th" onClick={() => handleSort("mentions")}>
+                      Mentions <SortIcon field="mentions" sortField={sortField} sortDir={sortDir} />
+                    </th>
+                    <th className="bp-th bp-th--nosort" style={{ width: 40 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((brand) => (
+                    <BrandRow
+                      key={brand.id}
+                      brand={brand}
+                      openMenu={openMenu}
+                      onMenu={(id) => setOpenMenu(openMenu === id ? null : id)}
+                      onDelete={doDelete}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 
-        <div className="brands-search-wrapper">
-          <Search className="brands-search-icon" size={16} />
-          <input 
-            type="text" 
-            className="brands-search-input" 
-            placeholder="Search..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
+        {/* Right column: suggestions */}
+        <div className="bp-sidebar">
+          <div className="bp-sidebar-head">
+            <span className="bp-sidebar-title">Brand suggestions</span>
+            <span className="bp-sidebar-count">· {suggestions.length}</span>
+            <Info size={13} className="bp-sidebar-info" />
+          </div>
 
-        <div className="brands-table-container">
-          {brands.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-6">
-                <Search size={32} className="text-slate-600" />
-              </div>
-              <h2 className="text-xl font-bold text-white mb-2">Add more competitors</h2>
-              <p className="text-slate-400 max-w-sm mb-8">
-                Actions work best when you're tracking enough competitors and brands. 
-                Add more to see where you're missing out.
-              </p>
-              <button 
-                className="px-6 py-2 bg-white text-black rounded-lg font-bold hover:bg-white/90 transition-all flex items-center gap-2"
-                onClick={() => setIsModalOpen(true)}
-              >
-                <Plus size={18} />
-                Add competitors
-              </button>
-            </div>
-          ) : (
-            <table className="brands-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '40px' }}>Brand color</th>
-                  <th>Display name <ChevronDown size={12} className="inline ml-1" /></th>
-                  <th>Tracked names <ChevronDown size={12} className="inline ml-1" /></th>
-                  <th>Domains <ChevronDown size={12} className="inline ml-1" /></th>
-                  <th>Mentions <ChevronDown size={12} className="inline ml-1" /></th>
-                  <th style={{ width: '40px' }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredBrands.map((brand, i) => (
-                  <tr key={brand.id}>
-                    <td>
-                      <div className="brand-color-dot" style={{ background: i === 0 ? '#fbbf24' : '#64748b' }}></div>
-                    </td>
-                    <td>
-                      <div className="brand-name-cell">
-                        {brand.name}
-                        {brand.isOwn && <span className="tag-you">You</span>}
-                      </div>
-                    </td>
-                    <td>{brand.aliases.join(", ")}</td>
-                    <td>{brand.domains.join(", ")}</td>
-                    <td>{brand.mentions || 0}</td>
-                    <td className="relative">
-                      <button 
-                        className="text-slate-500 hover:text-slate-300"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenDeleteMenu(openDeleteMenu === brand.id ? null : brand.id);
-                        }}
-                      >
-                        <MoreHorizontal size={16} />
-                      </button>
-
-                      {openDeleteMenu === brand.id && (
-                        <div 
-                          className="delete-popover"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <p className="text-[11px] text-slate-400 mb-2">
-                            Permanently delete this brand and all associated data.
-                          </p>
-                          <button 
-                            className="btn-delete-confirm"
-                            onClick={() => handleDeleteBrand(brand.id)}
-                          >
-                            Delete brand
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <div className="bp-sidebar-cards">
+            {suggestions.length === 0 ? (
+              <p className="bp-sidebar-empty">No suggestions yet.</p>
+            ) : (
+              suggestions.map((s) => (
+                <SuggestionCard key={s.id} s={s} onAccept={doAccept} onReject={doReject} />
+              ))
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="brands-sidebar">
-        <div className="sidebar-section-title">
-          Brand suggestions <span>· {suggestions.length}</span>
-          <Info size={14} className="text-slate-500" />
-        </div>
-        
-        <div className="flex flex-col gap-3">
-          {suggestions.map((suggestion) => (
-            <div key={suggestion.id} className="suggestion-card">
-              <div className="suggestion-header">
-                <span className="suggestion-mentions">{suggestion.mentions} mentions</span>
-                <div className="suggestion-actions">
-                  <button 
-                    className="btn-suggestion btn-reject"
-                    onClick={() => handleRejectSuggestion(suggestion.id)}
-                  >
-                    <X size={14} />
-                  </button>
-                  <button 
-                    className="btn-suggestion btn-accept"
-                    onClick={() => handleAcceptSuggestion(suggestion.id)}
-                  >
-                    <Check size={14} />
-                  </button>
-                </div>
-              </div>
-              <div className="suggestion-name">{suggestion.name}</div>
-              <div className="suggestion-domain flex items-center gap-1">
-                {suggestion.domain}
-                <ExternalLink size={10} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Add Brand Modal */}
-      {isModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">Add brand</h2>
-              <button className="modal-close" onClick={() => setIsModalOpen(false)}>
-                <X size={20} />
+      {/* ── Add Brand Modal ── */}
+      {modal && (
+        <div className="bp-modal-overlay" onClick={() => setModal(false)}>
+          <div className="bp-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="bp-modal-header">
+              <span className="bp-modal-title">Add brand</span>
+              <button className="bp-modal-close" onClick={() => setModal(false)}>
+                <X size={17} />
               </button>
             </div>
 
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label flex items-center gap-1">
-                  Display Name <Info size={14} className="text-slate-500" />
+            <div className="bp-modal-body">
+              {/* Display name */}
+              <div className="bp-field">
+                <label className="bp-label">
+                  Display Name <Info size={12} className="text-zinc-400" />
                 </label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="e.g. My Awesome Brand"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                />
+                <input className="bp-input" placeholder="e.g. Acme Corp"
+                  value={mName} onChange={(e) => setMName(e.target.value)} />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Tracked Name</label>
-                <p className="form-help">
+              {/* Tracked names */}
+              <div className="bp-field">
+                <label className="bp-label">Tracked Name</label>
+                <p className="bp-hint">
                   Only the tracked name and its aliases are matched in an AI answer to identify the brand.
                 </p>
-                <div className="flex flex-col gap-2">
-                  {newAliases.map((alias, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="Tracked Name"
-                        value={alias}
-                        onChange={(e) => {
-                          const updated = [...newAliases];
-                          updated[index] = e.target.value;
-                          setNewAliases(updated);
-                        }}
-                      />
-                      {newAliases.length > 1 && (
-                        <button 
-                          className="text-slate-500 hover:text-rose-500"
-                          onClick={() => setNewAliases(newAliases.filter((_, i) => i !== index))}
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button 
-                    className="text-indigo-400 text-xs font-medium flex items-center gap-1 mt-1 hover:text-indigo-300 transition-colors"
-                    onClick={() => setNewAliases([...newAliases, ""])}
-                  >
-                    <Plus size={14} /> Add Alias
-                  </button>
-                </div>
+                {mAliases.map((a, i) => (
+                  <div key={i} className="bp-field-row">
+                    <input className="bp-input" placeholder="Tracked Name" value={a}
+                      onChange={(e) => {
+                        const n = [...mAliases]; n[i] = e.target.value; setMAliases(n);
+                      }} />
+                    {mAliases.length > 1 && (
+                      <button className="bp-field-rm" onClick={() => setMAliases(mAliases.filter((_, j) => j !== i))}>
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button className="bp-field-add" onClick={() => setMAliases([...mAliases, ""])}>
+                  <Plus size={12} /> Add alias
+                </button>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Domains</label>
-                <div className="flex flex-col gap-2">
-                  {newDomains.map((domain, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="Domain"
-                        value={domain}
-                        onChange={(e) => {
-                          const updated = [...newDomains];
-                          updated[index] = e.target.value;
-                          setNewDomains(updated);
-                        }}
-                      />
-                      {newDomains.length > 1 && (
-                        <button 
-                          className="text-slate-500 hover:text-rose-500"
-                          onClick={() => setNewDomains(newDomains.filter((_, i) => i !== index))}
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button 
-                    className="text-indigo-400 text-xs font-medium flex items-center gap-1 mt-1 hover:text-indigo-300 transition-colors"
-                    onClick={() => setNewDomains([...newDomains, ""])}
-                  >
-                    <Plus size={14} /> Add alternative domain
-                  </button>
-                </div>
+              {/* Domains */}
+              <div className="bp-field">
+                <label className="bp-label">Domains</label>
+                {mDomains.map((d, i) => (
+                  <div key={i} className="bp-field-row">
+                    <input className="bp-input" placeholder="e.g. example.com" value={d}
+                      onChange={(e) => {
+                        const n = [...mDomains]; n[i] = e.target.value; setMDomains(n);
+                      }} />
+                    {mDomains.length > 1 && (
+                      <button className="bp-field-rm" onClick={() => setMDomains(mDomains.filter((_, j) => j !== i))}>
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button className="bp-field-add" onClick={() => setMDomains([...mDomains, ""])}>
+                  <Plus size={12} /> Add domain
+                </button>
               </div>
             </div>
 
-            <div className="modal-footer">
-              <button className="btn-cancel" onClick={() => setIsModalOpen(false)}>
-                Cancel
-              </button>
-              <button className="btn-create" onClick={handleCreateBrand}>
-                Create
-              </button>
+            <div className="bp-modal-footer">
+              <button className="bp-btn-cancel" onClick={() => setModal(false)}>Cancel</button>
+              <button className="bp-btn-create" onClick={doCreate}>Create</button>
             </div>
           </div>
         </div>

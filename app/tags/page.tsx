@@ -5,6 +5,7 @@ import { projects } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import { getTags } from "./actions";
+import "./tags.css";
 
 export default async function TagsPage() {
   const activeProjectId = await getActiveProjectId();
