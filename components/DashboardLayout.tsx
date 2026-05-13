@@ -10,7 +10,15 @@ import { getAllProjects, getActiveProject } from "../lib/project-context";
 import { switchProject, createProject } from "../app/projects/actions";
 import "../app/globals-sidebar.css";
 
-export default async function DashboardLayout({ children, currentPath }: { children: React.ReactNode, currentPath: string }) {
+export default async function DashboardLayout({
+  children,
+  currentPath,
+  headerAction,
+}: {
+  children: React.ReactNode;
+  currentPath: string;
+  headerAction?: React.ReactNode;
+}) {
   const allProjects = await getAllProjects();
   const activeProject = await getActiveProject();
 
@@ -129,6 +137,11 @@ export default async function DashboardLayout({ children, currentPath }: { child
             <button className="text-zinc-500 hover:text-zinc-900 transition-colors">
               <Settings className="w-5 h-5" />
             </button>
+            {headerAction && (
+              <div className="pl-2 border-l border-zinc-200">
+                {headerAction}
+              </div>
+            )}
           </div>
         </header>
 
