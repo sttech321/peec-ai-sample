@@ -1,7 +1,7 @@
 import DashboardLayout from "../../components/DashboardLayout";
 import BrandsClient from "../../components/BrandsClient";
 import { db } from "../../db";
-import { brands, brandSuggestions, projects } from "../../db/schema";
+import { brands, brandSuggestions, brandMentions, projects } from "../../db/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import "./brands.css";
@@ -15,10 +15,31 @@ export default async function BrandsPage() {
     .where(eq(projects.id, activeProjectId))
     .limit(1);
 
+  // Join brandMentions to get real mention counts per brand
   const projectBrands = await db
-    .select()
+    .select({
+      id: brands.id,
+      workspaceId: brands.workspaceId,
+      projectId: brands.projectId,
+      name: brands.name,
+      isOwn: brands.isOwn,
+      aliases: brands.aliases,
+      domains: brands.domains,
+      mentions: drizzleSql<number>`cast(count(${brandMentions.id}) as int)`,
+    })
     .from(brands)
-    .where(eq(brands.projectId, activeProjectId));
+    .leftJoin(brandMentions, eq(brandMentions.brandId, brands.id))
+    .where(eq(brands.projectId, activeProjectId))
+    .groupBy(
+      brands.id,
+      brands.workspaceId,
+      brands.projectId,
+      brands.name,
+      brands.isOwn,
+      brands.aliases,
+      brands.domains,
+    )
+    .orderBy(drizzleSql`count(${brandMentions.id}) desc`);
 
   const suggestions = await db
     .select()
