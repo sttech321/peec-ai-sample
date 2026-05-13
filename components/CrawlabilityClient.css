@@ -1,0 +1,73 @@
+/* Extra styles scoped to CrawlabilityClient */
+
+.cw-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.cw-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cw-stat-chip:hover { background: #fafafa; border-color: #d4d4d8; }
+.cw-stat-chip.cw-chip-active { background: #18181b; color: #fff; border-color: #18181b; }
+.cw-stat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cw-status-dot-allowed  { background: #16a34a; }
+.cw-status-dot-blocked  { background: #dc2626; }
+.cw-status-dot-partial  { background: #b45309; }
+.cw-status-dot-unknown  { background: #a1a1aa; }
+.cw-stat-num {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cw-stat-label-sm {
+  font-size: 12px;
+  color: #71717a;
+}
+.cw-stat-chip.cw-chip-active .cw-stat-label-sm,
+.cw-stat-chip.cw-chip-active .cw-stat-dot { color: #d4d4d8; }
+
+/* Search in top bar (reuse ci-search style) */
+.cw-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  width: 200px;
+  font-size: 13px;
+}
+.cw-search input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: #18181b;
+  width: 100%;
+}
+.cw-search input::placeholder { color: #a1a1aa; }
+
+/* Spin animation for reload button */
+@keyframes cw-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.cw-spin { animation: cw-spin 0.8s linear infinite; }

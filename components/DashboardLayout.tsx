@@ -88,7 +88,7 @@ export default async function DashboardLayout({
         </nav>
 
         {/* Setup Progress */}
-        <div className="px-3 pb-2">
+        {/* <div className="px-3 pb-2">
           <div className="sidebar-setup">
             <div className="sidebar-setup-title">
               Get set up <span className="sidebar-setup-count">· {allProjects.length}/{Math.max(5, allProjects.length)}</span>
@@ -100,7 +100,7 @@ export default async function DashboardLayout({
               Organize your prompts and insights into themes.
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Refer & Earn */}
         <div className="border-t border-zinc-100 px-4 py-3">
