@@ -4,7 +4,17 @@
       "Bash(Get-ChildItem -Path \"d:\\\\peec ai 2026\\\\peec-ai-sample\" -Recurse -Depth 2)",
       "Bash(Select-Object FullName)",
       "PowerShell(head -150)",
-      "WebFetch(domain:app.peec.ai)"
+      "WebFetch(domain:app.peec.ai)",
+      "Read(//c/Users/Admin/Downloads/**)",
+      "Bash(node -e \"const { Square } = require\\('lucide-react'\\); console.log\\(typeof Square\\);\")",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000/earned)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/earned)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/owned)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/impact)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/crawlability)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/crawl-insights)"
     ]
   }
 }

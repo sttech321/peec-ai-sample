@@ -978,10 +978,14 @@
 .pp-volume-bar-on { background: #6366f1; }
 
 /* Tags */
+.pp-tag-cell-wrap {
+  position: relative;
+}
 .pp-tags-cell {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  align-items: center;
 }
 .pp-tag-pill {
   display: inline-flex;
@@ -991,6 +995,15 @@
   font-weight: 500;
   border-radius: 6px;
   white-space: nowrap;
+}
+.pp-tag-pill-btn {
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.pp-tag-pill-btn:hover {
+  filter: brightness(0.95);
+  transform: translateY(-1px);
 }
 .pp-add-tags {
   display: inline-flex;
@@ -1009,6 +1022,121 @@
   background: #fafafa;
   color: #3f3f46;
   border-color: #d4d4d8;
+}
+.pp-add-tags-small {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+/* Inline tag-assignment popover */
+.pp-tag-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.10);
+  z-index: 40;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pp-tag-popover-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fafafa;
+}
+.pp-tag-popover-search svg { color: #a1a1aa; flex-shrink: 0; }
+.pp-tag-popover-search input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 12px;
+  color: #18181b;
+}
+.pp-tag-popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.pp-tag-popover-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 5px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.pp-tag-popover-row:hover { background: #fafafa; }
+.pp-tag-popover-row:disabled { opacity: 0.5; cursor: not-allowed; }
+.pp-tag-popover-check { color: #6366f1; }
+.pp-tag-popover-create {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid #f4f4f5;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6366f1;
+  cursor: pointer;
+}
+.pp-tag-popover-create:hover { background: #fafafa; }
+.pp-tag-popover-create strong { font-weight: 600; }
+
+/* Or / And toggle inside tags filter dropdown */
+.pp-tagop-toggle {
+  display: flex;
+  background: #f4f4f5;
+  border-radius: 6px;
+  padding: 2px;
+  margin: 4px 0;
+  gap: 2px;
+}
+.pp-tagop-btn {
+  flex: 1;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #71717a;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.pp-tagop-btn:hover { color: #18181b; }
+.pp-tagop-btn-active {
+  background: #fff;
+  color: #18181b;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* Colored pill style for the tag filter dropdown rows */
+.pp-dd-check-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
 /* Location */

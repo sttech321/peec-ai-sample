@@ -15,8 +15,6 @@ export async function getTags(projectId: string) {
       name: tags.name,
       slug: tags.slug,
       color: tags.color,
-      category: tags.category,
-      description: tags.description,
       usageCount: sql<number>`cast(count(${promptTags.id}) as int)`,
       createdAt: tags.createdAt,
       updatedAt: tags.updatedAt,
@@ -31,8 +29,6 @@ export async function getTags(projectId: string) {
       tags.name,
       tags.slug,
       tags.color,
-      tags.category,
-      tags.description,
       tags.createdAt,
       tags.updatedAt,
     )
@@ -44,29 +40,30 @@ export async function createTag(data: {
   workspaceId: string;
   name: string;
   color?: string;
-  category?: string;
-  description?: string;
 }) {
   const slug = data.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
   await db.insert(tags).values({
-    ...data,
+    projectId: data.projectId,
+    workspaceId: data.workspaceId,
+    name: data.name,
     slug,
     color: data.color ?? "gray",
   });
   revalidatePath("/tags");
+  revalidatePath("/prompts");
 }
 
 export async function updateTag(id: string, data: {
   name?: string;
   color?: string;
-  category?: string;
-  description?: string;
 }) {
   await db.update(tags).set(data).where(eq(tags.id, id));
   revalidatePath("/tags");
+  revalidatePath("/prompts");
 }
 
 export async function deleteTag(id: string) {
   await db.delete(tags).where(eq(tags.id, id));
   revalidatePath("/tags");
+  revalidatePath("/prompts");
 }

@@ -26,8 +26,6 @@ export default async function TagsPage() {
     name: t.name,
     slug: t.slug ?? null,
     color: t.color,
-    category: t.category ?? null,
-    description: t.description ?? null,
     usageCount: Number(t.usageCount),
     createdAt: new Date(t.createdAt),
     updatedAt: new Date(t.updatedAt),

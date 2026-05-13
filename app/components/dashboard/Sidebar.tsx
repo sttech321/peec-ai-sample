@@ -133,7 +133,7 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
-
+{/* 
       <div className="m-3 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
         <div className="text-[13px] font-semibold tracking-tight text-zinc-900">
           Get set up <span className="text-zinc-400">· 3/5</span>
@@ -144,7 +144,7 @@ export function Sidebar() {
         <p className="mt-2 text-[13px] leading-snug text-zinc-500">
           Organize your prompts and insights into themes.
         </p>
-      </div>
+      </div> */}
 
       <div className="border-t border-zinc-100 px-4 py-3">
         <a href="#" className="flex items-center gap-2 text-[14px] font-normal text-zinc-700 hover:text-zinc-900">

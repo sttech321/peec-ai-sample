@@ -59,9 +59,6 @@ export const tags = pgTable("tags", {
   name: varchar("name", { length: 100 }).notNull(),
   slug: varchar("slug", { length: 100 }),
   color: varchar("color", { length: 50 }).default("gray").notNull(),
-  category: varchar("category", { length: 100 }),
-  description: text("description"),
-  usageCount: integer("usage_count").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({

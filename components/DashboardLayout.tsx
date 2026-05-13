@@ -10,7 +10,15 @@ import { getAllProjects, getActiveProject } from "../lib/project-context";
 import { switchProject, createProject } from "../app/projects/actions";
 import "../app/globals-sidebar.css";
 
-export default async function DashboardLayout({ children, currentPath }: { children: React.ReactNode, currentPath: string }) {
+export default async function DashboardLayout({
+  children,
+  currentPath,
+  headerAction,
+}: {
+  children: React.ReactNode;
+  currentPath: string;
+  headerAction?: React.ReactNode;
+}) {
   const allProjects = await getAllProjects();
   const activeProject = await getActiveProject();
 
@@ -80,7 +88,7 @@ export default async function DashboardLayout({ children, currentPath }: { child
         </nav>
 
         {/* Setup Progress */}
-        <div className="px-3 pb-2">
+        {/* <div className="px-3 pb-2">
           <div className="sidebar-setup">
             <div className="sidebar-setup-title">
               Get set up <span className="sidebar-setup-count">· {allProjects.length}/{Math.max(5, allProjects.length)}</span>
@@ -92,7 +100,7 @@ export default async function DashboardLayout({ children, currentPath }: { child
               Organize your prompts and insights into themes.
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Refer & Earn */}
         <div className="border-t border-zinc-100 px-4 py-3">
@@ -129,6 +137,11 @@ export default async function DashboardLayout({ children, currentPath }: { child
             <button className="text-zinc-500 hover:text-zinc-900 transition-colors">
               <Settings className="w-5 h-5" />
             </button>
+            {headerAction && (
+              <div className="pl-2 border-l border-zinc-200">
+                {headerAction}
+              </div>
+            )}
           </div>
         </header>
 

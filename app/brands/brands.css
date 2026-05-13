@@ -385,6 +385,12 @@
   background: #ecfdf5;
 }
 
+/* When favicon loads, img sits inside a light container — keep it crisp */
+.bp-name-cell span[style*="overflow: hidden"] img,
+.bp-sug-name-row span[style*="overflow: hidden"] img {
+  image-rendering: -webkit-optimize-contrast;
+}
+
 .bp-sug-name-row {
   display: flex;
   align-items: center;

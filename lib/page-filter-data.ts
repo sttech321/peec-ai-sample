@@ -79,9 +79,8 @@ export async function getPageFilterData(projectId: string) {
     domain: b.domains?.[0] ?? guessBrandDomain(b.name),
   }));
 
-  // Note: don't select tags.color — column not in live DB. Derive client-side.
   const tagRows = await db
-    .select({ id: tags.id, name: tags.name })
+    .select({ id: tags.id, name: tags.name, color: tags.color })
     .from(tags)
     .where(eq(tags.projectId, projectId))
     .orderBy(tags.name);
@@ -89,7 +88,7 @@ export async function getPageFilterData(projectId: string) {
   const availableTags = tagRows.map((t) => ({
     id: t.id,
     name: t.name,
-    color: deriveTagColor(t.name),
+    color: t.color || "gray",
   }));
 
   return { projectBrands, availableTags };

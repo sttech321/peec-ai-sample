@@ -102,7 +102,7 @@ export default function UrlsClient({
     );
   };
 
-  // ── Resolve "your brand" so we can show "Yes/No" in the "<brand> mentioned" column
+  
   const yourBrand = useMemo(() => {
     if (ownBrandName) return ownBrandName;
     const explicit = projectBrands.find((b) => b.isOwn);

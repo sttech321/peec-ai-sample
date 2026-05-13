@@ -1,13 +1,14 @@
 import DashboardLayout from "../../components/DashboardLayout";
-import PlaceholderPage from "../../components/PlaceholderPage";
+import CrawlInsightsClient from "../../components/CrawlInsightsClient";
+import { getActiveProject } from "../../lib/project-context";
+import "./crawl-insights.css";
 
-export default function Page() {
+export default async function Page() {
+  const project = await getActiveProject();
+
   return (
     <DashboardLayout currentPath="/crawl-insights">
-      <PlaceholderPage 
-        title="Crawl Insights" 
-        description="Monitor how AI agents and search crawlers interact with your website. Identify crawl frequency and access patterns."
-      />
+      <CrawlInsightsClient projectName={project?.name ?? "Your Project"} />
     </DashboardLayout>
   );
 }

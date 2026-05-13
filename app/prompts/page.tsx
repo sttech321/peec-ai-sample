@@ -11,7 +11,13 @@ import {
   promptTags,
   projects,
 } from "../../db/schema";
-import { addPrompt, runNow, createTopic } from "./actions";
+import {
+  addPrompt,
+  runNow,
+  createTopic,
+  assignTagToPromptByName,
+  removeTagFromPrompt,
+} from "./actions";
 import { addBrand } from "../actions/brands";
 import { eq, sql } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
@@ -118,13 +124,12 @@ export default async function PromptsPage() {
   brandsByPrompt.forEach((arr) => arr.sort((a, b) => b.count - a.count));
 
   // ── 4. Tags per prompt ─────────────────────────────────────────────────────
-  // Note: don't select tags.color — the column isn't in the live DB even though
-  // it's declared in schema.ts. Color is derived client-side from the tag name.
   const promptTagsRaw = await db
     .select({
       promptId: promptTags.promptId,
       tagId: tags.id,
       tagName: tags.name,
+      tagColor: tags.color,
     })
     .from(promptTags)
     .innerJoin(tags, eq(promptTags.tagId, tags.id))
@@ -134,7 +139,7 @@ export default async function PromptsPage() {
   const tagsByPrompt = new Map<string, PromptTag[]>();
   for (const t of promptTagsRaw) {
     const arr = tagsByPrompt.get(t.promptId) ?? [];
-    arr.push({ id: t.tagId, name: t.tagName, color: deriveTagColor(t.tagName) });
+    arr.push({ id: t.tagId, name: t.tagName, color: t.tagColor || "gray" });
     tagsByPrompt.set(t.promptId, arr);
   }
 
@@ -159,7 +164,7 @@ export default async function PromptsPage() {
 
   // ── 5. All tags in the project (for filter dropdown) ───────────────────────
   const allTagsRaw = await db
-    .select({ id: tags.id, name: tags.name })
+    .select({ id: tags.id, name: tags.name, color: tags.color })
     .from(tags)
     .where(eq(tags.projectId, activeProjectId))
     .orderBy(tags.name);
@@ -167,7 +172,7 @@ export default async function PromptsPage() {
   const allTags = allTagsRaw.map((t) => ({
     id: t.id,
     name: t.name,
-    color: deriveTagColor(t.name),
+    color: t.color || "gray",
   }));
 
   // ── 6. Topics list with prompt counts ──────────────────────────────────────
@@ -295,6 +300,8 @@ export default async function PromptsPage() {
         runNowAction={runNow}
         addBrandAction={addBrand}
         createTopicAction={createTopic}
+        assignTagAction={assignTagToPromptByName}
+        removeTagAction={removeTagFromPrompt}
       />
     </DashboardLayout>
   );
