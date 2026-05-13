@@ -1,5 +1,7 @@
 import DashboardLayout from "../../components/DashboardLayout";
 import BrandsClient from "../../components/BrandsClient";
+import AddBrandTrigger from "../../components/AddBrandTrigger";
+import { BrandsModalProvider } from "../../lib/brands-modal-context";
 import { db } from "../../db";
 import { brands, brandSuggestions, brandMentions, projects } from "../../db/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
@@ -15,7 +17,6 @@ export default async function BrandsPage() {
     .where(eq(projects.id, activeProjectId))
     .limit(1);
 
-  // Join brandMentions to get real mention counts per brand
   const projectBrands = await db
     .select({
       id: brands.id,
@@ -48,13 +49,18 @@ export default async function BrandsPage() {
     .orderBy(drizzleSql`${brandSuggestions.mentions} DESC`);
 
   return (
-    <DashboardLayout currentPath="/brands">
-      <BrandsClient
-        initialBrands={projectBrands}
-        initialSuggestions={suggestions}
-        projectId={activeProjectId}
-        workspaceId={project?.workspaceId || "00000000-0000-0000-0000-000000000000"}
-      />
-    </DashboardLayout>
+    <BrandsModalProvider>
+      <DashboardLayout
+        currentPath="/brands"
+        headerAction={<AddBrandTrigger />}
+      >
+        <BrandsClient
+          initialBrands={projectBrands}
+          initialSuggestions={suggestions}
+          projectId={activeProjectId}
+          workspaceId={project?.workspaceId || "00000000-0000-0000-0000-000000000000"}
+        />
+      </DashboardLayout>
+    </BrandsModalProvider>
   );
 }

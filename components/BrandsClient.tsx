@@ -8,6 +8,7 @@ import {
 import {
   deleteBrand, acceptSuggestion, rejectSuggestion, createBrand,
 } from "../app/brands/actions";
+import { useBrandsModal } from "../lib/brands-modal-context";
 
 // ─── Color palette (matches Peec AI brand colors) ──────────────────────────
 const PALETTE = [
@@ -52,18 +53,47 @@ interface Suggestion {
 }
 
 // ─── BrandAvatar ─────────────────────────────────────────────────────────────
-function BrandAvatar({ id, name, size = 22 }: { id: string; name: string; size?: number }) {
+// Tries to load the real favicon for `domain`; falls back to a colored-initial
+// square if the domain is missing or the favicon fails to load.
+function BrandAvatar({
+  id, name, domain, size = 22,
+}: {
+  id: string;
+  name: string;
+  domain?: string | null;
+  size?: number;
+}) {
+  const [err, setErr] = useState(false);
   const color = colorFromId(id);
+  // Normalise domain: strip protocol/path so the favicon service gets just the hostname
+  const host = domain ? domain.replace(/^https?:\/\//, "").split("/")[0] : null;
+  const faviconSrc = host && !err
+    ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`
+    : null;
+
   return (
     <span
       style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center",
-        width: size, height: size, borderRadius: 6, background: color,
-        fontSize: 9, fontWeight: 700, color: "#fff", flexShrink: 0,
-        letterSpacing: 0,
+        width: size, height: size, borderRadius: 6, flexShrink: 0,
+        overflow: "hidden",
+        background: faviconSrc ? "#f3f4f6" : color,
       }}
     >
-      {initials(name)}
+      {faviconSrc ? (
+        <img
+          src={faviconSrc}
+          alt=""
+          width={size - 2}
+          height={size - 2}
+          style={{ objectFit: "contain", display: "block" }}
+          onError={() => setErr(true)}
+        />
+      ) : (
+        <span style={{ fontSize: 9, fontWeight: 700, color: "#fff", letterSpacing: 0 }}>
+          {initials(name)}
+        </span>
+      )}
     </span>
   );
 }
@@ -90,7 +120,7 @@ function BrandRow({ brand, openMenu, onMenu, onDelete }: {
       </td>
       <td className="bp-td">
         <div className="bp-name-cell">
-          <BrandAvatar id={brand.id} name={brand.name} />
+          <BrandAvatar id={brand.id} name={brand.name} domain={brand.domains?.[0]} />
           <span className="bp-name-text">{brand.name}</span>
           {brand.isOwn && <span className="bp-badge-you">You</span>}
         </div>
@@ -140,7 +170,7 @@ function SuggestionCard({ s, onAccept, onReject }: {
         </div>
       </div>
       <div className="bp-sug-name-row">
-        <BrandAvatar id={s.id} name={s.name} size={20} />
+        <BrandAvatar id={s.id} name={s.name} domain={s.domain} size={20} />
         <span className="bp-sug-name">{s.name}</span>
       </div>
       {s.domain && (
@@ -166,7 +196,7 @@ export default function BrandsClient({
   const [suggestions, setSuggestions] = useState<Suggestion[]>(initialSuggestions);
   const [search,      setSearch]      = useState("");
   const [openMenu,    setOpenMenu]    = useState<string | null>(null);
-  const [modal,       setModal]       = useState(false);
+  const { isOpen: modal, open: openModal, close: closeModal } = useBrandsModal();
 
   const [sortField, setSortField] = useState<SortField>("mentions");
   const [sortDir,   setSortDir]   = useState<SortDir>("desc");
@@ -215,7 +245,7 @@ export default function BrandsClient({
       domains: mDomains.filter((d) => d.trim()),
     };
     setBrands((p) => [...p, { ...data, id: crypto.randomUUID(), isOwn: false, mentions: 0 }]);
-    setModal(false); setMName(""); setMAliases([""]); setMDomains([""]);
+    closeModal(); setMName(""); setMAliases([""]); setMDomains([""]);
     await createBrand(data);
   };
 
@@ -242,10 +272,6 @@ export default function BrandsClient({
       {/* ── Top bar (full-width) ── */}
       <div className="bp-topbar">
         <h1 className="bp-title">Your brands <span className="bp-title-count">· {brands.length}</span></h1>
-        <button className="bp-btn-add" onClick={() => setModal(true)}>
-          <Plus size={14} strokeWidth={2.5} />
-          Add brand
-        </button>
       </div>
 
       {/* ── Two-column body ── */}
@@ -276,7 +302,7 @@ export default function BrandsClient({
                   Add brands to track how often they appear in AI-generated answers
                   vs. your own visibility.
                 </p>
-                <button className="bp-btn-add" onClick={() => setModal(true)}>
+                <button className="bp-btn-add" onClick={() => openModal()}>
                   <Plus size={14} /> Add brand
                 </button>
               </div>
@@ -338,11 +364,11 @@ export default function BrandsClient({
 
       {/* ── Add Brand Modal ── */}
       {modal && (
-        <div className="bp-modal-overlay" onClick={() => setModal(false)}>
+        <div className="bp-modal-overlay" onClick={() => closeModal()}>
           <div className="bp-modal" onClick={(e) => e.stopPropagation()}>
             <div className="bp-modal-header">
               <span className="bp-modal-title">Add brand</span>
-              <button className="bp-modal-close" onClick={() => setModal(false)}>
+              <button className="bp-modal-close" onClick={() => closeModal()}>
                 <X size={17} />
               </button>
             </div>
@@ -404,7 +430,7 @@ export default function BrandsClient({
             </div>
 
             <div className="bp-modal-footer">
-              <button className="bp-btn-cancel" onClick={() => setModal(false)}>Cancel</button>
+              <button className="bp-btn-cancel" onClick={() => closeModal()}>Cancel</button>
               <button className="bp-btn-create" onClick={doCreate}>Create</button>
             </div>
           </div>
