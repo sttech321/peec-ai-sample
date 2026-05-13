@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { db } from "../db";
-import { projects } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { projects, brands } from "../db/schema";
+import { and, eq } from "drizzle-orm";
 
 const WORKSPACE_ID = "00000000-0000-0000-0000-000000000000";
 const ACTIVE_PROJECT_COOKIE = "active_project_id";
@@ -43,10 +43,37 @@ export async function getActiveProjectId(): Promise<string> {
 }
 
 /**
- * Get all projects for the workspace.
+ * Look up the "own" brand domain for each project ID.
+ */
+async function fetchProjectDomains(projectIds: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (projectIds.length === 0) return map;
+
+  const ownBrands = await db
+    .select({
+      projectId: brands.projectId,
+      domains: brands.domains,
+    })
+    .from(brands)
+    .where(and(
+      eq(brands.workspaceId, WORKSPACE_ID),
+      eq(brands.isOwn, true),
+    ));
+
+  for (const b of ownBrands) {
+    if (b.domains && b.domains.length > 0 && !map.has(b.projectId)) {
+      map.set(b.projectId, b.domains[0]);
+    }
+  }
+  return map;
+}
+
+/**
+ * Get all projects for the workspace, including each project's own-brand domain
+ * (used to render a favicon in the project switcher).
  */
 export async function getAllProjects() {
-  return db
+  const rows = await db
     .select({
       id: projects.id,
       name: projects.name,
@@ -55,10 +82,17 @@ export async function getAllProjects() {
     .from(projects)
     .where(eq(projects.workspaceId, WORKSPACE_ID))
     .orderBy(projects.name);
+
+  const domainByProject = await fetchProjectDomains(rows.map(r => r.id));
+
+  return rows.map(p => ({
+    ...p,
+    domain: domainByProject.get(p.id) ?? null,
+  }));
 }
 
 /**
- * Get the active project details.
+ * Get the active project details, including its own-brand domain.
  */
 export async function getActiveProject() {
   const projectId = await getActiveProjectId();
@@ -67,7 +101,13 @@ export async function getActiveProject() {
     .from(projects)
     .where(eq(projects.id, projectId))
     .limit(1);
-  return project!;
+
+  const domainByProject = await fetchProjectDomains([projectId]);
+
+  return {
+    ...project!,
+    domain: domainByProject.get(projectId) ?? null,
+  };
 }
 
 export const WORKSPACE = WORKSPACE_ID;

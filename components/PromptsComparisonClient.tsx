@@ -1,27 +1,44 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   ChevronDown,
   ChevronUp,
-  Search,
-  Plus,
-  Play,
-  Trash2,
-  Download,
-  Filter,
-  Calendar,
-  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
-  Loader2,
+  Search,
+  Plus,
+  Calendar,
+  Tag as TagIcon,
+  Layers,
+  ArrowUpDown,
+  Settings as SettingsIcon,
+  Share2,
+  RefreshCw,
+  Archive,
+  Building2,
+  Check,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
+interface PromptBrand {
+  id: string;
+  name: string;
+  domain: string | null;
+  isOwn: boolean;
+}
+
+interface PromptTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface PromptMetric {
   id: string;
   query: string;
-  topicName: string;
+  topicId: string;
+  topicName: string | null;
   volumeTier: string;
   createdAt: string;
   visibility: number;
@@ -35,115 +52,552 @@ interface PromptMetric {
   rank: number;
   enginesUsed: string[];
   lastRunDate: string | null;
+  topBrands: PromptBrand[];
+  totalBrandsCount: number;
+  tags: PromptTag[];
+  sov: number;
+  location: string;
+}
+
+interface Topic {
+  id: string;
+  name: string;
+  count: number;
+}
+
+interface AvailableTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
+interface Aggregates {
+  visibility: number;
+  sentiment: number;
+  position: number;
+}
+
+interface AvailableBrand {
+  id: string;
+  name: string;
+  isOwn: boolean;
+  domain: string | null;
 }
 
 interface Props {
   prompts: PromptMetric[];
   totalCount: number;
+  topics: Topic[];
+  availableTags: AvailableTag[];
+  availableBrands: AvailableBrand[];
+  aggregates: Aggregates;
+  projectName: string;
   addPromptAction: (formData: FormData) => Promise<void>;
-  runNowAction: (promptId: string, query: string, selectedEngines: string[]) => Promise<void>;
+  runNowAction: (
+    promptId: string,
+    query: string,
+    selectedEngines: string[],
+  ) => Promise<void>;
+  addBrandAction: (name: string) => Promise<{ ok: boolean; error?: string }>;
+  createTopicAction: (args: {
+    name: string;
+    promptsPerTopic: number;
+    location: string;
+    language: string;
+  }) => Promise<{ ok: boolean; topicId?: string; error?: string }>;
 }
 
-// ── Engine Colors ──────────────────────────────────────────────────────────
-const ENGINE_COLORS: Record<string, string> = {
-  ChatGPT: "#10a37f",
-  Claude: "#d97706",
-  Perplexity: "#3b82f6",
-  Gemini: "#8b5cf6",
-  "AI Overviews": "#ef4444",
-};
+const TOPIC_LOCATIONS: { code: string; name: string; flag: string }[] = [
+  { code: "US", name: "United States", flag: "🇺🇸" },
+  { code: "CA", name: "Canada", flag: "🇨🇦" },
+  { code: "GB", name: "United Kingdom", flag: "🇬🇧" },
+  { code: "DE", name: "Germany", flag: "🇩🇪" },
+  { code: "FR", name: "France", flag: "🇫🇷" },
+  { code: "ES", name: "Spain", flag: "🇪🇸" },
+  { code: "IT", name: "Italy", flag: "🇮🇹" },
+  { code: "NL", name: "Netherlands", flag: "🇳🇱" },
+  { code: "AU", name: "Australia", flag: "🇦🇺" },
+  { code: "JP", name: "Japan", flag: "🇯🇵" },
+  { code: "IN", name: "India", flag: "🇮🇳" },
+  { code: "BR", name: "Brazil", flag: "🇧🇷" },
+];
+
+const TOPIC_LANGUAGES: { code: string; name: string }[] = [
+  { code: "en", name: "English" },
+  { code: "es", name: "Spanish" },
+  { code: "fr", name: "French" },
+  { code: "de", name: "German" },
+  { code: "it", name: "Italian" },
+  { code: "pt", name: "Portuguese" },
+  { code: "nl", name: "Dutch" },
+  { code: "ja", name: "Japanese" },
+  { code: "ko", name: "Korean" },
+  { code: "zh", name: "Chinese" },
+  { code: "hi", name: "Hindi" },
+  { code: "ar", name: "Arabic" },
+];
 
 const ALL_ENGINES = ["ChatGPT", "Claude", "Perplexity", "Gemini", "AI Overviews"];
 
-// ── Sort helpers ───────────────────────────────────────────────────────────
-type SortField = "rank" | "query" | "visibility" | "sentiment" | "avgPosition" | "mentions" | "volumeTier" | "createdAt";
+const DATE_PRESETS: { label: string; days: number }[] = [
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 14 days", days: 14 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 90 days", days: 90 },
+];
+
+type SortField =
+  | "query"
+  | "visibility"
+  | "sentiment"
+  | "avgPosition"
+  | "volumeTier"
+  | "location"
+  | "sov";
 type SortDir = "asc" | "desc";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
-// ── Component ──────────────────────────────────────────────────────────────
+// ── Subcomponent: dropdown wrapper ──────────────────────────────────────────
+function Dropdown({
+  trigger,
+  children,
+  align = "left",
+  width = 220,
+}: {
+  trigger: (open: boolean) => React.ReactNode;
+  children: (close: () => void) => React.ReactNode;
+  align?: "left" | "right";
+  width?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="pp-dd" ref={ref}>
+      <button className="pp-dd-trigger" onClick={() => setOpen((v) => !v)}>
+        {trigger(open)}
+      </button>
+      {open && (
+        <div
+          className="pp-dd-menu"
+          style={{ width, [align === "right" ? "right" : "left"]: 0 }}
+        >
+          {children(() => setOpen(false))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Brand favicon stack for Mentions column ─────────────────────────────────
+function BrandFavicon({ brand }: { brand: PromptBrand }) {
+  const [failed, setFailed] = useState(false);
+  const initial = brand.name.charAt(0).toUpperCase();
+  if (!brand.domain || failed) {
+    return <span className="pp-mention-fallback">{initial}</span>;
+  }
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={`https://www.google.com/s2/favicons?sz=64&domain=${brand.domain}`}
+      alt={brand.name}
+      className="pp-mention-img"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+// ── Small brand favicon for the brand filter rows ───────────────────────────
+function SmallBrandFavicon({
+  name,
+  domain,
+}: {
+  name: string;
+  domain: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (!domain || failed) {
+    return (
+      <span className="pp-brand-fav-fallback">
+        {name.charAt(0).toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={`https://www.google.com/s2/favicons?sz=64&domain=${domain}`}
+      alt={name}
+      className="pp-brand-fav-img"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+// ── Brand filter dropdown (search + checkboxes + Add brand) ─────────────────
+function BrandFilterDropdown({
+  projectName,
+  brands,
+  selectedIds,
+  onChange,
+  onAddBrand,
+}: {
+  projectName: string;
+  brands: AvailableBrand[];
+  selectedIds: string[] | null;
+  onChange: (ids: string[] | null) => void;
+  onAddBrand: (name: string) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setAdding(false);
+        setError(null);
+        setQuery("");
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const filtered = useMemo(
+    () =>
+      brands.filter((b) =>
+        b.name.toLowerCase().includes(query.toLowerCase()),
+      ),
+    [brands, query],
+  );
+
+  const allSelected = selectedIds === null;
+  const triggerLabel = allSelected
+    ? projectName
+    : selectedIds.length === 1
+    ? brands.find((b) => b.id === selectedIds[0])?.name ?? projectName
+    : `${selectedIds.length} brands`;
+
+  const toggleBrand = (id: string) => {
+    if (selectedIds === null) {
+      // Was "all selected" — keep all except this one OR drop to just this one?
+      // peec.ai pattern: unchecking from "all" keeps the rest selected.
+      const next = brands.map((b) => b.id).filter((bid) => bid !== id);
+      onChange(next.length === brands.length ? null : next);
+      return;
+    }
+    const set = new Set(selectedIds);
+    if (set.has(id)) set.delete(id);
+    else set.add(id);
+    if (set.size === brands.length) onChange(null);
+    else if (set.size === 0) onChange([]);
+    else onChange(Array.from(set));
+  };
+
+  const handleAdd = async () => {
+    setError(null);
+    setPending(true);
+    const res = await onAddBrand(newName);
+    setPending(false);
+    if (!res.ok) {
+      setError(res.error || "Failed to add brand");
+      return;
+    }
+    setNewName("");
+    setAdding(false);
+  };
+
+  return (
+    <div className="pp-dd" ref={ref}>
+      <button
+        className="pp-dd-trigger"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Building2 size={13} />
+        <span>{triggerLabel}</span>
+        <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
+      </button>
+      {open && (
+        <div className="pp-dd-menu pp-brand-menu" style={{ left: 0, width: 280 }}>
+          <div className="pp-brand-search">
+            <Search size={12} className="pp-brand-search-icon" />
+            <input
+              autoFocus
+              placeholder="Search brands..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <button
+            className={`pp-brand-all ${allSelected ? "pp-brand-all-active" : ""}`}
+            onClick={() => onChange(null)}
+          >
+            <span>All brands</span>
+            {allSelected && <Check size={14} />}
+          </button>
+          <div className="pp-brand-list">
+            {filtered.length === 0 && (
+              <div className="pp-dd-empty">No brands found</div>
+            )}
+            {filtered.map((b) => {
+              const checked =
+                selectedIds === null ? true : selectedIds.includes(b.id);
+              return (
+                <label key={b.id} className="pp-brand-item">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleBrand(b.id)}
+                  />
+                  <SmallBrandFavicon name={b.name} domain={b.domain} />
+                  <span className="pp-brand-name">{b.name}</span>
+                </label>
+              );
+            })}
+          </div>
+          {adding ? (
+            <div className="pp-brand-add-form">
+              <input
+                autoFocus
+                placeholder="Brand name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAdd();
+                  if (e.key === "Escape") {
+                    setAdding(false);
+                    setNewName("");
+                    setError(null);
+                  }
+                }}
+                disabled={pending}
+              />
+              {error && <div className="pp-brand-error">{error}</div>}
+              <div className="pp-brand-add-actions">
+                <button
+                  type="button"
+                  className="pp-brand-add-cancel"
+                  onClick={() => {
+                    setAdding(false);
+                    setNewName("");
+                    setError(null);
+                  }}
+                  disabled={pending}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="pp-brand-add-submit"
+                  onClick={handleAdd}
+                  disabled={pending || !newName.trim()}
+                >
+                  {pending ? "Adding..." : "Add"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="pp-brand-add-btn"
+              onClick={() => setAdding(true)}
+            >
+              <Plus size={13} />
+              <span>Add brand</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Volume bars indicator ───────────────────────────────────────────────────
+function VolumeBars({ tier }: { tier: string }) {
+  const t = tier.toLowerCase();
+  let filled = 1;
+  if (t.includes("very high")) filled = 4;
+  else if (t.includes("high")) filled = 3;
+  else if (t.includes("medium")) filled = 2;
+  return (
+    <span className="pp-volume" title={tier}>
+      {[0, 1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className={`pp-volume-bar ${i < filled ? "pp-volume-bar-on" : ""}`}
+          style={{ height: 4 + i * 3 }}
+        />
+      ))}
+    </span>
+  );
+}
+
+// ── Sentiment dot color ─────────────────────────────────────────────────────
+function sentimentDotColor(val: number) {
+  if (val >= 60) return "#10b981";
+  if (val >= 40) return "#f59e0b";
+  return "#ef4444";
+}
+
+// ── Trend small label ───────────────────────────────────────────────────────
+function TrendLabel({ value, suffix = "" }: { value: number; suffix?: string }) {
+  if (value === 0) return <span className="pp-trend-flat">—</span>;
+  if (value > 0)
+    return (
+      <span className="pp-trend-up">
+        +{value.toFixed(1)}
+        {suffix}
+      </span>
+    );
+  return (
+    <span className="pp-trend-down">
+      {value.toFixed(1)}
+      {suffix}
+    </span>
+  );
+}
+
+// ── Component ───────────────────────────────────────────────────────────────
 export default function PromptsComparisonClient({
   prompts,
   totalCount,
+  topics,
+  availableTags,
+  availableBrands,
+  aggregates,
+  projectName,
   addPromptAction,
   runNowAction,
+  addBrandAction,
+  createTopicAction,
 }: Props) {
+  // null = all brands; otherwise filter to selected brand IDs
+  const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
+  const [showNewTopic, setShowNewTopic] = useState(false);
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"all" | "active" | "archived" | "attention">("all");
-  const [sortField, setSortField] = useState<SortField>("rank");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [activeTab, setActiveTab] = useState<"active" | "suggested" | "archived">("active");
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedEngine, setSelectedEngine] = useState<string>("all");
+  const [pageSize, setPageSize] = useState(50);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [runningPrompts, setRunningPrompts] = useState<Record<string, boolean>>({});
+  const [selectedTopicId, setSelectedTopicId] = useState<string | "all" | "none">("all");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[] | null>(null); // null = all
+  const [selectedModels, setSelectedModels] = useState<string[]>(ALL_ENGINES);
+  const [datePreset, setDatePreset] = useState<string>("Last 7 days");
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
-  const allAvailableModels = ["ChatGPT", "Claude", "Gemini", "Perplexity", "Groq"];
-  const [selectedModels, setSelectedModels] = useState<string[]>(allAvailableModels);
-
-  const toggleModel = (model: string) => {
-    if (selectedModels.includes(model)) {
-      setSelectedModels(selectedModels.filter(m => m !== model));
-    } else {
-      setSelectedModels([...selectedModels, model]);
-    }
-  };
-
-  const handleRun = async (id: string, query: string) => {
-    setRunningPrompts(prev => ({ ...prev, [id]: true }));
-    try {
-      await runNowAction(id, query, selectedModels);
-      // Show running state for 3 seconds to give feedback
-      setTimeout(() => {
-        setRunningPrompts(prev => ({ ...prev, [id]: false }));
-      }, 3000);
-    } catch (e) {
-      setRunningPrompts(prev => ({ ...prev, [id]: false }));
-    }
-  };
-
-  // Filter + sort
+  // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let result = [...prompts];
 
-    // Search filter
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter((p) => p.query.toLowerCase().includes(q));
     }
 
-    // Engine filter
-    if (selectedEngine !== "all") {
-      result = result.filter((p) => p.enginesUsed.includes(selectedEngine));
+    if (selectedTopicId === "none") {
+      result = result.filter((p) => !p.topicName);
+    } else if (selectedTopicId !== "all") {
+      result = result.filter((p) => p.topicId === selectedTopicId);
     }
 
-    // Tab filter (all are "active" for now)
-    if (activeTab === "attention") {
-      result = result.filter((p) => p.visibility < 10 || p.sentiment < 30);
+    if (selectedTagIds !== null) {
+      const set = new Set(selectedTagIds);
+      result = result.filter((p) => p.tags.some((t) => set.has(t.id)));
     }
 
-    // Sort
-    result.sort((a, b) => {
-      let cmp = 0;
-      switch (sortField) {
-        case "rank": cmp = a.rank - b.rank; break;
-        case "query": cmp = a.query.localeCompare(b.query); break;
-        case "visibility": cmp = a.visibility - b.visibility; break;
-        case "sentiment": cmp = a.sentiment - b.sentiment; break;
-        case "avgPosition": cmp = a.avgPosition - b.avgPosition; break;
-        case "mentions": cmp = a.mentions - b.mentions; break;
-        case "volumeTier": cmp = a.volumeTier.localeCompare(b.volumeTier); break;
-        case "createdAt": cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(); break;
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
+    // Brand filter — keep prompts that mention at least one selected brand
+    if (selectedBrandIds !== null) {
+      const set = new Set(selectedBrandIds);
+      result = result.filter((p) =>
+        p.topBrands.some((b) => set.has(b.id)),
+      );
+    }
+
+    if (selectedModels.length > 0 && selectedModels.length < ALL_ENGINES.length) {
+      const set = new Set(selectedModels);
+      result = result.filter((p) =>
+        p.enginesUsed.some((e) => set.has(e)) || p.enginesUsed.length === 0,
+      );
+    }
+
+    if (sortField) {
+      result.sort((a, b) => {
+        let cmp = 0;
+        switch (sortField) {
+          case "query":
+            cmp = a.query.localeCompare(b.query);
+            break;
+          case "visibility":
+            cmp = a.visibility - b.visibility;
+            break;
+          case "sentiment":
+            cmp = a.sentiment - b.sentiment;
+            break;
+          case "avgPosition":
+            cmp = a.avgPosition - b.avgPosition;
+            break;
+          case "volumeTier":
+            cmp = a.volumeTier.localeCompare(b.volumeTier);
+            break;
+          case "location":
+            cmp = a.location.localeCompare(b.location);
+            break;
+          case "sov":
+            cmp = a.sov - b.sov;
+            break;
+        }
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
 
     return result;
-  }, [prompts, search, activeTab, sortField, sortDir, selectedEngine]);
+  }, [
+    prompts,
+    search,
+    selectedTopicId,
+    selectedTagIds,
+    selectedBrandIds,
+    selectedModels,
+    sortField,
+    sortDir,
+  ]);
 
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // ── Tab counts (dynamic) ──────────────────────────────────────────────────
+  const activeCount = prompts.length; // all current prompts are "active"
+  const suggestedCount = 0;
+  const archivedCount = 0;
+
+  const tabFiltered = filtered; // Active tab uses filtered; other tabs are 0 for now
+
+  const noTopicCount = useMemo(
+    () => prompts.filter((p) => !p.topicName).length,
+    [prompts],
+  );
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(tabFiltered.length / pageSize));
+  const paginated = tabFiltered.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  );
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -156,374 +610,617 @@ export default function PromptsComparisonClient({
   };
 
   const renderSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown size={9} style={{ marginLeft: 3, opacity: 0.3 }} />;
+    if (sortField !== field)
+      return <ArrowUpDown size={10} className="pp-sort-icon-idle" />;
     return sortDir === "asc" ? (
-      <ChevronUp size={10} style={{ marginLeft: 3 }} />
+      <ChevronUp size={12} />
     ) : (
-      <ChevronDown size={10} style={{ marginLeft: 3 }} />
+      <ChevronDown size={12} />
     );
   };
 
-  const getTrendEl = (val: number) => {
-    if (val > 0) return <span className="pc-trend-up">▲ +{val.toFixed(1)}</span>;
-    if (val < 0) return <span className="pc-trend-down">▼ {val.toFixed(1)}</span>;
-    return <span className="pc-trend-flat">—</span>;
+  const toggleModel = (model: string) => {
+    setSelectedModels((curr) =>
+      curr.includes(model) ? curr.filter((m) => m !== model) : [...curr, model],
+    );
   };
 
-  const getSentimentClass = (val: number) => {
-    if (val >= 60) return "pc-sentiment-positive";
-    if (val >= 35) return "pc-sentiment-neutral";
-    return "pc-sentiment-negative";
+  const toggleTagFilter = (id: string) => {
+    setSelectedTagIds((curr) => {
+      if (curr === null) return [id];
+      if (curr.includes(id)) {
+        const next = curr.filter((t) => t !== id);
+        return next.length === 0 ? null : next;
+      }
+      return [...curr, id];
+    });
   };
 
-  const getPositionClass = (val: number) => {
-    if (val <= 3) return "pc-position-top";
-    if (val <= 6) return "pc-position-mid";
-    return "pc-position-low";
+  const toggleRow = (id: string) => {
+    setSelectedRows((curr) => {
+      const next = new Set(curr);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-  const getVolumeClass = (tier: string) => {
-    const t = tier.toLowerCase();
-    if (t.includes("high")) return "pc-vol-high";
-    if (t.includes("medium")) return "pc-vol-medium";
-    return "pc-vol-low";
-  };
-
-  // Spark bars (simple 5-bar visualization)
-  const renderSpark = (base: number) => {
-    const heights = [];
-    for (let i = 0; i < 5; i++) {
-      heights.push(Math.max(2, Math.min(16, base * 0.16 + Math.sin(i * 1.3) * 6 + 4)));
+  const toggleAllRows = () => {
+    if (paginated.every((p) => selectedRows.has(p.id)) && paginated.length > 0) {
+      const next = new Set(selectedRows);
+      paginated.forEach((p) => next.delete(p.id));
+      setSelectedRows(next);
+    } else {
+      const next = new Set(selectedRows);
+      paginated.forEach((p) => next.add(p.id));
+      setSelectedRows(next);
     }
-    return (
-      <span className="pc-spark">
-        {heights.map((h, i) => (
-          <span key={i} className="pc-spark-bar" style={{ height: `${h}px` }} />
-        ))}
-      </span>
-    );
   };
 
-  const attentionCount = prompts.filter((p) => p.visibility < 10 || p.sentiment < 30).length;
+  const allOnPageSelected =
+    paginated.length > 0 && paginated.every((p) => selectedRows.has(p.id));
 
   return (
-    <div className="pc-page">
-      {/* Breadcrumb */}
-      <div className="pc-breadcrumb">
-        <a href="/">Dashboard</a> &gt; <span>Prompts</span>
+    <div className="pp-page">
+      {/* ── Breadcrumb / title ─────────────────────────────────────────── */}
+      <div className="pp-breadcrumb">
+        <Layers size={14} />
+        <span>Prompts</span>
       </div>
 
-      {/* Filter Bar */}
-      <div className="pc-filter-bar">
-        <button className="pc-filter-chip">
-          🏢 Thrive
-          <ChevronDown size={11} />
-        </button>
-        <div className="pc-filter-sep" />
-        <button className="pc-filter-chip">
-          <Calendar size={11} />
-          Last 30 days
-          <ChevronDown size={11} />
-        </button>
-        <button className="pc-filter-chip">
-          All Topics
-          <ChevronDown size={11} />
-        </button>
-        {/* Models Dropdown */}
-        <div className="relative inline-block text-left" style={{ position: "relative" }}>
-          <button 
-            className="pc-filter-chip"
-            onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-          >
-            {selectedModels.length === allAvailableModels.length ? "All Models" : `${selectedModels.length} Models`} <ChevronDown size={11} />
-          </button>
-          
-          {isModelDropdownOpen && (
-            <div className="absolute left-0 z-50 mt-2 w-56 origin-top-left rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none" style={{ position: "absolute", zIndex: 50, marginTop: "8px", width: "14rem", borderRadius: "0.375rem", backgroundColor: "#141418", border: "1px solid #1e293b", padding: "4px 0" }}>
-              <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wider" style={{ borderBottom: "1px solid #1e293b", padding: "8px 16px", color: "#64748b", fontSize: "12px", textTransform: "uppercase" }}>
-                Active models
-              </div>
-              <div className="max-h-60 overflow-y-auto" style={{ maxHeight: "15rem", overflowY: "auto" }}>
-                {allAvailableModels.map((model) => (
-                  <label key={model} className="flex items-center px-4 py-2 cursor-pointer group" style={{ display: "flex", alignItems: "center", padding: "8px 16px", cursor: "pointer" }}>
-                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                      <input 
-                        type="checkbox" 
-                        style={{ width: "16px", height: "16px", borderRadius: "4px", accentColor: "#6366f1", cursor: "pointer", appearance: "auto" }}
-                        checked={selectedModels.includes(model)}
-                        onChange={() => toggleModel(model)}
-                      />
-                    </div>
-                    <div className="ml-3 flex items-center gap-2" style={{ marginLeft: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
-                      <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: ENGINE_COLORS[model] || "#64748b" }} />
-                      <span style={{ fontSize: "14px", fontWeight: 500, color: "#cbd5e1" }}>{model}</span>
-                    </div>
-                  </label>
-                ))}
-              </div>
+      {/* ── Filter bar ────────────────────────────────────────────────── */}
+      <div className="pp-filter-bar">
+        <BrandFilterDropdown
+          projectName={projectName}
+          brands={availableBrands}
+          selectedIds={selectedBrandIds}
+          onChange={setSelectedBrandIds}
+          onAddBrand={addBrandAction}
+        />
+
+        <Dropdown
+          width={200}
+          trigger={(open) => (
+            <>
+              <Calendar size={13} />
+              <span>{datePreset}</span>
+              <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
+            </>
+          )}
+        >
+          {(close) => (
+            <div className="pp-dd-section">
+              {DATE_PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  className={`pp-dd-item ${datePreset === p.label ? "pp-dd-item-active" : ""}`}
+                  onClick={() => {
+                    setDatePreset(p.label);
+                    close();
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
           )}
-        </div>
-      </div>
+        </Dropdown>
 
-      {/* Tabs Row */}
-      <div className="pc-tabs-row">
-        <div className="pc-tabs-left">
-          {([
-            { key: "all", label: "All", count: totalCount },
-            { key: "active", label: "Active", count: totalCount },
-            { key: "archived", label: "Archived", count: 0 },
-            { key: "attention", label: "Attention", count: attentionCount },
-          ] as const).map((tab) => (
-            <button
-              key={tab.key}
-              className={`pc-tab ${activeTab === tab.key ? "pc-tab-active" : ""}`}
-              onClick={() => { setActiveTab(tab.key); setCurrentPage(1); }}
-            >
-              {tab.label}
-              <span className="pc-tab-count">{tab.count}</span>
-            </button>
-          ))}
-        </div>
-        <div className="pc-tabs-right">
-          <div className="pc-search-box">
-            <Search size={13} className="pc-search-icon" />
-            <input
-              className="pc-search-input"
-              placeholder="Search prompts..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-            />
-          </div>
-          <button className="pc-action-btn">
-            <Filter size={12} />
-            Filters
-          </button>
-          <button className="pc-action-btn">
-            <Download size={12} />
-            Export
-          </button>
-          <button className="pc-add-btn" onClick={() => setShowAddForm(true)}>
-            <Plus size={13} />
-            Add Prompt
-          </button>
-        </div>
-      </div>
-
-      {/* Engine Pills */}
-      <div className="pc-engines-row">
-        <button
-          className={`pc-engine-pill ${selectedEngine === "all" ? "pc-engine-pill-active" : ""}`}
-          onClick={() => { setSelectedEngine("all"); setCurrentPage(1); }}
+        <Dropdown
+          width={240}
+          trigger={(open) => (
+            <>
+              <TagIcon size={13} />
+              <span>
+                {selectedTagIds === null
+                  ? "All Tags"
+                  : selectedTagIds.length === 1
+                  ? availableTags.find((t) => t.id === selectedTagIds[0])?.name ??
+                    "1 Tag"
+                  : `${selectedTagIds.length} Tags`}
+              </span>
+              <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
+            </>
+          )}
         >
-          All engines
-        </button>
-        {ALL_ENGINES.map((eng) => (
-          <button
-            key={eng}
-            className={`pc-engine-pill ${selectedEngine === eng ? "pc-engine-pill-active" : ""}`}
-            onClick={() => { setSelectedEngine(eng); setCurrentPage(1); }}
-          >
-            <span className="pc-engine-dot" style={{ background: ENGINE_COLORS[eng] }} />
-            {eng}
-          </button>
-        ))}
+          {() => (
+            <div className="pp-dd-section">
+              <button
+                className={`pp-dd-item ${selectedTagIds === null ? "pp-dd-item-active" : ""}`}
+                onClick={() => setSelectedTagIds(null)}
+              >
+                All Tags
+              </button>
+              {availableTags.length === 0 && (
+                <div className="pp-dd-empty">No tags yet</div>
+              )}
+              {availableTags.map((t) => (
+                <label key={t.id} className="pp-dd-check-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedTagIds?.includes(t.id) ?? false}
+                    onChange={() => toggleTagFilter(t.id)}
+                  />
+                  <span className="pp-dd-check-label">{t.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </Dropdown>
+
+        <Dropdown
+          width={220}
+          trigger={(open) => (
+            <>
+              <Layers size={13} />
+              <span>
+                {selectedModels.length === ALL_ENGINES.length
+                  ? "All Models"
+                  : `${selectedModels.length} Models`}
+              </span>
+              <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
+            </>
+          )}
+        >
+          {() => (
+            <div className="pp-dd-section">
+              <div className="pp-dd-heading">Active models</div>
+              {ALL_ENGINES.map((m) => (
+                <label key={m} className="pp-dd-check-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedModels.includes(m)}
+                    onChange={() => toggleModel(m)}
+                  />
+                  <span className="pp-dd-check-label">{m}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </Dropdown>
       </div>
 
-      {/* Main Table */}
-      <div className="pc-table-wrapper">
-        <table className="pc-table">
-          <thead>
-            <tr>
-              <th onClick={() => handleSort("rank")} className={sortField === "rank" ? "pc-th-sort" : ""}>
-                # {renderSortIcon("rank")}
-              </th>
-              <th onClick={() => handleSort("query")} className={sortField === "query" ? "pc-th-sort" : ""}>
-                Prompt {renderSortIcon("query")}
-              </th>
-              <th onClick={() => handleSort("visibility")} className={sortField === "visibility" ? "pc-th-sort" : ""}>
-                Visibility {renderSortIcon("visibility")}
-              </th>
-              <th onClick={() => handleSort("sentiment")} className={sortField === "sentiment" ? "pc-th-sort" : ""}>
-                Sentiment {renderSortIcon("sentiment")}
-              </th>
-              <th onClick={() => handleSort("avgPosition")} className={sortField === "avgPosition" ? "pc-th-sort" : ""}>
-                Position {renderSortIcon("avgPosition")}
-              </th>
-              <th onClick={() => handleSort("mentions")} className={sortField === "mentions" ? "pc-th-sort" : ""}>
-                Mentions {renderSortIcon("mentions")}
-              </th>
-              <th onClick={() => handleSort("volumeTier")} className={sortField === "volumeTier" ? "pc-th-sort" : ""}>
-                Volume {renderSortIcon("volumeTier")}
-              </th>
-              <th>Rank</th>
-              <th>Type</th>
-              <th onClick={() => handleSort("createdAt")} className={sortField === "createdAt" ? "pc-th-sort" : ""}>
-                Date {renderSortIcon("createdAt")}
-              </th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginated.length === 0 ? (
-              <tr>
-                <td colSpan={11}>
-                  <div className="pc-empty">
-                    <div className="pc-empty-icon">📊</div>
-                    <div className="pc-empty-text">No prompts found</div>
-                    <div className="pc-empty-sub">Add a prompt to start tracking AI visibility</div>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              paginated.map((p, idx) => {
-                const rowNum = (currentPage - 1) * PAGE_SIZE + idx + 1;
-                const dateStr = p.lastRunDate
-                  ? new Date(p.lastRunDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                  : "—";
-                return (
-                  <tr key={p.id}>
-                    <td><span className="pc-row-num">{rowNum}</span></td>
-                    <td className="pc-prompt-cell">
-                      <a href={`/prompts/${p.id}`} className="pc-prompt-link">
-                        {p.query}
-                      </a>
-                    </td>
-                    <td>
-                      <span className="pc-metric pc-metric-vis">{p.visibility}%</span>
-                      {renderSpark(p.visibility)}
-                      <br />
-                      {getTrendEl(p.visibilityTrend)}
-                    </td>
-                    <td>
-                      <div className="pc-sentiment-bar-container">
-                        <div className="pc-sentiment-bar-track">
-                          <div
-                            className={`pc-sentiment-bar-fill ${getSentimentClass(p.sentiment)}`}
-                            style={{ width: `${Math.min(100, p.sentiment)}%` }}
-                          />
+      {/* ── Main two-column layout ────────────────────────────────────── */}
+      <div className="pp-main">
+        {/* Topics panel */}
+        <aside className="pp-topics">
+          <div className="pp-topics-head">
+            <span className="pp-topics-title">Topics</span>
+            <button className="pp-icon-btn" title="Collapse">
+              <ChevronUp size={14} />
+            </button>
+          </div>
+          <button className="pp-new-topic" onClick={() => setShowNewTopic(true)}>
+            <Plus size={13} />
+            <span>New topic</span>
+          </button>
+          <div className="pp-topics-search">
+            <Search size={12} className="pp-topics-search-icon" />
+            <input placeholder="Search" />
+          </div>
+          <ul className="pp-topics-list">
+            <li>
+              <button
+                className={`pp-topic-item ${selectedTopicId === "all" ? "pp-topic-item-active" : ""}`}
+                onClick={() => setSelectedTopicId("all")}
+              >
+                <span>All topics</span>
+                <span className="pp-topic-count">{totalCount}</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`pp-topic-item ${selectedTopicId === "none" ? "pp-topic-item-active" : ""}`}
+                onClick={() => setSelectedTopicId("none")}
+              >
+                <span>No topic</span>
+                <span className="pp-topic-count">{noTopicCount}</span>
+              </button>
+            </li>
+            {topics.map((t) => (
+              <li key={t.id}>
+                <button
+                  className={`pp-topic-item ${selectedTopicId === t.id ? "pp-topic-item-active" : ""}`}
+                  onClick={() => setSelectedTopicId(t.id)}
+                >
+                  <span>{t.name}</span>
+                  <span className="pp-topic-count">{t.count}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </aside>
+
+        {/* Content */}
+        <section className="pp-content">
+          {/* Tabs row */}
+          <div className="pp-tabs-row">
+            <div className="pp-tabs">
+              <button
+                className={`pp-tab ${activeTab === "active" ? "pp-tab-active" : ""}`}
+                onClick={() => setActiveTab("active")}
+              >
+                Active
+              </button>
+              <button
+                className={`pp-tab ${activeTab === "suggested" ? "pp-tab-active" : ""}`}
+                onClick={() => setActiveTab("suggested")}
+              >
+                Suggested
+              </button>
+              <button
+                className={`pp-tab ${activeTab === "archived" ? "pp-tab-active" : ""}`}
+                onClick={() => setActiveTab("archived")}
+              >
+                Archived
+              </button>
+            </div>
+            <div className="pp-tabs-actions">
+              <span className="pp-counter">
+                <span className="pp-counter-dot" />
+                {activeCount} / {totalCount}
+              </span>
+              <button className="pp-add-btn" onClick={() => setShowAddForm(true)}>
+                <Plus size={13} />
+                Add Prompt
+              </button>
+            </div>
+          </div>
+
+          {/* Aggregate metrics + utility icons */}
+          <div className="pp-summary-row">
+            <div className="pp-search-wrap">
+              <Search size={13} className="pp-search-icon" />
+              <input
+                className="pp-search-input"
+                placeholder="Search"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
+            <div className="pp-summary-stats">
+              <span className="pp-summary-stat">
+                <span className="pp-summary-label">Visibility</span>
+                <strong>{aggregates.visibility}%</strong>
+              </span>
+              <span className="pp-summary-sep">|</span>
+              <span className="pp-summary-stat">
+                <span className="pp-summary-label">Sentiment</span>
+                <span
+                  className="pp-dot"
+                  style={{ background: sentimentDotColor(aggregates.sentiment) }}
+                />
+                <strong>{aggregates.sentiment}</strong>
+              </span>
+              <span className="pp-summary-sep">|</span>
+              <span className="pp-summary-stat">
+                <span className="pp-summary-label">Position</span>
+                <strong>#&nbsp;{aggregates.position || "—"}</strong>
+              </span>
+              <div className="pp-summary-icons">
+                <button className="pp-icon-btn" title="Refresh">
+                  <RefreshCw size={14} />
+                </button>
+                <button className="pp-icon-btn" title="Share">
+                  <Share2 size={14} />
+                </button>
+                <button className="pp-icon-btn" title="Settings">
+                  <SettingsIcon size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="pp-table-wrap">
+            <table className="pp-table">
+              <thead>
+                <tr>
+                  <th className="pp-th-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={allOnPageSelected}
+                      onChange={toggleAllRows}
+                    />
+                  </th>
+                  <th
+                    className="pp-th-sortable"
+                    onClick={() => handleSort("query")}
+                  >
+                    Prompt {renderSortIcon("query")}
+                  </th>
+                  <th
+                    className="pp-th-sortable"
+                    onClick={() => handleSort("visibility")}
+                  >
+                    Visibility {renderSortIcon("visibility")}
+                  </th>
+                  <th
+                    className="pp-th-sortable"
+                    onClick={() => handleSort("sentiment")}
+                  >
+                    Sentiment {renderSortIcon("sentiment")}
+                  </th>
+                  <th
+                    className="pp-th-sortable"
+                    onClick={() => handleSort("avgPosition")}
+                  >
+                    Position {renderSortIcon("avgPosition")}
+                  </th>
+                  <th>Mentions</th>
+                  <th
+                    className="pp-th-sortable"
+                    onClick={() => handleSort("volumeTier")}
+                  >
+                    Volume <span className="pp-beta-pill">Beta</span>{" "}
+                    {renderSortIcon("volumeTier")}
+                  </th>
+                  <th>Tags</th>
+                  <th
+                    className="pp-th-sortable"
+                    onClick={() => handleSort("location")}
+                  >
+                    Location {renderSortIcon("location")}
+                  </th>
+                  <th
+                    className="pp-th-sortable"
+                    onClick={() => handleSort("sov")}
+                  >
+                    SOV {renderSortIcon("sov")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeTab !== "active" || paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="pp-empty-cell">
+                      <div className="pp-empty">
+                        <div className="pp-empty-icon">
+                          <Layers size={28} />
                         </div>
-                        <span className="pc-metric">{p.sentiment.toFixed(0)}</span>
-                      </div>
-                      {getTrendEl(p.sentimentTrend)}
-                    </td>
-                    <td>
-                      <span className={`pc-position-badge ${getPositionClass(p.avgPosition)}`}>
-                        #{p.avgPosition.toFixed(1)}
-                      </span>
-                      <br />
-                      {getTrendEl(p.positionTrend)}
-                    </td>
-                    <td>
-                      <span className="pc-mentions-count">{p.mentions}</span>
-                      <br />
-                      {getTrendEl(p.mentionsTrend)}
-                    </td>
-                    <td>
-                      <span className={`pc-volume-badge ${getVolumeClass(p.volumeTier)}`}>
-                        {p.volumeTier}
-                      </span>
-                    </td>
-                    <td className="pc-rank-cell">{p.rank}</td>
-                    <td className="pc-type-cell">
-                      <span className="pc-status-active">Active</span>
-                    </td>
-                    <td className="pc-date-cell">{dateStr}</td>
-                    <td>
-                      <div className="pc-actions-cell">
-                        <form action={() => handleRun(p.id, p.query)} style={{ display: "inline" }}>
-                          <button type="submit" className="pc-action-icon-btn pc-action-run" title="Run Now" disabled={runningPrompts[p.id]}>
-                            {runningPrompts[p.id] ? (
-                              <Loader2 size={13} className="animate-spin text-indigo-500" style={{ animation: "spin 2s linear infinite" }} />
-                            ) : (
-                              <Play size={13} />
-                            )}
-                          </button>
-                        </form>
-                        <button className="pc-action-icon-btn pc-action-delete" title="Delete">
-                          <Trash2 size={13} />
-                        </button>
+                        <div className="pp-empty-title">
+                          {activeTab === "suggested"
+                            ? "No suggested prompts"
+                            : activeTab === "archived"
+                            ? "No archived prompts"
+                            : "No prompts found"}
+                        </div>
+                        <div className="pp-empty-sub">
+                          {activeTab === "active"
+                            ? "Adjust filters or add a new prompt to get started."
+                            : "Prompts will appear here once available."}
+                        </div>
                       </div>
                     </td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                ) : (
+                  paginated.map((p) => (
+                    <tr key={p.id}>
+                      <td className="pp-td-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={selectedRows.has(p.id)}
+                          onChange={() => toggleRow(p.id)}
+                        />
+                      </td>
+                      <td className="pp-td-prompt">
+                        <a href={`/prompts/${p.id}`} className="pp-prompt-link">
+                          {p.query}
+                        </a>
+                      </td>
+                      <td>
+                        <div className="pp-cell-stack">
+                          <span className="pp-metric-val">{p.visibility}%</span>
+                          <TrendLabel value={p.visibilityTrend} suffix="%" />
+                        </div>
+                      </td>
+                      <td>
+                        {p.sentiment > 0 ? (
+                          <div className="pp-cell-stack pp-cell-row">
+                            <span className="pp-cell-inline">
+                              <span
+                                className="pp-dot"
+                                style={{
+                                  background: sentimentDotColor(p.sentiment),
+                                }}
+                              />
+                              <span className="pp-metric-val">
+                                {p.sentiment.toFixed(0)}
+                              </span>
+                            </span>
+                            <TrendLabel value={p.sentimentTrend} />
+                          </div>
+                        ) : (
+                          <span className="pp-empty-val">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {p.avgPosition > 0 ? (
+                          <div className="pp-cell-stack">
+                            <span className="pp-metric-val">
+                              #&nbsp;{p.avgPosition.toFixed(1)}
+                            </span>
+                            <TrendLabel value={p.positionTrend} />
+                          </div>
+                        ) : (
+                          <span className="pp-empty-val">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {p.topBrands.length > 0 ? (
+                          <div className="pp-mentions-stack">
+                            {p.topBrands.slice(0, 3).map((b) => (
+                              <span key={b.id} className="pp-mention-chip">
+                                <BrandFavicon brand={b} />
+                              </span>
+                            ))}
+                            {p.totalBrandsCount > 3 && (
+                              <span className="pp-mention-plus">
+                                +{p.totalBrandsCount - 3}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="pp-empty-val">—</span>
+                        )}
+                      </td>
+                      <td>
+                        <VolumeBars tier={p.volumeTier} />
+                      </td>
+                      <td>
+                        {p.tags.length > 0 ? (
+                          <div className="pp-tags-cell">
+                            {p.tags.map((t) => (
+                              <span
+                                key={t.id}
+                                className="pp-tag-pill"
+                                style={{
+                                  background: `color-mix(in srgb, ${tagColor(t.color)} 18%, white)`,
+                                  color: tagColor(t.color),
+                                }}
+                              >
+                                {t.name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <button className="pp-add-tags">
+                            <Plus size={11} />
+                            Add tags
+                          </button>
+                        )}
+                      </td>
+                      <td>
+                        <span className="pp-location">
+                          <span className="pp-flag">🇺🇸</span>
+                          {p.location}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="pp-metric-val">{p.sov}%</span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-        {/* Pagination */}
-        {filtered.length > 0 && (
-          <div className="pc-pagination">
-            <div className="pc-pagination-info">
-              <span className="pc-pagination-count">{filtered.length} Prompts</span>
-              <span>·</span>
-              <span>Page {currentPage} of {totalPages}</span>
+          {/* Pagination row */}
+          <div className="pp-pagination">
+            <div className="pp-pagination-left">
+              <Dropdown
+                width={120}
+                trigger={(open) => (
+                  <>
+                    <span>{pageSize} Prompts</span>
+                    <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
+                  </>
+                )}
+              >
+                {(close) => (
+                  <div className="pp-dd-section">
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <button
+                        key={n}
+                        className={`pp-dd-item ${pageSize === n ? "pp-dd-item-active" : ""}`}
+                        onClick={() => {
+                          setPageSize(n);
+                          setCurrentPage(1);
+                          close();
+                        }}
+                      >
+                        {n} Prompts
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </Dropdown>
             </div>
-            <div className="pc-pagination-nav">
+
+            <div className="pp-pagination-pages">
               <button
-                className="pc-page-btn"
+                className="pp-page-arrow"
                 disabled={currentPage <= 1}
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
               >
                 <ChevronLeft size={14} />
               </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum: number;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                return (
+              {pageRange(currentPage, totalPages).map((n, i) =>
+                n === "…" ? (
+                  <span key={`dots-${i}`} className="pp-page-dots">…</span>
+                ) : (
                   <button
-                    key={pageNum}
-                    className={`pc-page-btn ${currentPage === pageNum ? "pc-page-btn-active" : ""}`}
-                    onClick={() => setCurrentPage(pageNum)}
+                    key={n}
+                    className={`pp-page-num ${currentPage === n ? "pp-page-num-active" : ""}`}
+                    onClick={() => setCurrentPage(n as number)}
                   >
-                    {pageNum}
+                    {n}
                   </button>
-                );
-              })}
+                ),
+              )}
               <button
-                className="pc-page-btn"
+                className="pp-page-arrow"
                 disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                onClick={() =>
+                  setCurrentPage(Math.min(totalPages, currentPage + 1))
+                }
               >
                 <ChevronRight size={14} />
               </button>
             </div>
+
+            <button className="pp-archive-all">
+              <Archive size={13} />
+              Archive all
+            </button>
           </div>
-        )}
+        </section>
       </div>
+
+      {/* New Topic Modal */}
+      {showNewTopic && (
+        <NewTopicModal
+          onClose={() => setShowNewTopic(false)}
+          onSubmit={createTopicAction}
+        />
+      )}
 
       {/* Add Prompt Modal */}
       {showAddForm && (
-        <div className="pc-add-form-overlay" onClick={(e) => {
-          if (e.target === e.currentTarget) setShowAddForm(false);
-        }}>
-          <div className="pc-add-form-card">
-            <div className="pc-add-form-title">Add New Prompt</div>
-            <form action={async (formData) => {
-              await addPromptAction(formData);
-              setShowAddForm(false);
-            }}>
+        <div
+          className="pp-modal-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddForm(false);
+          }}
+        >
+          <div className="pp-modal-card">
+            <div className="pp-modal-title">Add New Prompt</div>
+            <form
+              action={async (formData) => {
+                await addPromptAction(formData);
+                setShowAddForm(false);
+              }}
+            >
               <input
-                className="pc-add-form-input"
+                className="pp-modal-input"
                 name="query"
                 placeholder="e.g. Best CRM software for small business 2026"
                 required
                 autoFocus
               />
-              <div className="pc-add-form-actions">
-                <button type="button" className="pc-add-form-cancel" onClick={() => setShowAddForm(false)}>
+              <div className="pp-modal-actions">
+                <button
+                  type="button"
+                  className="pp-modal-cancel"
+                  onClick={() => setShowAddForm(false)}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="pc-add-form-submit">
+                <button type="submit" className="pp-modal-submit">
                   Add Prompt
                 </button>
               </div>
@@ -533,4 +1230,239 @@ export default function PromptsComparisonClient({
       )}
     </div>
   );
+}
+
+// ── New Topic Modal ─────────────────────────────────────────────────────────
+function NewTopicModal({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void;
+  onSubmit: (args: {
+    name: string;
+    promptsPerTopic: number;
+    location: string;
+    language: string;
+  }) => Promise<{ ok: boolean; topicId?: string; error?: string }>;
+}) {
+  const [name, setName] = useState("");
+  const [count, setCount] = useState(10);
+  const [location, setLocation] = useState("US");
+  const [language, setLanguage] = useState("en");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const locRef = useRef<HTMLDivElement>(null);
+  const langRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (locRef.current && !locRef.current.contains(e.target as Node))
+        setLocationOpen(false);
+      if (langRef.current && !langRef.current.contains(e.target as Node))
+        setLanguageOpen(false);
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, []);
+
+  const selectedLocation = TOPIC_LOCATIONS.find((l) => l.code === location);
+  const selectedLanguage = TOPIC_LANGUAGES.find((l) => l.code === language);
+
+  const handleAdd = async () => {
+    setError(null);
+    setPending(true);
+    const res = await onSubmit({
+      name,
+      promptsPerTopic: count,
+      location,
+      language,
+    });
+    setPending(false);
+    if (!res.ok) {
+      setError(res.error || "Failed to create topic");
+      return;
+    }
+    onClose();
+  };
+
+  return (
+    <div
+      className="pp-modal-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="pp-modal-card pp-topic-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="pp-topic-modal-close" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+        <div className="pp-topic-modal-title">Add new Topic</div>
+        <div className="pp-topic-modal-sub">
+          Create a Topic without mentioning your own brand. Every topic will have prompts
+        </div>
+
+        <div className="pp-topic-field">
+          <label className="pp-topic-label">Topic</label>
+          <input
+            autoFocus
+            className="pp-topic-input"
+            placeholder="e.g. SEO optimization"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={pending}
+          />
+        </div>
+
+        <div className="pp-topic-field">
+          <label className="pp-topic-label">Prompts per topic</label>
+          <input
+            type="number"
+            min={1}
+            max={50}
+            className="pp-topic-input"
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value) || 1)}
+            disabled={pending}
+          />
+        </div>
+
+        <div className="pp-topic-field">
+          <label className="pp-topic-label">Location</label>
+          <div className="pp-topic-select" ref={locRef}>
+            <button
+              type="button"
+              className="pp-topic-select-trigger"
+              onClick={() => setLocationOpen((v) => !v)}
+              disabled={pending}
+            >
+              <span className="pp-topic-select-value">
+                <span className="pp-flag">{selectedLocation?.flag}</span>
+                {selectedLocation?.name}
+              </span>
+              <ChevronDown
+                size={14}
+                className={locationOpen ? "pp-rotate" : ""}
+              />
+            </button>
+            {locationOpen && (
+              <div className="pp-topic-select-menu">
+                {TOPIC_LOCATIONS.map((l) => (
+                  <button
+                    key={l.code}
+                    type="button"
+                    className={`pp-topic-select-option ${
+                      location === l.code ? "pp-topic-select-option-active" : ""
+                    }`}
+                    onClick={() => {
+                      setLocation(l.code);
+                      setLocationOpen(false);
+                    }}
+                  >
+                    <span className="pp-flag">{l.flag}</span>
+                    {l.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="pp-topic-field">
+          <label className="pp-topic-label">Language</label>
+          <div className="pp-topic-select" ref={langRef}>
+            <button
+              type="button"
+              className="pp-topic-select-trigger"
+              onClick={() => setLanguageOpen((v) => !v)}
+              disabled={pending}
+            >
+              <span className="pp-topic-select-value">
+                <span className="pp-topic-lang-icon">文A</span>
+                {selectedLanguage?.name}
+              </span>
+              <ChevronDown
+                size={14}
+                className={languageOpen ? "pp-rotate" : ""}
+              />
+            </button>
+            {languageOpen && (
+              <div className="pp-topic-select-menu">
+                {TOPIC_LANGUAGES.map((l) => (
+                  <button
+                    key={l.code}
+                    type="button"
+                    className={`pp-topic-select-option ${
+                      language === l.code ? "pp-topic-select-option-active" : ""
+                    }`}
+                    onClick={() => {
+                      setLanguage(l.code);
+                      setLanguageOpen(false);
+                    }}
+                  >
+                    <span className="pp-topic-lang-icon">文A</span>
+                    {l.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {error && <div className="pp-topic-error">{error}</div>}
+
+        <div className="pp-topic-modal-actions">
+          <button
+            type="button"
+            className="pp-topic-modal-add"
+            onClick={handleAdd}
+            disabled={pending || !name.trim()}
+          >
+            <Plus size={14} />
+            {pending ? "Adding..." : "Add"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function pageRange(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | "…")[] = [];
+  if (current <= 4) {
+    for (let i = 1; i <= 5; i++) pages.push(i);
+    pages.push("…", total);
+  } else if (current >= total - 3) {
+    pages.push(1, "…");
+    for (let i = total - 4; i <= total; i++) pages.push(i);
+  } else {
+    pages.push(1, "…");
+    for (let i = current - 1; i <= current + 1; i++) pages.push(i);
+    pages.push("…", total);
+  }
+  return pages;
+}
+
+const TAG_COLOR_MAP: Record<string, string> = {
+  gray: "#6b7280",
+  red: "#ef4444",
+  orange: "#f97316",
+  amber: "#f59e0b",
+  yellow: "#eab308",
+  green: "#10b981",
+  emerald: "#10b981",
+  teal: "#14b8a6",
+  cyan: "#06b6d4",
+  blue: "#3b82f6",
+  indigo: "#6366f1",
+  violet: "#8b5cf6",
+  purple: "#a855f7",
+  pink: "#ec4899",
+};
+
+function tagColor(name: string): string {
+  return TAG_COLOR_MAP[name?.toLowerCase()] ?? "#6b7280";
 }

@@ -3,27 +3,72 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ChevronDown, Search, Plus, LogOut, FolderOpen,
+  ChevronDown, Search, Plus, LogOut,
 } from "lucide-react";
 
 interface Project {
   id: string;
   name: string;
+  domain?: string | null;
 }
 
 interface Props {
   projects: Project[];
   activeProjectId: string;
   activeProjectName: string;
+  activeProjectDomain?: string | null;
   userEmail?: string;
   switchProjectAction: (projectId: string) => Promise<void>;
   createProjectAction: (formData: FormData) => Promise<void>;
+}
+
+function ProjectIcon({
+  name,
+  domain,
+  size = 22,
+}: {
+  name: string;
+  domain?: string | null;
+  size?: number;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  const initials = (() => {
+    const parts = name.split(" ").filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
+  })();
+
+  if (!domain || failed) {
+    return (
+      <span
+        className="ps-project-icon"
+        style={{ width: size, height: size, fontSize: Math.max(9, size - 13) }}
+      >
+        {initials}
+      </span>
+    );
+  }
+
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={`https://www.google.com/s2/favicons?sz=64&domain=${domain}`}
+      alt={name}
+      width={size}
+      height={size}
+      onError={() => setFailed(true)}
+      className="ps-project-favicon"
+      style={{ width: size, height: size }}
+    />
+  );
 }
 
 export default function ProjectSwitcher({
   projects,
   activeProjectId,
   activeProjectName,
+  activeProjectDomain,
   userEmail = "admin@workspace.com",
   switchProjectAction,
   createProjectAction,
@@ -51,13 +96,6 @@ export default function ProjectSwitcher({
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Get initials for project icon
-  const getInitials = (name: string) => {
-    const parts = name.split(" ").filter(Boolean);
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return name.substring(0, 2).toUpperCase();
-  };
-
   return (
     <div className="ps-wrapper" ref={dropdownRef}>
       {/* Trigger Button */}
@@ -65,9 +103,7 @@ export default function ProjectSwitcher({
         className="ps-trigger"
         onClick={() => { setOpen(!open); setShowAddForm(false); setSearch(""); }}
       >
-        <div className="ps-trigger-icon">
-          <FolderOpen size={14} />
-        </div>
+        <ProjectIcon name={activeProjectName} domain={activeProjectDomain} size={28} />
         <span className="ps-trigger-name">{activeProjectName}</span>
         <ChevronDown size={14} className={`ps-trigger-chevron ${open ? "ps-chevron-open" : ""}`} />
       </button>
@@ -103,7 +139,7 @@ export default function ProjectSwitcher({
                   setOpen(false);
                 }}
               >
-                <span className="ps-project-icon">{getInitials(p.name)}</span>
+                <ProjectIcon name={p.name} domain={p.domain} size={22} />
                 <span className="ps-project-name">{p.name}</span>
                 {p.id === activeProjectId && (
                   <span className="ps-project-check">✓</span>
