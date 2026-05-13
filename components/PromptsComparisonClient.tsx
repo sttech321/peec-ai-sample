@@ -106,6 +106,15 @@ interface Props {
     location: string;
     language: string;
   }) => Promise<{ ok: boolean; topicId?: string; error?: string }>;
+  assignTagAction: (args: {
+    promptId: string;
+    name: string;
+    color?: string;
+  }) => Promise<{ ok: boolean; tagId?: string; error?: string }>;
+  removeTagAction: (args: {
+    promptId: string;
+    tagId: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const TOPIC_LOCATIONS: { code: string; name: string; flag: string }[] = [
@@ -554,10 +563,14 @@ export default function PromptsComparisonClient({
   runNowAction,
   addBrandAction,
   createTopicAction,
+  assignTagAction,
+  removeTagAction,
 }: Props) {
   // null = all brands; otherwise filter to selected brand IDs
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
   const [showNewTopic, setShowNewTopic] = useState(false);
+  // Or = match prompts with ANY selected tag; And = match ALL selected tags
+  const [tagOp, setTagOp] = useState<"or" | "and">("or");
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"active" | "suggested" | "archived">("active");
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -586,9 +599,16 @@ export default function PromptsComparisonClient({
       result = result.filter((p) => p.topicId === selectedTopicId);
     }
 
-    if (selectedTagIds !== null) {
+    if (selectedTagIds !== null && selectedTagIds.length > 0) {
       const set = new Set(selectedTagIds);
-      result = result.filter((p) => p.tags.some((t) => set.has(t.id)));
+      if (tagOp === "and") {
+        result = result.filter((p) => {
+          const ids = new Set(p.tags.map((t) => t.id));
+          return selectedTagIds.every((id) => ids.has(id));
+        });
+      } else {
+        result = result.filter((p) => p.tags.some((t) => set.has(t.id)));
+      }
     }
 
     // Brand filter — keep prompts that mention at least one selected brand
@@ -642,6 +662,7 @@ export default function PromptsComparisonClient({
     search,
     selectedTopicId,
     selectedTagIds,
+    tagOp,
     selectedBrandIds,
     selectedModels,
     sortField,
@@ -749,7 +770,7 @@ export default function PromptsComparisonClient({
         <DateRangePicker value={dateRange} onChange={setDateRange} />
 
         <Dropdown
-          width={240}
+          width={260}
           trigger={(open) => (
             <>
               <TagIcon size={13} />
@@ -773,6 +794,21 @@ export default function PromptsComparisonClient({
               >
                 All Tags
               </button>
+              {/* Or / And toggle — peec.ai pattern */}
+              <div className="pp-tagop-toggle">
+                <button
+                  className={`pp-tagop-btn ${tagOp === "or" ? "pp-tagop-btn-active" : ""}`}
+                  onClick={() => setTagOp("or")}
+                >
+                  Or
+                </button>
+                <button
+                  className={`pp-tagop-btn ${tagOp === "and" ? "pp-tagop-btn-active" : ""}`}
+                  onClick={() => setTagOp("and")}
+                >
+                  And
+                </button>
+              </div>
               {availableTags.length === 0 && (
                 <div className="pp-dd-empty">No tags yet</div>
               )}
@@ -783,7 +819,15 @@ export default function PromptsComparisonClient({
                     checked={selectedTagIds?.includes(t.id) ?? false}
                     onChange={() => toggleTagFilter(t.id)}
                   />
-                  <span className="pp-dd-check-label">{t.name}</span>
+                  <span
+                    className="pp-dd-check-tag"
+                    style={{
+                      background: `color-mix(in srgb, ${tagColor(t.color)} 18%, white)`,
+                      color: tagColor(t.color),
+                    }}
+                  >
+                    {t.name}
+                  </span>
                 </label>
               ))}
             </div>
@@ -1114,27 +1158,18 @@ export default function PromptsComparisonClient({
                         <VolumeBars tier={p.volumeTier} />
                       </td>
                       <td>
-                        {p.tags.length > 0 ? (
-                          <div className="pp-tags-cell">
-                            {p.tags.map((t) => (
-                              <span
-                                key={t.id}
-                                className="pp-tag-pill"
-                                style={{
-                                  background: `color-mix(in srgb, ${tagColor(t.color)} 18%, white)`,
-                                  color: tagColor(t.color),
-                                }}
-                              >
-                                {t.name}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <button className="pp-add-tags">
-                            <Plus size={11} />
-                            Add tags
-                          </button>
-                        )}
+                        <PromptTagsCell
+                          promptId={p.id}
+                          promptTags={p.tags}
+                          availableTags={availableTags}
+                          onTagClick={(tagId) => {
+                            setSelectedTagIds([tagId]);
+                            setTagOp("or");
+                            setCurrentPage(1);
+                          }}
+                          assignTagAction={assignTagAction}
+                          removeTagAction={removeTagAction}
+                        />
                       </td>
                       <td>
                         <span className="pp-location">
@@ -1268,6 +1303,215 @@ export default function PromptsComparisonClient({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Inline tag-assignment popover on a prompt row ───────────────────────────
+function PromptTagsCell({
+  promptId,
+  promptTags,
+  availableTags,
+  onTagClick,
+  assignTagAction,
+  removeTagAction,
+}: {
+  promptId: string;
+  promptTags: PromptTag[];
+  availableTags: AvailableTag[];
+  onTagClick: (tagId: string) => void;
+  assignTagAction: (args: {
+    promptId: string;
+    name: string;
+    color?: string;
+  }) => Promise<{ ok: boolean; tagId?: string; error?: string }>;
+  removeTagAction: (args: {
+    promptId: string;
+    tagId: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  // Local optimistic state — keep the cell snappy without re-querying the page.
+  const [localTags, setLocalTags] = useState<PromptTag[]>(promptTags);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [pending, setPending] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLocalTags(promptTags);
+  }, [promptTags]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const assignedIds = useMemo(
+    () => new Set(localTags.map((t) => t.id)),
+    [localTags],
+  );
+
+  const matches = useMemo(
+    () =>
+      availableTags.filter((t) =>
+        t.name.toLowerCase().includes(query.trim().toLowerCase()),
+      ),
+    [availableTags, query],
+  );
+
+  const exactMatch = availableTags.find(
+    (t) => t.name.toLowerCase() === query.trim().toLowerCase(),
+  );
+  const canCreate = query.trim().length > 0 && !exactMatch;
+
+  const handleAdd = async (name: string) => {
+    if (pending) return;
+    setPending(true);
+    const res = await assignTagAction({ promptId, name });
+    setPending(false);
+    if (!res.ok || !res.tagId) return;
+    // Optimistic add to local state.
+    const found = availableTags.find((t) => t.id === res.tagId);
+    setLocalTags((curr) =>
+      curr.some((t) => t.id === res.tagId)
+        ? curr
+        : [
+            ...curr,
+            {
+              id: res.tagId!,
+              name: found?.name ?? name,
+              color: found?.color ?? "gray",
+            },
+          ],
+    );
+    setQuery("");
+  };
+
+  const handleRemove = async (tagId: string) => {
+    if (pending) return;
+    setPending(true);
+    const res = await removeTagAction({ promptId, tagId });
+    setPending(false);
+    if (!res.ok) return;
+    setLocalTags((curr) => curr.filter((t) => t.id !== tagId));
+  };
+
+  return (
+    <div className="pp-tag-cell-wrap" ref={ref}>
+      {localTags.length > 0 ? (
+        <div className="pp-tags-cell">
+          {localTags.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className="pp-tag-pill pp-tag-pill-btn"
+              style={{
+                background: `color-mix(in srgb, ${tagColor(t.color)} 18%, white)`,
+                color: tagColor(t.color),
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onTagClick(t.id);
+              }}
+              title="Filter by this tag"
+            >
+              {t.name}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="pp-add-tags pp-add-tags-small"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((v) => !v);
+            }}
+            title="Add another tag"
+          >
+            <Plus size={11} />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="pp-add-tags"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((v) => !v);
+          }}
+        >
+          <Plus size={11} />
+          Add tags
+        </button>
+      )}
+
+      {open && (
+        <div className="pp-tag-popover">
+          <div className="pp-tag-popover-search">
+            <Search size={12} />
+            <input
+              autoFocus
+              placeholder="Search or create…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && query.trim()) handleAdd(query.trim());
+                if (e.key === "Escape") {
+                  setOpen(false);
+                  setQuery("");
+                }
+              }}
+            />
+          </div>
+          <div className="pp-tag-popover-list">
+            {matches.map((t) => {
+              const assigned = assignedIds.has(t.id);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="pp-tag-popover-row"
+                  onClick={() =>
+                    assigned ? handleRemove(t.id) : handleAdd(t.name)
+                  }
+                  disabled={pending}
+                >
+                  <span
+                    className="pp-tag-pill"
+                    style={{
+                      background: `color-mix(in srgb, ${tagColor(t.color)} 18%, white)`,
+                      color: tagColor(t.color),
+                    }}
+                  >
+                    {t.name}
+                  </span>
+                  {assigned && <Check size={13} className="pp-tag-popover-check" />}
+                </button>
+              );
+            })}
+            {matches.length === 0 && !canCreate && (
+              <div className="pp-dd-empty">No tags yet</div>
+            )}
+            {canCreate && (
+              <button
+                type="button"
+                className="pp-tag-popover-create"
+                onClick={() => handleAdd(query.trim())}
+                disabled={pending}
+              >
+                <Plus size={12} />
+                Create <strong>{query.trim()}</strong>
+              </button>
+            )}
           </div>
         </div>
       )}

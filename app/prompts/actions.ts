@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "../../db";
-import { prompts, topics } from "../../db/schema";
+import { prompts, topics, tags, promptTags } from "../../db/schema";
 import { revalidatePath } from "next/cache";
 import { inngest } from "../../inngest/client";
 import { getActiveProjectId, WORKSPACE } from "../../lib/project-context";
@@ -163,4 +163,85 @@ export async function runNow(promptId: string, query: string, selectedEngines?: 
     revalidatePath("/");
     revalidatePath("/prompts");
   }
+}
+
+// ─── Prompt-tag actions ─────────────────────────────────────────────────────
+
+/**
+ * Assign a tag to a prompt. Looks up the tag by name and creates it (with the
+ * supplied color, or "gray" by default) if it doesn't exist. Idempotent — if
+ * the prompt is already tagged, returns ok without re-inserting.
+ */
+export async function assignTagToPromptByName(args: {
+  promptId: string;
+  name: string;
+  color?: string;
+}): Promise<{ ok: boolean; tagId?: string; error?: string }> {
+  const name = args.name.trim();
+  if (!name) return { ok: false, error: "Tag name is required" };
+  if (name.length > 100) return { ok: false, error: "Tag name too long" };
+
+  const projectId = await getActiveProjectId();
+  const workspaceId = WORKSPACE;
+
+  // 1. Find or create the tag.
+  let [existing] = await db
+    .select({ id: tags.id })
+    .from(tags)
+    .where(and(eq(tags.projectId, projectId), eq(tags.name, name)))
+    .limit(1);
+
+  let tagId: string;
+  if (existing) {
+    tagId = existing.id;
+  } else {
+    const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const [created] = await db
+      .insert(tags)
+      .values({
+        workspaceId,
+        projectId,
+        name,
+        slug,
+        color: args.color ?? "gray",
+      })
+      .returning({ id: tags.id });
+    tagId = created.id;
+  }
+
+  // 2. Link to prompt if not already linked.
+  const [linked] = await db
+    .select({ id: promptTags.id })
+    .from(promptTags)
+    .where(and(eq(promptTags.promptId, args.promptId), eq(promptTags.tagId, tagId)))
+    .limit(1);
+
+  if (!linked) {
+    await db.insert(promptTags).values({
+      workspaceId,
+      promptId: args.promptId,
+      tagId,
+    });
+  }
+
+  revalidatePath("/prompts");
+  revalidatePath("/tags");
+  return { ok: true, tagId };
+}
+
+/** Remove a single tag from a prompt. */
+export async function removeTagFromPrompt(args: {
+  promptId: string;
+  tagId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  await db
+    .delete(promptTags)
+    .where(
+      and(
+        eq(promptTags.promptId, args.promptId),
+        eq(promptTags.tagId, args.tagId),
+      ),
+    );
+  revalidatePath("/prompts");
+  return { ok: true };
 }
