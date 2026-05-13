@@ -110,7 +110,7 @@ export default async function PromptsPage() {
       id: b.brandId,
       name: b.brandName,
       isOwn: b.brandIsOwn,
-      domain: b.brandDomains?.[0] ?? null,
+      domain: b.brandDomains?.[0] ?? guessBrandDomain(b.brandName),
       count: Number(b.mentionCount),
     });
     brandsByPrompt.set(b.promptId, arr);
@@ -154,7 +154,7 @@ export default async function PromptsPage() {
     id: b.id,
     name: b.name,
     isOwn: b.isOwn,
-    domain: b.domains?.[0] ?? null,
+    domain: b.domains?.[0] ?? guessBrandDomain(b.name),
   }));
 
   // ── 5. All tags in the project (for filter dropdown) ───────────────────────
@@ -298,6 +298,40 @@ export default async function PromptsPage() {
       />
     </DashboardLayout>
   );
+}
+
+// Map of well-known brand names where the obvious "name.com" guess is wrong.
+// Keeps the guess heuristic deterministic without requiring DB updates.
+const BRAND_DOMAIN_OVERRIDES: Record<string, string> = {
+  "google analytics": "analytics.google.com",
+  "google ads": "ads.google.com",
+  "google search console": "search.google.com",
+  "youtube": "youtube.com",
+  "facebook ads": "facebook.com",
+  "meta ads": "meta.com",
+  "microsoft ads": "ads.microsoft.com",
+  "bing ads": "ads.microsoft.com",
+  "chatgpt": "chatgpt.com",
+  "claude": "claude.ai",
+  "perplexity": "perplexity.ai",
+  "gemini": "gemini.google.com",
+  "ai overview": "google.com",
+  "ai overviews": "google.com",
+  "ai mode": "google.com",
+};
+
+function guessBrandDomain(name: string): string {
+  const key = name.trim().toLowerCase();
+  if (BRAND_DOMAIN_OVERRIDES[key]) return BRAND_DOMAIN_OVERRIDES[key];
+  // Drop common suffixes ("Inc.", "LLC", "Ltd"), strip non-alphanumerics,
+  // collapse whitespace, append .com. Google's favicon service tolerates
+  // misses by returning a generic globe — we still render initials on error.
+  const cleaned = key
+    .replace(/\b(inc|llc|ltd|corp|co|gmbh)\.?$/g, "")
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
+  if (!cleaned) return `${key.replace(/\s+/g, "")}.com`;
+  return `${cleaned}.com`;
 }
 
 const TAG_PALETTE = [

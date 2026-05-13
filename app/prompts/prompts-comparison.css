@@ -119,6 +119,205 @@
   color: #a1a1aa;
 }
 
+/* Model dropdown rows with favicons */
+.pp-model-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #18181b;
+}
+.pp-model-item:hover { background: #fafafa; }
+.pp-model-item input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #6366f1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.pp-model-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pp-model-item .pd-chat-engine-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* ── Date range picker ──────────────────────────────────────────────────── */
+.pp-date-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  grid-template-rows: 1fr auto;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.10);
+  z-index: 50;
+  width: 480px;
+  overflow: hidden;
+}
+
+.pp-date-presets {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  padding: 6px;
+  border-right: 1px solid #f4f4f5;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: #fff;
+}
+
+.pp-date-presets-head {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #a1a1aa;
+}
+
+.pp-date-preset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #3f3f46;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+.pp-date-preset:hover { background: #fafafa; color: #18181b; }
+.pp-date-preset-active { background: #f4f4f5; color: #18181b; font-weight: 500; }
+.pp-date-preset-active svg { color: #18181b; }
+.pp-date-preset-disabled {
+  color: #d4d4d8;
+  cursor: not-allowed;
+}
+.pp-date-preset-disabled:hover { background: transparent; color: #d4d4d8; }
+
+.pp-date-divider {
+  height: 1px;
+  background: #f4f4f5;
+  margin: 4px 4px;
+}
+
+.pp-date-calendar {
+  grid-column: 2;
+  grid-row: 1;
+  padding: 10px 12px 8px;
+}
+
+.pp-date-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.pp-date-month-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #18181b;
+}
+
+.pp-date-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 2px;
+}
+.pp-date-weekdays span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #71717a;
+}
+
+.pp-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.pp-date-day {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: 12px;
+  color: #18181b;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.1s;
+}
+.pp-date-day:hover:not(:disabled):not(.pp-date-day-in-range):not(.pp-date-day-start):not(.pp-date-day-end) {
+  background: #fafafa;
+  border-radius: 6px;
+}
+.pp-date-day-muted { color: #d4d4d8; }
+.pp-date-day-disabled {
+  color: #d4d4d8;
+  cursor: not-allowed;
+}
+.pp-date-day-in-range {
+  background: #f4f4f5;
+  border-radius: 0;
+}
+.pp-date-day-start,
+.pp-date-day-end {
+  background: #18181b;
+  color: #fff;
+  border-radius: 6px;
+  font-weight: 600;
+  z-index: 1;
+}
+.pp-date-day-pick {
+  background: #18181b;
+  color: #fff;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.pp-date-footer {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-top: 1px solid #f4f4f5;
+  font-size: 12px;
+  color: #3f3f46;
+}
+.pp-date-days-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: #71717a;
+}
+
 /* ── Brand filter dropdown ──────────────────────────────────────────────── */
 .pp-brand-menu {
   padding: 0;

@@ -1,12 +1,16 @@
 import DashboardLayout from "../../components/DashboardLayout";
 import DomainsClient from "../../components/DomainsClient";
+import PageFilterBar from "../../components/PageFilterBar";
 import { db } from "../../db";
 import { projects, brands, brandProfiles } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import { fetchChatFacts, fetchProjectBrands } from "../../lib/chat-facts-server";
+import { getPageFilterData } from "../../lib/page-filter-data";
+import { addBrand } from "../actions/brands";
 import type { BrandProfile } from "../../lib/brand-profile-types";
 import "../prompts/[id]/prompt-detail.css";
+import "../prompts/prompts-comparison.css";
 import "../insights/insights.css";
 import "../urls/urls.css";
 import "./domains.css";
@@ -54,13 +58,20 @@ export default async function DomainsPage() {
   if (profileDomain) ownDomains.push(profileDomain);
   for (const d of ownBrand?.domains ?? []) ownDomains.push(d.toLowerCase());
 
-  const [chatFacts, projectBrands] = await Promise.all([
+  const [chatFacts, projectBrands, filterData] = await Promise.all([
     fetchChatFacts({ projectId: activeProjectId }),
     fetchProjectBrands(activeProjectId),
+    getPageFilterData(activeProjectId),
   ]);
 
   return (
     <DashboardLayout currentPath="/domains">
+      <PageFilterBar
+        projectName={projectName}
+        projectBrands={filterData.projectBrands}
+        availableTags={filterData.availableTags}
+        addBrandAction={addBrand}
+      />
       <DomainsClient
         chatFacts={chatFacts}
         projectName={projectName}

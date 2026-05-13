@@ -19,6 +19,7 @@ import {
   Building2,
   Check,
 } from "lucide-react";
+import EngineIcon from "./EngineIcon";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface PromptBrand {
@@ -139,12 +140,79 @@ const TOPIC_LANGUAGES: { code: string; name: string }[] = [
 
 const ALL_ENGINES = ["ChatGPT", "Claude", "Perplexity", "Gemini", "AI Overviews"];
 
-const DATE_PRESETS: { label: string; days: number }[] = [
-  { label: "Last 7 days", days: 7 },
-  { label: "Last 14 days", days: 14 },
-  { label: "Last 30 days", days: 30 },
-  { label: "Last 90 days", days: 90 },
+type DatePreset = "7" | "14" | "30" | "90" | "180" | "365" | "custom" | "all";
+
+interface DateRange {
+  start: Date;
+  end: Date;
+  preset: DatePreset;
+  label: string;
+}
+
+const DATE_PRESETS: { key: DatePreset; label: string; days: number; disabled?: boolean }[] = [
+  { key: "7", label: "Last 7 days", days: 7 },
+  { key: "14", label: "Last 14 days", days: 14 },
+  { key: "30", label: "Last 30 days", days: 30 },
+  { key: "90", label: "Last 90 days", days: 90 },
+  { key: "180", label: "Last 180 days", days: 180 },
+  { key: "365", label: "Last 365 days", days: 365 },
 ];
+
+function makeDateRange(preset: DatePreset): DateRange {
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  if (preset === "all") {
+    return {
+      start: new Date(2000, 0, 1),
+      end,
+      preset,
+      label: "All time",
+    };
+  }
+  if (preset === "custom") {
+    const start = new Date();
+    start.setDate(start.getDate() - 29);
+    start.setHours(0, 0, 0, 0);
+    return { start, end, preset, label: "Custom" };
+  }
+  const days = parseInt(preset, 10);
+  const start = new Date();
+  start.setDate(start.getDate() - days + 1);
+  start.setHours(0, 0, 0, 0);
+  return { start, end, preset, label: `Last ${days} days` };
+}
+
+function fmtDay(d: Date): string {
+  return `${d.getDate()} ${d.toLocaleString("en", { month: "short" })} ${d.getFullYear()}`;
+}
+
+function daysBetween(start: Date, end: Date): number {
+  // Strip times so 00:00 → 23:59 of the same span counts cleanly.
+  const s = startOfDay(start).getTime();
+  const e = startOfDay(end).getTime();
+  return Math.max(1, Math.round((e - s) / 86400000) + 1);
+}
+
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function isBetween(d: Date, start: Date, end: Date): boolean {
+  const t = startOfDay(d).getTime();
+  return t >= startOfDay(start).getTime() && t <= startOfDay(end).getTime();
+}
 
 type SortField =
   | "query"
@@ -500,7 +568,7 @@ export default function PromptsComparisonClient({
   const [selectedTopicId, setSelectedTopicId] = useState<string | "all" | "none">("all");
   const [selectedTagIds, setSelectedTagIds] = useState<string[] | null>(null); // null = all
   const [selectedModels, setSelectedModels] = useState<string[]>(ALL_ENGINES);
-  const [datePreset, setDatePreset] = useState<string>("Last 7 days");
+  const [dateRange, setDateRange] = useState<DateRange>(() => makeDateRange("7"));
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
   // ── Filtering ─────────────────────────────────────────────────────────────
@@ -678,33 +746,7 @@ export default function PromptsComparisonClient({
           onAddBrand={addBrandAction}
         />
 
-        <Dropdown
-          width={200}
-          trigger={(open) => (
-            <>
-              <Calendar size={13} />
-              <span>{datePreset}</span>
-              <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
-            </>
-          )}
-        >
-          {(close) => (
-            <div className="pp-dd-section">
-              {DATE_PRESETS.map((p) => (
-                <button
-                  key={p.label}
-                  className={`pp-dd-item ${datePreset === p.label ? "pp-dd-item-active" : ""}`}
-                  onClick={() => {
-                    setDatePreset(p.label);
-                    close();
-                  }}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </Dropdown>
+        <DateRangePicker value={dateRange} onChange={setDateRange} />
 
         <Dropdown
           width={240}
@@ -749,7 +791,7 @@ export default function PromptsComparisonClient({
         </Dropdown>
 
         <Dropdown
-          width={220}
+          width={240}
           trigger={(open) => (
             <>
               <Layers size={13} />
@@ -766,13 +808,14 @@ export default function PromptsComparisonClient({
             <div className="pp-dd-section">
               <div className="pp-dd-heading">Active models</div>
               {ALL_ENGINES.map((m) => (
-                <label key={m} className="pp-dd-check-item">
+                <label key={m} className="pp-model-item">
                   <input
                     type="checkbox"
                     checked={selectedModels.includes(m)}
                     onChange={() => toggleModel(m)}
                   />
-                  <span className="pp-dd-check-label">{m}</span>
+                  <EngineIcon engine={m} size={18} />
+                  <span className="pp-model-name">{m}</span>
                 </label>
               ))}
             </div>
@@ -1225,6 +1268,218 @@ export default function PromptsComparisonClient({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Date range picker (presets + calendar) ──────────────────────────────────
+function DateRangePicker({
+  value,
+  onChange,
+}: {
+  value: DateRange;
+  onChange: (v: DateRange) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [calMonth, setCalMonth] = useState(() => startOfMonth(value.end));
+  const [pickStart, setPickStart] = useState<Date | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setPickStart(null);
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const applyPreset = (key: DatePreset) => {
+    onChange(makeDateRange(key));
+    setPickStart(null);
+    // Stay open — user can preview different ranges; closes on outside click.
+  };
+
+  const handleDayClick = (d: Date) => {
+    if (!pickStart) {
+      setPickStart(d);
+      return;
+    }
+    const a = pickStart;
+    const b = d;
+    const start = a.getTime() <= b.getTime() ? new Date(a) : new Date(b);
+    const end = a.getTime() <= b.getTime() ? new Date(b) : new Date(a);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    onChange({ start, end, preset: "custom", label: "Custom" });
+    setPickStart(null);
+    // Stay open — only outside click closes.
+  };
+
+  const grid = useMemo(() => {
+    const first = startOfMonth(calMonth);
+    const lastDay = new Date(
+      calMonth.getFullYear(),
+      calMonth.getMonth() + 1,
+      0,
+    ).getDate();
+    // Monday-first offset
+    const offset = (first.getDay() + 6) % 7;
+    const cells: { date: Date; current: boolean }[] = [];
+    for (let i = offset; i > 0; i--) {
+      const d = new Date(first);
+      d.setDate(d.getDate() - i);
+      cells.push({ date: d, current: false });
+    }
+    for (let i = 1; i <= lastDay; i++) {
+      cells.push({
+        date: new Date(calMonth.getFullYear(), calMonth.getMonth(), i),
+        current: true,
+      });
+    }
+    while (cells.length < 42) {
+      const last = cells[cells.length - 1].date;
+      const d = new Date(last);
+      d.setDate(d.getDate() + 1);
+      cells.push({ date: d, current: false });
+    }
+    return cells;
+  }, [calMonth]);
+
+  const today = startOfDay(new Date());
+
+  return (
+    <div className="pp-dd" ref={ref}>
+      <button className="pp-dd-trigger" onClick={() => setOpen((v) => !v)}>
+        <Calendar size={13} />
+        <span>{value.label}</span>
+        <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
+      </button>
+      {open && (
+        <div className="pp-date-panel">
+          <div className="pp-date-presets">
+            <div className="pp-date-presets-head">Select range</div>
+            {DATE_PRESETS.map((p) => {
+              const disabled = p.disabled;
+              const active = value.preset === p.key;
+              return (
+                <button
+                  key={p.key}
+                  className={`pp-date-preset ${active ? "pp-date-preset-active" : ""} ${
+                    disabled ? "pp-date-preset-disabled" : ""
+                  }`}
+                  onClick={() => !disabled && applyPreset(p.key)}
+                  disabled={disabled}
+                >
+                  <span>{p.label}</span>
+                  {active && <Check size={13} />}
+                </button>
+              );
+            })}
+            <div className="pp-date-divider" />
+            <button
+              className={`pp-date-preset ${value.preset === "custom" ? "pp-date-preset-active" : ""}`}
+              onClick={() => setPickStart(null)}
+            >
+              <span>Custom</span>
+              {value.preset === "custom" && <Check size={13} />}
+            </button>
+            <button
+              className={`pp-date-preset ${value.preset === "all" ? "pp-date-preset-active" : ""}`}
+              onClick={() => applyPreset("all")}
+            >
+              <span>All time</span>
+              {value.preset === "all" && <Check size={13} />}
+            </button>
+            <div className="pp-date-divider" />
+            <button
+              className="pp-date-preset"
+              onClick={() => applyPreset("7")}
+            >
+              <span>Reset</span>
+            </button>
+          </div>
+
+          <div className="pp-date-calendar">
+            <div className="pp-date-month-nav">
+              <button
+                className="pp-icon-btn"
+                onClick={() => {
+                  const m = new Date(calMonth);
+                  m.setMonth(m.getMonth() - 1);
+                  setCalMonth(m);
+                }}
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span className="pp-date-month-label">
+                {calMonth.toLocaleString("en", {
+                  month: "long",
+                  year: "numeric",
+                })}
+              </span>
+              <button
+                className="pp-icon-btn"
+                onClick={() => {
+                  const m = new Date(calMonth);
+                  m.setMonth(m.getMonth() + 1);
+                  setCalMonth(m);
+                }}
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+            <div className="pp-date-weekdays">
+              {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
+                <span key={d}>{d}</span>
+              ))}
+            </div>
+            <div className="pp-date-grid">
+              {grid.map((cell, i) => {
+                const isFuture = startOfDay(cell.date).getTime() > today.getTime();
+                const inRange =
+                  !isFuture && isBetween(cell.date, value.start, value.end);
+                const isStart = isSameDay(cell.date, value.start);
+                const isEnd = isSameDay(cell.date, value.end);
+                const isPick = pickStart && isSameDay(cell.date, pickStart);
+                const classes = [
+                  "pp-date-day",
+                  !cell.current ? "pp-date-day-muted" : "",
+                  isFuture ? "pp-date-day-disabled" : "",
+                  inRange ? "pp-date-day-in-range" : "",
+                  isStart ? "pp-date-day-start" : "",
+                  isEnd ? "pp-date-day-end" : "",
+                  isPick ? "pp-date-day-pick" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <button
+                    key={i}
+                    className={classes}
+                    onClick={() => !isFuture && handleDayClick(cell.date)}
+                    disabled={isFuture}
+                  >
+                    {cell.date.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="pp-date-footer">
+            <span>
+              {fmtDay(value.start)} – {fmtDay(value.end)}
+            </span>
+            <span className="pp-date-days-badge">
+              {daysBetween(value.start, value.end)} days
+            </span>
           </div>
         </div>
       )}

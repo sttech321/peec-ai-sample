@@ -269,54 +269,6 @@ export default function DomainsClient({
         <strong>Domains</strong>
       </div>
 
-      {/* Filters */}
-      <div className="ins-filters">
-        <BrandsDropdown
-          projectBrands={projectBrands}
-          projectName={projectName}
-          value={selectedBrands}
-          onChange={setSelectedBrands}
-        />
-        <DateRangeDropdown value={dateRange} onChange={setDateRange} />
-
-        <div className="ins-filter-wrapper">
-          <button className="pd-filter-chip">
-            <span className="ins-chip-icon">🏷</span>
-            All Tags <ChevronDown size={11} />
-          </button>
-        </div>
-
-        <div className="ins-filter-wrapper">
-          <button
-            className="pd-filter-chip"
-            onClick={() => setModelDropdownOpen((o) => !o)}
-          >
-            <span className="ins-chip-icon">●</span>
-            {selectedModels.length === allEngines.length
-              ? "All Models"
-              : `${selectedModels.length} Models`} <ChevronDown size={11} />
-          </button>
-          {modelDropdownOpen && (
-            <div className="ins-popover">
-              <div className="ins-popover-label">Active models</div>
-              <div className="ins-popover-list">
-                {allEngines.map((m) => (
-                  <label key={m} className="ins-popover-row">
-                    <input
-                      type="checkbox"
-                      checked={selectedModels.includes(m)}
-                      onChange={() => toggleModel(m)}
-                    />
-                    <EngineIcon engine={m} size={14} />
-                    <span>{m}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
       <h2 className="urls-section-title">Overview</h2>
       <p className="urls-section-subtitle">
         How often each domain appears in AI generated discussions

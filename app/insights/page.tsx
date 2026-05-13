@@ -1,12 +1,16 @@
 import DashboardLayout from "../../components/DashboardLayout";
 import InsightsClient from "../../components/InsightsClient";
+import PageFilterBar from "../../components/PageFilterBar";
 import { db } from "../../db";
 import { projects, brands, brandProfiles } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import { fetchChatFacts, fetchProjectBrands } from "../../lib/chat-facts-server";
+import { getPageFilterData } from "../../lib/page-filter-data";
+import { addBrand } from "../actions/brands";
 import type { BrandProfile } from "../../lib/brand-profile-types";
 import "../prompts/[id]/prompt-detail.css";
+import "../prompts/prompts-comparison.css";
 import "./insights.css";
 
 export default async function InsightsPage() {
@@ -44,13 +48,20 @@ export default async function InsightsPage() {
     profileDomain ||
     (ownBrand?.domains && ownBrand.domains.length > 0 ? ownBrand.domains[0] : null);
 
-  const [chatFacts, projectBrands] = await Promise.all([
+  const [chatFacts, projectBrands, filterData] = await Promise.all([
     fetchChatFacts({ projectId: activeProjectId }),
     fetchProjectBrands(activeProjectId),
+    getPageFilterData(activeProjectId),
   ]);
 
   return (
     <DashboardLayout currentPath="/insights">
+      <PageFilterBar
+        projectName={projectName}
+        projectBrands={filterData.projectBrands}
+        availableTags={filterData.availableTags}
+        addBrandAction={addBrand}
+      />
       <InsightsClient
         chatFacts={chatFacts}
         projectName={projectName}

@@ -142,58 +142,6 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands }
         </button>
       </div>
 
-      <div className="pd-filters">
-        <BrandsDropdown
-          projectBrands={projectBrands}
-          projectName={projectName}
-          value={selectedBrands}
-          onChange={setSelectedBrands}
-        />
-        <DateRangeDropdown value={dateRange} onChange={setDateRange} />
-
-        <div className="relative inline-block text-left">
-          <button
-            className="pd-filter-chip"
-            onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-          >
-            {selectedModels.length === allAvailableModels.length ? "All Models" : `${selectedModels.length} Models`} <ChevronDown size={11} />
-          </button>
-
-          {isModelDropdownOpen && (
-            <div className="absolute left-0 z-50 mt-2 w-56 origin-top-left rounded-md bg-[#141418] shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none border border-slate-800">
-              <div className="py-1">
-                <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800/50">
-                  Active models
-                </div>
-                <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                  {allAvailableModels.map((model) => (
-                    <label key={model} className="flex items-center px-4 py-2 hover:bg-slate-800/50 cursor-pointer group transition-colors">
-                      <div className="relative flex items-center">
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer appearance-none checked:bg-indigo-500 checked:border-indigo-500 transition-colors"
-                          checked={selectedModels.includes(model)}
-                          onChange={() => toggleModel(model)}
-                        />
-                        {selectedModels.includes(model) && (
-                          <svg className="absolute w-3 h-3 text-white pointer-events-none left-[2px] top-[2px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                      <div className="ml-3 flex items-center gap-2">
-                        <EngineIcon engine={model} size={16} />
-                        <span className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors">{model}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
       <div className="pd-section">
         <h2 className="pd-section-title">Overview</h2>
         <p className="pd-section-subtitle">How often each brand appears in AI generated discussions</p>

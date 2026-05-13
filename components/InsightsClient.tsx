@@ -195,68 +195,6 @@ export default function InsightsClient({ chatFacts, projectName, projectBrands, 
 
   return (
     <div className="ins-page">
-      {/* Filter bar */}
-      <div className="ins-filters">
-        <BrandsDropdown
-          projectBrands={projectBrands}
-          projectName={projectName}
-          value={selectedBrands}
-          onChange={setSelectedBrands}
-        />
-        <DateRangeDropdown value={dateRange} onChange={setDateRange} />
-
-        <div className="ins-filter-wrapper">
-          <button
-            className="pd-filter-chip"
-            onClick={() => {
-              setTagsDropdownOpen((o) => !o);
-              setModelDropdownOpen(false);
-            }}
-          >
-            <span className="ins-chip-icon">🏷</span>
-            All Tags <ChevronDown size={11} />
-          </button>
-          {tagsDropdownOpen && (
-            <div className="ins-popover">
-              <div className="ins-popover-empty">No tags configured for this project.</div>
-            </div>
-          )}
-        </div>
-
-        <div className="ins-filter-wrapper">
-          <button
-            className="pd-filter-chip"
-            onClick={() => {
-              setModelDropdownOpen((o) => !o);
-              setTagsDropdownOpen(false);
-            }}
-          >
-            <span className="ins-chip-icon">●</span>
-            {selectedModels.length === allEngines.length
-              ? "All Models"
-              : `${selectedModels.length} Models`} <ChevronDown size={11} />
-          </button>
-          {modelDropdownOpen && (
-            <div className="ins-popover">
-              <div className="ins-popover-label">Active models</div>
-              <div className="ins-popover-list">
-                {allEngines.map((m) => (
-                  <label key={m} className="ins-popover-row">
-                    <input
-                      type="checkbox"
-                      checked={selectedModels.includes(m)}
-                      onChange={() => toggleModel(m)}
-                    />
-                    <EngineIcon engine={m} size={14} />
-                    <span>{m}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Hero */}
       <div className="ins-hero">
         <div className="ins-hero-meta">Updated · {dateRange.label.toLowerCase()}</div>
