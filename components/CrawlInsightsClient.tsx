@@ -129,9 +129,14 @@ function PreviewPane() {
       </div>
       {/* Filters */}
       <div style={{ padding: "10px 14px", display: "flex", gap: 6, borderBottom: "1px solid #f4f4f5" }}>
-        {["Last 7 days", "All operators", "All bot types"].map(l => (
-          <span key={l} style={{ padding: "4px 9px", border: "1px solid #e4e4e7", borderRadius: 6, fontSize: 11, color: "#52525b", display: "inline-flex", alignItems: "center", gap: 4 }}>
-            {l} <ChevronDown size={10} />
+        {[
+          { label: "Last 7 days", icon: "○" },
+          { label: "All operators", icon: "⊙" },
+          { label: "All bot types", icon: "≡" },
+        ].map(({ label, icon }) => (
+          <span key={label} style={{ padding: "4px 9px", border: "1px solid #e4e4e7", borderRadius: 6, fontSize: 11, color: "#52525b", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontSize: 9, color: "#a1a1aa" }}>{icon}</span>
+            {label} <ChevronDown size={10} />
           </span>
         ))}
       </div>
@@ -334,16 +339,11 @@ export default function CrawlInsightsClient({ projectName }: { projectName: stri
                 disabled={!provider}
                 onClick={() => setConnected(true)}
               >
-                {providerInfo?.deployLabel ?? "Deploy"}
+                {providerInfo?.deployLabel ?? "Deploy worker"}
               </button>
-              {provider && (
-                <button
-                  className="ci-docs-link"
-                  onClick={() => {}}
-                >
-                  {providerInfo?.docsLabel}
-                </button>
-              )}
+              <button className="ci-docs-link" onClick={() => {}}>
+                {provider ? providerInfo?.docsLabel : "View agent analytics docs"}
+              </button>
             </div>
           </div>
 

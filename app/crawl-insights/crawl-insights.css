@@ -27,6 +27,7 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-height: 480px;
 }
 
 .ci-setup-title {
@@ -38,7 +39,7 @@
 
 .ci-setup-desc {
   font-size: 13px;
-  color: #f97316;
+  color: #71717a;
   margin: 0;
   line-height: 1.5;
 }
@@ -121,17 +122,19 @@
 
 /* Docs link */
 .ci-docs-link {
-  background: none;
-  border: none;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
   font-size: 13px;
-  color: #71717a;
+  color: #3f3f46;
   cursor: pointer;
   text-align: center;
-  padding: 4px;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  padding: 9px 16px;
+  width: 100%;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s;
 }
-.ci-docs-link:hover { color: #18181b; }
+.ci-docs-link:hover { background: #fafafa; border-color: #d4d4d8; }
 
 .ci-select-btn {
   display: flex;
@@ -210,7 +213,7 @@
 .ci-dropdown-request:hover { background: #fafafa; color: #18181b; }
 
 .ci-connect-btn {
-  padding: 9px 16px;
+  padding: 10px 16px;
   background: #18181b;
   color: #fff;
   border: none;
@@ -219,7 +222,8 @@
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
-  align-self: flex-start;
+  width: 100%;
+  text-align: center;
 }
 .ci-connect-btn:hover { background: #27272a; }
 .ci-connect-btn:disabled { opacity: 0.5; cursor: not-allowed; }
