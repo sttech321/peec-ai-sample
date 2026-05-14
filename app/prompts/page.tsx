@@ -7,19 +7,26 @@ import {
   chats,
   brandMentions,
   brands,
+  brandSuggestions,
   tags,
   promptTags,
   projects,
 } from "../../db/schema";
 import {
   addPrompt,
+  addPromptsBulk,
+  addPromptsFromCsv,
   runNow,
   createTopic,
   assignTagToPromptByName,
   removeTagFromPrompt,
+  batchAssignTag,
+  batchAssignTopic,
+  batchSetActive,
+  batchDeletePrompts,
 } from "./actions";
 import { addBrand } from "../actions/brands";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import "./prompts-comparison.css";
 
@@ -78,6 +85,91 @@ export default async function PromptsPage() {
   metricsRaw.forEach((m) => metricsMap.set(m.promptId, m));
   const mentionsMap = new Map<string, any>();
   mentionsRaw.forEach((m) => mentionsMap.set(m.promptId, m));
+
+  // ── 2b. Windowed metrics for real trend deltas ─────────────────────────────
+  // Per handoff (peec-clone-handoff/02-metrics-definitions.md + 07-gotchas):
+  // 7-day rolling beats daily noise. Trend = current 7-day window − previous
+  // 7-day window. When either window has no data, trend = 0.
+  const now = new Date();
+  const recentStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const previousStart = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+  type WindowRow = {
+    promptId: string;
+    totalChats: number;
+    totalMentions: number;
+    avgSentiment: number | null;
+    avgPosition: number | null;
+  };
+
+  async function loadWindow(start: Date, end?: Date): Promise<WindowRow[]> {
+    const chatWhere = end
+      ? and(
+          eq(prompts.projectId, activeProjectId),
+          gte(chats.runDate, start),
+          lt(chats.runDate, end),
+        )
+      : and(eq(prompts.projectId, activeProjectId), gte(chats.runDate, start));
+
+    const chatRows = await db
+      .select({
+        promptId: chats.promptId,
+        totalChats: sql<number>`count(distinct ${chats.id})`,
+      })
+      .from(chats)
+      .innerJoin(prompts, eq(chats.promptId, prompts.id))
+      .where(chatWhere)
+      .groupBy(chats.promptId);
+
+    const mentionRows = await db
+      .select({
+        promptId: chats.promptId,
+        totalMentions: sql<number>`count(${brandMentions.id})`,
+        avgSentiment: sql<number>`avg(${brandMentions.sentiment})`,
+        avgPosition: sql<number>`avg(${brandMentions.position})`,
+      })
+      .from(brandMentions)
+      .innerJoin(chats, eq(brandMentions.chatId, chats.id))
+      .innerJoin(prompts, eq(chats.promptId, prompts.id))
+      .where(chatWhere)
+      .groupBy(chats.promptId);
+
+    const byId = new Map<string, WindowRow>();
+    for (const r of chatRows) {
+      byId.set(r.promptId, {
+        promptId: r.promptId,
+        totalChats: Number(r.totalChats || 0),
+        totalMentions: 0,
+        avgSentiment: null,
+        avgPosition: null,
+      });
+    }
+    for (const r of mentionRows) {
+      const existing = byId.get(r.promptId);
+      if (existing) {
+        existing.totalMentions = Number(r.totalMentions || 0);
+        existing.avgSentiment = r.avgSentiment === null ? null : Number(r.avgSentiment);
+        existing.avgPosition = r.avgPosition === null ? null : Number(r.avgPosition);
+      }
+    }
+    return [...byId.values()];
+  }
+
+  const [recentRows, previousRows] = await Promise.all([
+    loadWindow(recentStart),
+    loadWindow(previousStart, recentStart),
+  ]);
+
+  const recentMap = new Map(recentRows.map((r) => [r.promptId, r]));
+  const previousMap = new Map(previousRows.map((r) => [r.promptId, r]));
+
+  function visibilityPct(row: WindowRow | undefined): number {
+    if (!row || row.totalChats === 0) return 0;
+    return Math.min(100, (row.totalMentions / row.totalChats) * 100);
+  }
+  function round1(n: number): number {
+    return Math.round(n * 10) / 10;
+  }
 
   // ── 3. Top brands per prompt (for Mentions column favicons) ────────────────
   const brandMentionsPerPrompt = await db
@@ -220,6 +312,33 @@ export default async function PromptsPage() {
       ? Math.round((ownMentions / allMentions) * 100)
       : 0;
 
+    const recent = recentMap.get(p.id);
+    const previous = previousMap.get(p.id);
+
+    // Trend = recent 7-day window − previous 7-day window. Zero when either
+    // window has no data so the chip doesn't flicker on a fresh project.
+    const visibilityTrend =
+      recent && previous && previous.totalChats > 0 && recent.totalChats > 0
+        ? round1(visibilityPct(recent) - visibilityPct(previous))
+        : 0;
+
+    const sentimentTrend =
+      recent?.avgSentiment != null && previous?.avgSentiment != null
+        ? round1(recent.avgSentiment - previous.avgSentiment)
+        : 0;
+
+    // Position: lower is better. Keep the raw delta — UI decides whether
+    // a negative delta is "good" (improvement) or "bad".
+    const positionTrend =
+      recent?.avgPosition != null && previous?.avgPosition != null
+        ? round1(recent.avgPosition - previous.avgPosition)
+        : 0;
+
+    const mentionsTrend =
+      recent && previous
+        ? recent.totalMentions - previous.totalMentions
+        : 0;
+
     return {
       id: p.id,
       query: p.query,
@@ -228,13 +347,13 @@ export default async function PromptsPage() {
       volumeTier: p.volumeTier || "Medium",
       createdAt: p.createdAt?.toISOString() || new Date().toISOString(),
       visibility,
-      visibilityTrend: visibility > 0 ? Math.round((Math.random() - 0.3) * 10) / 10 : 0,
+      visibilityTrend,
       sentiment: avgSentiment,
-      sentimentTrend: avgSentiment > 0 ? Math.round((Math.random() - 0.4) * 10) : 0,
+      sentimentTrend,
       avgPosition: avgPosition || 0,
-      positionTrend: avgPosition > 0 ? Math.round((Math.random() - 0.5) * 4) / 10 : 0,
+      positionTrend,
       mentions: totalMentions,
-      mentionsTrend: totalMentions > 0 ? Math.round((Math.random() - 0.3) * 6) / 10 : 0,
+      mentionsTrend,
       rank: idx + 1,
       enginesUsed: engines,
       lastRunDate: metrics.lastRunDate ? String(metrics.lastRunDate) : null,
@@ -282,6 +401,55 @@ export default async function PromptsPage() {
         ) / 10
       : 0;
 
+  // ── 9. Setup-state hints (banner inputs) ──────────────────────────────────
+  // The dashboard reads from `brand_mentions`, which only fills when an
+  // extracted brand matches a row in `brands` for this project. When the
+  // metrics column is all 0%, the user usually just hasn't set up brands —
+  // surface that loudly instead of silently rendering zeroes.
+  const [brandCountRow] = await db
+    .select({
+      total: sql<number>`count(*)`,
+      ownCount: sql<number>`count(*) filter (where ${brands.isOwn})`,
+    })
+    .from(brands)
+    .where(eq(brands.projectId, activeProjectId));
+
+  const [suggestionRow] = await db
+    .select({
+      rows: sql<number>`count(*)`,
+      totalMentions: sql<number>`coalesce(sum(${brandSuggestions.mentions}), 0)`,
+    })
+    .from(brandSuggestions)
+    .where(
+      and(
+        eq(brandSuggestions.projectId, activeProjectId),
+        eq(brandSuggestions.status, "pending"),
+      ),
+    );
+
+  const recentChatStats = await db
+    .select({
+      total: sql<number>`count(*)`,
+      errors: sql<number>`count(*) filter (where ${chats.rawResponse} like '[ERROR:%')`,
+    })
+    .from(chats)
+    .innerJoin(prompts, eq(chats.promptId, prompts.id))
+    .where(
+      and(
+        eq(prompts.projectId, activeProjectId),
+        gte(chats.runDate, recentStart),
+      ),
+    );
+
+  const setupHints = {
+    brandsTracked: Number(brandCountRow?.total ?? 0),
+    ownBrandsTracked: Number(brandCountRow?.ownCount ?? 0),
+    pendingSuggestions: Number(suggestionRow?.rows ?? 0),
+    pendingSuggestionMentions: Number(suggestionRow?.totalMentions ?? 0),
+    recentChatsTotal: Number(recentChatStats[0]?.total ?? 0),
+    recentChatsErrored: Number(recentChatStats[0]?.errors ?? 0),
+  };
+
   return (
     <DashboardLayout currentPath="/prompts">
       <PromptsComparisonClient
@@ -296,12 +464,19 @@ export default async function PromptsPage() {
         }}
         projectName={projectName}
         availableBrands={projectBrands}
+        setupHints={setupHints}
         addPromptAction={addPrompt}
+        addPromptsBulkAction={addPromptsBulk}
+        addPromptsFromCsvAction={addPromptsFromCsv}
         runNowAction={runNow}
         addBrandAction={addBrand}
         createTopicAction={createTopic}
         assignTagAction={assignTagToPromptByName}
         removeTagAction={removeTagFromPrompt}
+        batchAssignTagAction={batchAssignTag}
+        batchAssignTopicAction={batchAssignTopic}
+        batchSetActiveAction={batchSetActive}
+        batchDeleteAction={batchDeletePrompts}
       />
     </DashboardLayout>
   );

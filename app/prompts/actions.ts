@@ -6,7 +6,8 @@ import { revalidatePath } from "next/cache";
 import { inngest } from "../../inngest/client";
 import { getActiveProjectId, WORKSPACE } from "../../lib/project-context";
 import { runPipelineForAllEngines, type PipelineJob } from "../../lib/run-pipeline";
-import { and, eq } from "drizzle-orm";
+import { DEFAULT_ENGINES } from "../../lib/ai-clients";
+import { and, eq, inArray } from "drizzle-orm";
 
 export async function addPrompt(formData: FormData) {
   const query = formData.get("query") as string;
@@ -127,7 +128,7 @@ export async function runNow(promptId: string, query: string, selectedEngines?: 
   const workspaceId = WORKSPACE;
   const engines = selectedEngines && selectedEngines.length > 0
     ? selectedEngines
-    : ["ChatGPT", "Claude", "Perplexity", "Gemini", "Groq"];
+    : DEFAULT_ENGINES;
 
   const runDate = new Date().toISOString();
 
@@ -293,4 +294,338 @@ export async function updatePromptSettings(args: {
   revalidatePath("/prompts");
   revalidatePath(`/prompts/${args.promptId}`);
   return { ok: true };
+}
+
+// ─── Bulk-add prompts (textarea, one per line) ──────────────────────────────
+
+/**
+ * Add many prompts at once from a pre-parsed list of prompt strings.
+ * Used by the "Manual" tab of the Add Prompt modal — the user can paste a
+ * newline-separated list. Per Peec docs, each prompt is limited to 200 chars.
+ */
+export async function addPromptsBulk(args: {
+  texts: string[];
+  topicId: string | null;
+  location: string;
+  tagIds: string[];
+}): Promise<{ ok: boolean; inserted: number; error?: string }> {
+  const workspaceId = WORKSPACE;
+  const projectId = await getActiveProjectId();
+
+  const cleaned = args.texts
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && t.length <= 200);
+  if (cleaned.length === 0) return { ok: false, inserted: 0, error: "No valid prompts" };
+
+  let topicId = args.topicId;
+  if (!topicId) {
+    let general = await db.query.topics.findFirst({
+      where: (t, { eq, and }) =>
+        and(eq(t.projectId, projectId), eq(t.name, "General Topic")),
+    });
+    if (!general) {
+      const [inserted] = await db
+        .insert(topics)
+        .values({ workspaceId, projectId, name: "General Topic" })
+        .returning();
+      general = inserted;
+    }
+    topicId = general.id;
+  }
+
+  const location = (args.location || "US").toUpperCase().slice(0, 2);
+  const inserted = await db
+    .insert(prompts)
+    .values(
+      cleaned.map((q) => ({
+        workspaceId,
+        projectId,
+        topicId: topicId!,
+        query: q,
+        volumeTier: "Medium" as const,
+        location,
+      })),
+    )
+    .returning({ id: prompts.id });
+
+  if (args.tagIds.length > 0 && inserted.length > 0) {
+    const tagRows: { workspaceId: string; promptId: string; tagId: string }[] = [];
+    for (const p of inserted) {
+      for (const tagId of args.tagIds) {
+        tagRows.push({ workspaceId, promptId: p.id, tagId });
+      }
+    }
+    await db.insert(promptTags).values(tagRows);
+  }
+
+  revalidatePath("/prompts");
+  revalidatePath("/");
+  return { ok: true, inserted: inserted.length };
+}
+
+// ─── CSV bulk upload ────────────────────────────────────────────────────────
+
+/**
+ * Parse a CSV body (already read on the client) and insert each row as a
+ * prompt. Per Peec docs:
+ *   Row 1: header (ignored)
+ *   Col 1: prompt text
+ *   Col 2: ISO 3166-1 alpha-2 country code (e.g. US, DE)
+ *   Col 3: topic name (auto-created if missing in this project)
+ *   Col 4+: each remaining cell is a tag name
+ * Supports comma or semicolon separators; quoted cells respected.
+ */
+export async function addPromptsFromCsv(args: {
+  csvText: string;
+}): Promise<{ ok: boolean; inserted: number; error?: string }> {
+  const workspaceId = WORKSPACE;
+  const projectId = await getActiveProjectId();
+
+  const rows = parseCsv(args.csvText);
+  if (rows.length <= 1) return { ok: false, inserted: 0, error: "CSV has no data rows" };
+
+  // Skip header.
+  const dataRows = rows.slice(1).filter((r) => r.length > 0 && r[0]?.trim());
+
+  // Pre-build topic + tag caches so each row doesn't hit the DB on its own.
+  const existingTopics = await db
+    .select({ id: topics.id, name: topics.name })
+    .from(topics)
+    .where(eq(topics.projectId, projectId));
+  const topicByName = new Map(existingTopics.map((t) => [t.name.toLowerCase(), t.id]));
+
+  const existingTags = await db
+    .select({ id: tags.id, name: tags.name })
+    .from(tags)
+    .where(eq(tags.projectId, projectId));
+  const tagByName = new Map(existingTags.map((t) => [t.name.toLowerCase(), t.id]));
+
+  async function ensureTopic(name: string): Promise<string> {
+    const key = name.toLowerCase();
+    const existing = topicByName.get(key);
+    if (existing) return existing;
+    const [created] = await db
+      .insert(topics)
+      .values({ workspaceId, projectId, name })
+      .returning({ id: topics.id });
+    topicByName.set(key, created.id);
+    return created.id;
+  }
+  async function ensureTag(name: string): Promise<string> {
+    const key = name.toLowerCase();
+    const existing = tagByName.get(key);
+    if (existing) return existing;
+    const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const [created] = await db
+      .insert(tags)
+      .values({ workspaceId, projectId, name, slug, color: "gray" })
+      .returning({ id: tags.id });
+    tagByName.set(key, created.id);
+    return created.id;
+  }
+
+  // Default topic for rows with no topic specified.
+  let defaultTopicId: string | null = null;
+
+  let inserted = 0;
+  for (const row of dataRows) {
+    const promptText = (row[0] ?? "").trim();
+    if (!promptText || promptText.length > 200) continue;
+    const location = ((row[1] ?? "US").trim() || "US").toUpperCase().slice(0, 2);
+    const topicName = (row[2] ?? "").trim();
+    const tagNames = row
+      .slice(3)
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0 && t.length <= 100);
+
+    let topicId: string;
+    if (topicName) topicId = await ensureTopic(topicName);
+    else {
+      if (!defaultTopicId) defaultTopicId = await ensureTopic("General Topic");
+      topicId = defaultTopicId;
+    }
+
+    const [createdPrompt] = await db
+      .insert(prompts)
+      .values({
+        workspaceId,
+        projectId,
+        topicId,
+        query: promptText,
+        volumeTier: "Medium",
+        location,
+      })
+      .returning({ id: prompts.id });
+
+    if (tagNames.length > 0) {
+      const tagIds = await Promise.all(tagNames.map(ensureTag));
+      await db.insert(promptTags).values(
+        tagIds.map((tagId) => ({
+          workspaceId,
+          promptId: createdPrompt.id,
+          tagId,
+        })),
+      );
+    }
+    inserted++;
+  }
+
+  revalidatePath("/prompts");
+  revalidatePath("/");
+  return { ok: true, inserted };
+}
+
+// Minimal CSV parser: comma OR semicolon delimited, double-quoted cells
+// supported (with "" as an escaped quote). No external dependency.
+function parseCsv(text: string): string[][] {
+  const out: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+  // Detect separator on the first non-quoted line — favour comma unless the
+  // first line has more semicolons than commas.
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
+  const sep =
+    (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0)
+      ? ";"
+      : ",";
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        cell += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === sep) {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell);
+      cell = "";
+      if (row.length > 0 && row.some((c) => c.trim().length > 0)) out.push(row);
+      row = [];
+    } else {
+      cell += ch;
+    }
+  }
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+    if (row.some((c) => c.trim().length > 0)) out.push(row);
+  }
+  return out;
+}
+
+// ─── Batch row actions ─────────────────────────────────────────────────────
+
+async function assertOwnedPromptIds(promptIds: string[]): Promise<string[]> {
+  if (promptIds.length === 0) return [];
+  const projectId = await getActiveProjectId();
+  const owned = await db
+    .select({ id: prompts.id })
+    .from(prompts)
+    .where(and(eq(prompts.projectId, projectId), inArray(prompts.id, promptIds)));
+  return owned.map((r) => r.id);
+}
+
+export async function batchAssignTag(args: {
+  promptIds: string[];
+  tagName: string;
+  color?: string;
+}): Promise<{ ok: boolean; assigned: number; error?: string }> {
+  const name = args.tagName.trim();
+  if (!name) return { ok: false, assigned: 0, error: "Tag name required" };
+  const ids = await assertOwnedPromptIds(args.promptIds);
+  if (ids.length === 0) return { ok: false, assigned: 0, error: "No prompts" };
+
+  const projectId = await getActiveProjectId();
+  const workspaceId = WORKSPACE;
+
+  // Find-or-create tag in this project.
+  let [tag] = await db
+    .select({ id: tags.id })
+    .from(tags)
+    .where(and(eq(tags.projectId, projectId), eq(tags.name, name)))
+    .limit(1);
+  if (!tag) {
+    const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const [created] = await db
+      .insert(tags)
+      .values({ workspaceId, projectId, name, slug, color: args.color ?? "gray" })
+      .returning({ id: tags.id });
+    tag = created;
+  }
+
+  // Skip prompts already tagged.
+  const existingLinks = await db
+    .select({ promptId: promptTags.promptId })
+    .from(promptTags)
+    .where(and(eq(promptTags.tagId, tag.id), inArray(promptTags.promptId, ids)));
+  const alreadyTagged = new Set(existingLinks.map((l) => l.promptId));
+  const toInsert = ids.filter((id) => !alreadyTagged.has(id));
+
+  if (toInsert.length > 0) {
+    await db.insert(promptTags).values(
+      toInsert.map((promptId) => ({ workspaceId, promptId, tagId: tag.id })),
+    );
+  }
+
+  revalidatePath("/prompts");
+  return { ok: true, assigned: toInsert.length };
+}
+
+export async function batchAssignTopic(args: {
+  promptIds: string[];
+  topicId: string;
+}): Promise<{ ok: boolean; updated: number; error?: string }> {
+  const ids = await assertOwnedPromptIds(args.promptIds);
+  if (ids.length === 0) return { ok: false, updated: 0, error: "No prompts" };
+
+  const projectId = await getActiveProjectId();
+  const [topic] = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(eq(topics.projectId, projectId), eq(topics.id, args.topicId)))
+    .limit(1);
+  if (!topic) return { ok: false, updated: 0, error: "Topic not in project" };
+
+  await db
+    .update(prompts)
+    .set({ topicId: topic.id })
+    .where(inArray(prompts.id, ids));
+
+  revalidatePath("/prompts");
+  return { ok: true, updated: ids.length };
+}
+
+export async function batchSetActive(args: {
+  promptIds: string[];
+  isActive: boolean;
+}): Promise<{ ok: boolean; updated: number }> {
+  const ids = await assertOwnedPromptIds(args.promptIds);
+  if (ids.length === 0) return { ok: false, updated: 0 };
+  await db
+    .update(prompts)
+    .set({ isActive: args.isActive })
+    .where(inArray(prompts.id, ids));
+  revalidatePath("/prompts");
+  return { ok: true, updated: ids.length };
+}
+
+export async function batchDeletePrompts(args: {
+  promptIds: string[];
+}): Promise<{ ok: boolean; deleted: number }> {
+  const ids = await assertOwnedPromptIds(args.promptIds);
+  if (ids.length === 0) return { ok: false, deleted: 0 };
+  // FK cascades on prompts will drop dependent chats / brand_mentions / etc.
+  await db.delete(prompts).where(inArray(prompts.id, ids));
+  revalidatePath("/prompts");
+  return { ok: true, deleted: ids.length };
 }
