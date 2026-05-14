@@ -6,14 +6,19 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
-  Settings, ChevronDown, Sparkles, MessageSquare, Play, Loader2,
+  Settings, ChevronDown, MessageSquare, Play, Loader2,
 } from "lucide-react";
 import ChatModal from "./ChatModal";
 import EngineIcon from "./EngineIcon";
 import DomainFavicon from "./DomainFavicon";
-import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
-import BrandsDropdown from "./BrandsDropdown";
+import { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
 import PromptSettingsModal from "./PromptSettingsModal";
+import PageFilterBar, {
+  PageFilterBrand,
+  PageFilterDateRange,
+} from "./PageFilterBar";
+import { addBrand } from "../app/actions/brands";
+import { guessBrandDomain } from "../lib/brand-domain";
 import {
   ChatFact, ChatRecordView, Resolution,
   aggregateBrands, aggregateDomains, totalCitations, toChatRecords,
@@ -23,6 +28,7 @@ import {
 interface ProjectBrand {
   name: string;
   isOwn: boolean;
+  domains?: string[];
 }
 
 interface PromptInfo {
@@ -92,7 +98,6 @@ function getCategoryLabel(cat: string | null, domain: string, projectName: strin
 export default function PromptDetailClient({ prompt, chatFacts, projectBrands, availableTags, selectedTagIds }: Props) {
   const router = useRouter();
   const [resolution, setResolution] = useState<Resolution>("W");
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<ChatRecordView | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -107,15 +112,38 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
     return found;
   }, [chatFacts]);
 
+  // Adapt ProjectBrand (name + isOwn + optional domains[]) to the
+  // PageFilterBrand shape PageFilterBar expects ({ id, name, isOwn, domain }).
+  // We use name as id so the strings PageFilterBar returns in onBrandsChange
+  // are the same name-keyed identifiers selectedBrands is keyed on.
+  const pageFilterBrands: PageFilterBrand[] = useMemo(
+    () =>
+      projectBrands.map((b) => ({
+        id: b.name,
+        name: b.name,
+        isOwn: b.isOwn,
+        // Fall back to a guessed domain so the favicon lookup works for
+        // auto-tracked brands that don't have a domain configured yet.
+        // Same heuristic used by lib/page-filter-data.ts:getPageFilterData.
+        domain: b.domains?.[0] ?? guessBrandDomain(b.name),
+      })),
+    [projectBrands],
+  );
+
+  // Resolve a domain for any extracted brand name — prefer a domain configured
+  // on the project's brand row, fall back to the heuristic guess. Used by the
+  // Top 7 Brands table to render real favicons via DomainFavicon.
+  const brandDomainByName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const b of projectBrands) {
+      m.set(b.name, b.domains?.[0] ?? guessBrandDomain(b.name));
+    }
+    return m;
+  }, [projectBrands]);
+
   const [selectedModels, setSelectedModels] = useState<string[]>(allAvailableModels);
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
   const [selectedBrands, setSelectedBrands] = useState<string[] | null>(null);
-
-  const toggleModel = (model: string) => {
-    setSelectedModels((prev) =>
-      prev.includes(model) ? prev.filter((m) => m !== model) : [...prev, model],
-    );
-  };
 
   const runScan = async () => {
     if (isScanning) return;
@@ -157,13 +185,45 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
     [chatFacts, selectedModels, dateRange],
   );
 
-  const brands = useMemo(() => {
-    const all = aggregateBrands(filteredChats, 50, undefined, stableBrandColors);
-    const filtered = selectedBrands === null
-      ? all
-      : all.filter((b) => selectedBrands.includes(b.name));
-    return filtered.slice(0, 7);
-  }, [filteredChats, stableBrandColors, selectedBrands]);
+  // Full ranking of every brand seen for this prompt — drives both the top 7
+  // table and any overflow rows for pinned competitors that don't make the cut.
+  const fullRanking = useMemo(
+    () => aggregateBrands(filteredChats, 500, undefined, stableBrandColors),
+    [filteredChats, stableBrandColors],
+  );
+
+  // Real rank (1-indexed) by brand name, for the "#36" overflow label.
+  const rankByName = useMemo(() => {
+    const m = new Map<string, number>();
+    fullRanking.forEach((b, i) => m.set(b.name, i + 1));
+    return m;
+  }, [fullRanking]);
+
+  // Pinned brands are *always* shown: tracked-own brands by default, plus any
+  // competitor(s) the user selected in the Brands dropdown. Per spec the
+  // dropdown is "one at a time" but we tolerate any number — they all overflow.
+  const pinnedNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const b of projectBrands) if (b.isOwn) names.add(b.name);
+    if (selectedBrands !== null) for (const n of selectedBrands) names.add(n);
+    return names;
+  }, [projectBrands, selectedBrands]);
+
+  const top7 = useMemo(() => fullRanking.slice(0, 7), [fullRanking]);
+
+  // Brands that we want on the chart/table but aren't in the top 7. Renders as
+  // overflow rows at the bottom of the table with their real rank.
+  const overflowBrands = useMemo(() => {
+    const top7Names = new Set(top7.map((b) => b.name));
+    return fullRanking.filter(
+      (b) => pinnedNames.has(b.name) && !top7Names.has(b.name),
+    );
+  }, [top7, fullRanking, pinnedNames]);
+
+  const brands = useMemo(
+    () => [...top7, ...overflowBrands],
+    [top7, overflowBrands],
+  );
 
   const domains = useMemo(() => aggregateDomains(filteredChats, 10), [filteredChats]);
   const totalDomainCitations = useMemo(() => totalCitations(filteredChats), [filteredChats]);
@@ -178,6 +238,83 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
     records.sort((a, b) => new Date(b.runDate).getTime() - new Date(a.runDate).getTime());
     return records;
   }, [filteredChats]);
+
+  // ── Brand vs Source visibility ───────────────────────────────────────────
+  // Spec: a chat counts toward "brand visibility" if any own brand is named in
+  // the response, and toward "source visibility" if any source domain matches
+  // an own brand's tracked domain — even when the brand itself wasn't named.
+  const ownBrandSet = useMemo(
+    () => new Set(projectBrands.filter((b) => b.isOwn).map((b) => b.name)),
+    [projectBrands],
+  );
+  const ownDomainSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const b of projectBrands) {
+      if (!b.isOwn) continue;
+      for (const d of b.domains ?? []) if (d) s.add(d.toLowerCase());
+    }
+    return s;
+  }, [projectBrands]);
+
+  function domainMatchesOwn(domain: string, ownDomains: Set<string>): boolean {
+    if (ownDomains.size === 0 || !domain) return false;
+    const d = domain.toLowerCase().replace(/^www\./, "");
+    for (const o of ownDomains) {
+      if (d === o || d.endsWith("." + o)) return true;
+    }
+    return false;
+  }
+
+  const brandVsSource = useMemo(() => {
+    const totalChats = filteredChats.length;
+    if (totalChats === 0 || ownBrandSet.size === 0) {
+      return { totalChats, brandChats: 0, sourceChats: 0, hasOwnBrand: ownBrandSet.size > 0 };
+    }
+    let brandChats = 0;
+    let sourceChats = 0;
+    for (const c of filteredChats) {
+      const brandMentioned = c.brands.some((b) => ownBrandSet.has(b.name));
+      const sourceCited = c.sources.some((s) => domainMatchesOwn(s.domain, ownDomainSet));
+      if (brandMentioned) brandChats++;
+      if (sourceCited) sourceChats++;
+    }
+    return { totalChats, brandChats, sourceChats, hasOwnBrand: true };
+  }, [filteredChats, ownBrandSet, ownDomainSet]);
+
+  const brandVisibilityPct =
+    brandVsSource.totalChats > 0
+      ? Math.round((brandVsSource.brandChats / brandVsSource.totalChats) * 100)
+      : 0;
+  const sourceVisibilityPct =
+    brandVsSource.totalChats > 0
+      ? Math.round((brandVsSource.sourceChats / brandVsSource.totalChats) * 100)
+      : 0;
+
+  function visibilityInsight(brandPct: number, sourcePct: number): {
+    label: string;
+    tone: "good" | "warn" | "info";
+  } {
+    if (brandPct === 0 && sourcePct === 0) {
+      return { label: "Neither your brand nor your domain shows up yet.", tone: "warn" };
+    }
+    const delta = brandPct - sourcePct;
+    if (Math.abs(delta) <= 5) {
+      return { label: "Brand and source visibility are aligned.", tone: "good" };
+    }
+    if (delta > 0) {
+      return {
+        label:
+          "AI mentions your brand more than it cites your content. Tightening on-page authority may help your domain catch up.",
+        tone: "info",
+      };
+    }
+    return {
+      label:
+        "Your domain is cited more than your brand is named. AI may not associate the content with your brand — strengthen brand mentions on the cited pages.",
+      tone: "info",
+    };
+  }
+  const insight = visibilityInsight(brandVisibilityPct, sourceVisibilityPct);
 
   const totalMentions = brands.reduce((s, b) => s + b.count, 0);
   const maxDomainCount = domains.length > 0 ? domains[0].count : 1;
@@ -255,56 +392,18 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
       </div>
 
       <div className="pd-filters">
-        <BrandsDropdown
-          projectBrands={projectBrands}
+        <PageFilterBar
           projectName={prompt.projectName}
-          value={selectedBrands}
-          onChange={setSelectedBrands}
+          projectBrands={pageFilterBrands}
+          availableTags={availableTags}
+          hideTags
+          initialDateRange={dateRange as unknown as PageFilterDateRange}
+          initialModels={selectedModels}
+          addBrandAction={addBrand}
+          onBrandsChange={(ids) => setSelectedBrands(ids)}
+          onDateChange={(r) => setDateRange(r as unknown as DateRangeValue)}
+          onModelsChange={(engines) => setSelectedModels(engines)}
         />
-        <DateRangeDropdown value={dateRange} onChange={setDateRange} />
-
-        <div className="relative inline-block text-left">
-          <button
-            className="pd-filter-chip"
-            onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-          >
-            <Sparkles size={11} />
-            {selectedModels.length === allAvailableModels.length ? "All Models" : `${selectedModels.length} Models`} <ChevronDown size={11} />
-          </button>
-
-          {isModelDropdownOpen && (
-            <div className="absolute left-0 z-50 mt-2 w-56 origin-top-left rounded-md bg-[#141418] shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none border border-slate-800">
-              <div className="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
-                <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800/50">
-                  Active models
-                </div>
-                <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                  {allAvailableModels.map((model) => (
-                    <label key={model} className="flex items-center px-4 py-2 hover:bg-slate-800/50 cursor-pointer group transition-colors">
-                      <div className="relative flex items-center">
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer appearance-none checked:bg-indigo-500 checked:border-indigo-500 transition-colors"
-                          checked={selectedModels.includes(model)}
-                          onChange={() => toggleModel(model)}
-                        />
-                        {selectedModels.includes(model) && (
-                          <svg className="absolute w-3 h-3 text-white pointer-events-none left-0.5 top-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                      <div className="ml-3 flex items-center gap-2">
-                        <EngineIcon engine={model} size={16} />
-                        <span className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors">{model}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* ── Header Card ───────────────────────────────────── */}
@@ -422,18 +521,34 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
               <tbody>
                 {brands.map((b, i) => {
                   const vis = totalMentions > 0 ? Math.round((b.count / totalMentions) * 100) : 0;
+                  const isOverflow = i >= top7.length;
+                  const realRank = rankByName.get(b.name) ?? i + 1;
+                  const isFirstOverflow = isOverflow && i === top7.length;
                   return (
-                    <tr key={b.name}>
-                      <td className="pd-rank">{i + 1}</td>
-                      <td className="pd-brand-cell">
-                        <span className="pd-brand-dot" style={{ background: b.color }}></span>
-                        {b.name}
-                      </td>
-                      <td><span className="pd-vis-value">{vis}%</span></td>
-                      <td>{vis}%</td>
-                      <td><span className="pd-brand-count-badge">{b.count}</span></td>
-                      <td>#{b.position ? b.position.toFixed(1) : "—"}</td>
-                    </tr>
+                    <React.Fragment key={b.name}>
+                      {isFirstOverflow && (
+                        <tr className="pd-brands-overflow-sep">
+                          <td colSpan={6}>Pinned (outside top 7)</td>
+                        </tr>
+                      )}
+                      <tr className={isOverflow ? "pd-brands-overflow-row" : undefined}>
+                        <td className="pd-rank">#{realRank}</td>
+                        <td className="pd-brand-cell">
+                          <DomainFavicon
+                            domain={brandDomainByName.get(b.name) ?? guessBrandDomain(b.name)}
+                            size={16}
+                          />
+                          {b.name}
+                          {pinnedNames.has(b.name) && projectBrands.find((pb) => pb.name === b.name)?.isOwn && (
+                            <span className="pd-brand-you-badge">You</span>
+                          )}
+                        </td>
+                        <td><span className="pd-vis-value">{vis}%</span></td>
+                        <td>{vis}%</td>
+                        <td><span className="pd-brand-count-badge">{b.count}</span></td>
+                        <td>#{b.position ? b.position.toFixed(1) : "—"}</td>
+                      </tr>
+                    </React.Fragment>
                   );
                 })}
                 {brands.length === 0 && (
@@ -475,7 +590,7 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
                   return (
                     <tr key={i}>
                       <td className="pd-domain-cell">
-                        <span className="pd-domain-favicon" style={{ background: DOMAIN_TYPE_COLORS[typeLabel] || "#6366f1" }}></span>
+                        <DomainFavicon domain={d.domain} size={16} />
                         {d.domain}
                       </td>
                       <td>{pct}%</td>

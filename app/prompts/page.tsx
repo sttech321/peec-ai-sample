@@ -1,5 +1,6 @@
 import DashboardLayout from "../../components/DashboardLayout";
 import PromptsComparisonClient from "../../components/PromptsComparisonClient";
+import { guessBrandDomain } from "../../lib/brand-domain";
 import { db } from "../../db";
 import {
   prompts,
@@ -49,6 +50,7 @@ export default async function PromptsPage() {
       volumeTier: prompts.volumeTier,
       topicId: prompts.topicId,
       topicName: topics.name,
+      location: prompts.location,
     })
     .from(prompts)
     .leftJoin(topics, eq(prompts.topicId, topics.id))
@@ -72,6 +74,10 @@ export default async function PromptsPage() {
     .select({
       promptId: chats.promptId,
       totalMentions: sql<number>`count(${brandMentions.id})`,
+      // Visibility is "chats with at least one brand mention / total chats"
+      // (per docs/handoff/02-metrics-definitions.md), so we need the distinct
+      // chat count here — NOT the raw mention count.
+      chatsWithMentions: sql<number>`count(distinct ${chats.id})`,
       avgSentiment: sql<number>`avg(${brandMentions.sentiment})`,
       avgPosition: sql<number>`avg(${brandMentions.position})`,
     })
@@ -98,6 +104,8 @@ export default async function PromptsPage() {
     promptId: string;
     totalChats: number;
     totalMentions: number;
+    chatsWithMentions: number;
+    ownMentions: number;
     avgSentiment: number | null;
     avgPosition: number | null;
   };
@@ -125,12 +133,15 @@ export default async function PromptsPage() {
       .select({
         promptId: chats.promptId,
         totalMentions: sql<number>`count(${brandMentions.id})`,
+        chatsWithMentions: sql<number>`count(distinct ${chats.id})`,
+        ownMentions: sql<number>`sum(case when ${brands.isOwn} then 1 else 0 end)`,
         avgSentiment: sql<number>`avg(${brandMentions.sentiment})`,
         avgPosition: sql<number>`avg(${brandMentions.position})`,
       })
       .from(brandMentions)
       .innerJoin(chats, eq(brandMentions.chatId, chats.id))
       .innerJoin(prompts, eq(chats.promptId, prompts.id))
+      .innerJoin(brands, eq(brandMentions.brandId, brands.id))
       .where(chatWhere)
       .groupBy(chats.promptId);
 
@@ -140,6 +151,8 @@ export default async function PromptsPage() {
         promptId: r.promptId,
         totalChats: Number(r.totalChats || 0),
         totalMentions: 0,
+        chatsWithMentions: 0,
+        ownMentions: 0,
         avgSentiment: null,
         avgPosition: null,
       });
@@ -148,6 +161,8 @@ export default async function PromptsPage() {
       const existing = byId.get(r.promptId);
       if (existing) {
         existing.totalMentions = Number(r.totalMentions || 0);
+        existing.chatsWithMentions = Number(r.chatsWithMentions || 0);
+        existing.ownMentions = Number(r.ownMentions || 0);
         existing.avgSentiment = r.avgSentiment === null ? null : Number(r.avgSentiment);
         existing.avgPosition = r.avgPosition === null ? null : Number(r.avgPosition);
       }
@@ -165,7 +180,7 @@ export default async function PromptsPage() {
 
   function visibilityPct(row: WindowRow | undefined): number {
     if (!row || row.totalChats === 0) return 0;
-    return Math.min(100, (row.totalMentions / row.totalChats) * 100);
+    return (row.chatsWithMentions / row.totalChats) * 100;
   }
   function round1(n: number): number {
     return Math.round(n * 10) / 10;
@@ -295,13 +310,18 @@ export default async function PromptsPage() {
 
     const totalChats = Number(metrics.totalChats || 0);
     const totalMentions = Number(mentions.totalMentions || 0);
+    const chatsWithMentions = Number(mentions.chatsWithMentions || 0);
     const avgSentiment = Number(mentions.avgSentiment || 0);
     const avgPosition = Number(mentions.avgPosition || 0);
     const engines = metrics.engines ? (metrics.engines as string).split(",") : [];
 
+    // Visibility = chats with ≥1 brand mention / total chats (per
+    // docs/handoff/02-metrics-definitions.md). The previous formula divided
+    // raw mention count by chats and capped at 100, which made every prompt
+    // with multi-brand responses read 100%.
     const visibility =
       totalChats > 0
-        ? Math.min(100, Math.round((totalMentions / totalChats) * 100))
+        ? Math.round((chatsWithMentions / totalChats) * 100)
         : 0;
 
     const ownMentions = brandsForPrompt
@@ -339,6 +359,15 @@ export default async function PromptsPage() {
         ? recent.totalMentions - previous.totalMentions
         : 0;
 
+    function sovPct(row: WindowRow | undefined): number {
+      if (!row || row.totalMentions === 0) return 0;
+      return (row.ownMentions / row.totalMentions) * 100;
+    }
+    const sovTrend =
+      recent && previous && recent.totalMentions > 0 && previous.totalMentions > 0
+        ? round1(sovPct(recent) - sovPct(previous))
+        : 0;
+
     return {
       id: p.id,
       query: p.query,
@@ -366,7 +395,8 @@ export default async function PromptsPage() {
       totalBrandsCount: brandsForPrompt.length,
       tags: tagsForPrompt,
       sov,
-      location: "US",
+      sovTrend,
+      location: (p.location || "US").toUpperCase(),
     };
   });
 
@@ -482,39 +512,6 @@ export default async function PromptsPage() {
   );
 }
 
-// Map of well-known brand names where the obvious "name.com" guess is wrong.
-// Keeps the guess heuristic deterministic without requiring DB updates.
-const BRAND_DOMAIN_OVERRIDES: Record<string, string> = {
-  "google analytics": "analytics.google.com",
-  "google ads": "ads.google.com",
-  "google search console": "search.google.com",
-  "youtube": "youtube.com",
-  "facebook ads": "facebook.com",
-  "meta ads": "meta.com",
-  "microsoft ads": "ads.microsoft.com",
-  "bing ads": "ads.microsoft.com",
-  "chatgpt": "chatgpt.com",
-  "claude": "claude.ai",
-  "perplexity": "perplexity.ai",
-  "gemini": "gemini.google.com",
-  "ai overview": "google.com",
-  "ai overviews": "google.com",
-  "ai mode": "google.com",
-};
-
-function guessBrandDomain(name: string): string {
-  const key = name.trim().toLowerCase();
-  if (BRAND_DOMAIN_OVERRIDES[key]) return BRAND_DOMAIN_OVERRIDES[key];
-  // Drop common suffixes ("Inc.", "LLC", "Ltd"), strip non-alphanumerics,
-  // collapse whitespace, append .com. Google's favicon service tolerates
-  // misses by returning a generic globe — we still render initials on error.
-  const cleaned = key
-    .replace(/\b(inc|llc|ltd|corp|co|gmbh)\.?$/g, "")
-    .replace(/[^a-z0-9]+/g, "")
-    .trim();
-  if (!cleaned) return `${key.replace(/\s+/g, "")}.com`;
-  return `${cleaned}.com`;
-}
 
 const TAG_PALETTE = [
   "gray",

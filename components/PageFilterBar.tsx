@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Calendar,
@@ -59,6 +60,13 @@ interface Props {
   onTagsChange?: (ids: string[] | null) => void;
   onModelsChange?: (engines: string[]) => void;
   onDateChange?: (range: PageFilterDateRange) => void;
+  /** Hide the Tags chip — used on the prompt detail page where filtering
+   *  by tag has no meaning (single prompt). */
+  hideTags?: boolean;
+  /** Optional initial values so callers can start with something other than
+   *  the defaults (e.g. 30-day range on the prompt detail page). */
+  initialDateRange?: PageFilterDateRange;
+  initialModels?: string[];
 }
 
 const ALL_ENGINES = ["ChatGPT", "Claude", "Perplexity", "Gemini", "AI Overviews"];
@@ -200,6 +208,7 @@ function BrandFilterDropdown({
   onChange: (ids: string[] | null) => void;
   onAddBrand?: (name: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
@@ -261,6 +270,9 @@ function BrandFilterDropdown({
     }
     setNewName("");
     setAdding(false);
+    // Refresh server data so the newly-added brand appears in the dropdown
+    // without a manual page reload — same pattern BrandsDropdown uses.
+    router.refresh();
   };
 
   return (
@@ -578,12 +590,17 @@ export default function PageFilterBar({
   onTagsChange,
   onModelsChange,
   onDateChange,
+  hideTags,
+  initialDateRange,
+  initialModels,
 }: Props) {
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<string[] | null>(null);
-  const [selectedModels, setSelectedModels] = useState<string[]>(ALL_ENGINES);
-  const [dateRange, setDateRange] = useState<PageFilterDateRange>(() =>
-    makeDateRange("7"),
+  const [selectedModels, setSelectedModels] = useState<string[]>(
+    initialModels ?? ALL_ENGINES,
+  );
+  const [dateRange, setDateRange] = useState<PageFilterDateRange>(
+    () => initialDateRange ?? makeDateRange("7"),
   );
 
   const updateBrands = (v: string[] | null) => {
@@ -636,47 +653,49 @@ export default function PageFilterBar({
 
       <DateRangePicker value={dateRange} onChange={updateDate} />
 
-      <Dropdown
-        width={240}
-        trigger={(open) => (
-          <>
-            <TagIcon size={13} />
-            <span>
-              {selectedTagIds === null
-                ? "All Tags"
-                : selectedTagIds.length === 1
-                ? availableTags.find((t) => t.id === selectedTagIds[0])?.name ??
-                  "1 Tag"
-                : `${selectedTagIds.length} Tags`}
-            </span>
-            <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
-          </>
-        )}
-      >
-        {() => (
-          <div className="pp-dd-section">
-            <button
-              className={`pp-dd-item ${selectedTagIds === null ? "pp-dd-item-active" : ""}`}
-              onClick={() => updateTags(null)}
-            >
-              All Tags
-            </button>
-            {availableTags.length === 0 && (
-              <div className="pp-dd-empty">No tags yet</div>
-            )}
-            {availableTags.map((t) => (
-              <label key={t.id} className="pp-dd-check-item">
-                <input
-                  type="checkbox"
-                  checked={selectedTagIds?.includes(t.id) ?? false}
-                  onChange={() => toggleTagFilter(t.id)}
-                />
-                <span className="pp-dd-check-label">{t.name}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      </Dropdown>
+      {!hideTags && (
+        <Dropdown
+          width={240}
+          trigger={(open) => (
+            <>
+              <TagIcon size={13} />
+              <span>
+                {selectedTagIds === null
+                  ? "All Tags"
+                  : selectedTagIds.length === 1
+                  ? availableTags.find((t) => t.id === selectedTagIds[0])?.name ??
+                    "1 Tag"
+                  : `${selectedTagIds.length} Tags`}
+              </span>
+              <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
+            </>
+          )}
+        >
+          {() => (
+            <div className="pp-dd-section">
+              <button
+                className={`pp-dd-item ${selectedTagIds === null ? "pp-dd-item-active" : ""}`}
+                onClick={() => updateTags(null)}
+              >
+                All Tags
+              </button>
+              {availableTags.length === 0 && (
+                <div className="pp-dd-empty">No tags yet</div>
+              )}
+              {availableTags.map((t) => (
+                <label key={t.id} className="pp-dd-check-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedTagIds?.includes(t.id) ?? false}
+                    onChange={() => toggleTagFilter(t.id)}
+                  />
+                  <span className="pp-dd-check-label">{t.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </Dropdown>
+      )}
 
       <Dropdown
         width={240}

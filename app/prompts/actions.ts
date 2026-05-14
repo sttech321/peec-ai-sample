@@ -3,7 +3,6 @@
 import { db } from "../../db";
 import { prompts, topics, tags, promptTags } from "../../db/schema";
 import { revalidatePath } from "next/cache";
-import { inngest } from "../../inngest/client";
 import { getActiveProjectId, WORKSPACE } from "../../lib/project-context";
 import { runPipelineForAllEngines, type PipelineJob } from "../../lib/run-pipeline";
 import { DEFAULT_ENGINES } from "../../lib/ai-clients";
@@ -140,30 +139,13 @@ export async function runNow(promptId: string, query: string, selectedEngines?: 
     query,
   }));
 
-  // Try Inngest first; fall back to direct inline execution when dev server is not running.
-  try {
-    const events = jobs.map((j) => ({
-      name: "prompt.run" as const,
-      data: j,
-    }));
-    await inngest.send(events);
-  } catch (err: unknown) {
-    const isConnErr =
-      err instanceof Error &&
-      ((err as NodeJS.ErrnoException).code === "ECONNREFUSED" ||
-        (err as NodeJS.ErrnoException).code === "ENOTFOUND" ||
-        err.message?.includes("fetch failed") ||
-        err.message?.includes("ECONNREFUSED"));
-
-    if (!isConnErr) throw err; // re-throw unexpected errors
-
-    console.warn(
-      "[runNow] Inngest dev server unreachable — running pipeline directly.",
-    );
-    await runPipelineForAllEngines(jobs);
-    revalidatePath("/");
-    revalidatePath("/prompts");
-  }
+  // Always run inline so the action resolves only after every engine call has
+  // been persisted — the per-row Crawl button uses this await to decide when to
+  // stop its spinner. The daily 06:00 UTC cron in inngest/functions.ts still
+  // uses Inngest for durable scheduled runs.
+  await runPipelineForAllEngines(jobs);
+  revalidatePath("/");
+  revalidatePath("/prompts");
 }
 
 // ─── Prompt-tag actions ─────────────────────────────────────────────────────

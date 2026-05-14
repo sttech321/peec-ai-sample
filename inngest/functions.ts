@@ -153,9 +153,9 @@ export const runPromptPipeline = inngest.createFunction(
              workspaceId,
              chatId,
              brandId,
-             position: brand.position || 1,
-             sentiment: brand.sentiment || 50,
-             confidence: brand.confidence || 0.8,
+             position: typeof brand.position === "number" ? brand.position : null,
+             sentiment: typeof brand.sentiment === "number" ? brand.sentiment : null,
+             confidence: typeof brand.confidence === "number" ? brand.confidence : null,
              mentionText: brand.mentionText || brandName
            });
         }
