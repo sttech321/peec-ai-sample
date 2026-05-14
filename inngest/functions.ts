@@ -2,6 +2,7 @@ import { inngest } from "./client";
 import { db } from "../db";
 import { chats, sources, citations, brandMentions, prompts } from "../db/schema";
 import { eq } from "drizzle-orm";
+import { DEFAULT_ENGINES } from "../lib/ai-clients";
 
 export const scheduleDailyScans = inngest.createFunction(
   {
@@ -13,7 +14,7 @@ export const scheduleDailyScans = inngest.createFunction(
       return await db.select().from(prompts).where(eq(prompts.isActive, true));
     });
 
-    const engines = ["ChatGPT", "Claude", "Perplexity", "Gemini", "AI Overviews"];
+    const engines = DEFAULT_ENGINES;
     const events = [];
     const runDate = new Date().toISOString().split('T')[0];
     

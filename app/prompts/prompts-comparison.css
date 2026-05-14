@@ -1514,3 +1514,297 @@
     position: static;
   }
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.pp-row-crawl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #d4d4d8;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #18181b;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.pp-row-crawl-btn:hover:not(:disabled) {
+  background: #f0fdf4;
+  border-color: #10b981;
+  color: #047857;
+}
+.pp-row-crawl-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── Rich Add-Prompt modal ─────────────────────────────────────────────── */
+.pp-modal-wide {
+  width: min(640px, 96vw);
+}
+.pp-modal-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #e4e4e7;
+  margin-bottom: 14px;
+}
+.pp-modal-tab {
+  background: transparent;
+  border: none;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #71717a;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.pp-modal-tab:hover {
+  color: #18181b;
+}
+.pp-modal-tab-active {
+  color: #18181b;
+  border-bottom-color: #18181b;
+}
+.pp-modal-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #52525b;
+  margin: 10px 0 4px;
+}
+.pp-modal-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 110px;
+  outline: none;
+}
+.pp-modal-textarea:focus {
+  border-color: #18181b;
+}
+.pp-modal-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+}
+.pp-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 4px;
+}
+.pp-modal-hint {
+  font-size: 12px;
+  color: #71717a;
+  margin-top: 4px;
+}
+.pp-modal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pp-modal-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid #d4d4d8;
+  background: #fff;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.pp-modal-tag-chip-on {
+  background: #18181b;
+  color: white;
+  border-color: #18181b;
+}
+.pp-modal-empty {
+  font-size: 12px;
+  color: #a1a1aa;
+  font-style: italic;
+}
+.pp-modal-error {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.pp-csv-preview {
+  margin-top: 12px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.pp-csv-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.pp-csv-preview-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f4f4f5;
+}
+.pp-csv-header-row td {
+  background: #fafafa;
+  font-weight: 600;
+}
+
+/* ── Batch-actions bar ─────────────────────────────────────────────────── */
+.pp-batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #18181b;
+  color: white;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.pp-batch-count {
+  font-weight: 600;
+}
+.pp-batch-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.pp-batch-action-wrap {
+  position: relative;
+}
+.pp-batch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pp-batch-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+.pp-batch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pp-batch-btn-danger {
+  border-color: #dc2626;
+  color: #fecaca;
+}
+.pp-batch-btn-danger:hover:not(:disabled) {
+  background: #7f1d1d;
+}
+.pp-batch-btn-clear {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 6px;
+}
+.pp-batch-btn-clear:hover:not(:disabled) {
+  color: white;
+}
+.pp-batch-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: white;
+  color: #18181b;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 8px;
+  min-width: 200px;
+  z-index: 10;
+}
+.pp-batch-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d4d4d8;
+  border-radius: 6px;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.pp-batch-popover-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.pp-batch-popover-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pp-batch-popover-item:hover {
+  background: #f4f4f5;
+}
+
+/* ── Setup hints banner ──────────────────────────────────────────────── */
+.pp-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+.pp-hint {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.pp-hint a {
+  color: inherit;
+  text-decoration: underline;
+}
+.pp-hint code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+}
+.pp-hint-warn {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #78350f;
+}
+.pp-hint-info {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+}
+.pp-hint-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #7f1d1d;
+}
