@@ -52,7 +52,7 @@ export async function runPipelineForOneEngine(job: PipelineJob): Promise<void> {
 
   if (!aiResponse.ok) return;
 
-  // 3. Persist sources and citations
+  // 3. Persist sources and citations   
   if (aiResponse.citations && aiResponse.citations.length > 0) {
     for (const citation of aiResponse.citations) {
       const [insertedSource] = await db

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, X, History, BarChart3 } from "lucide-react";
+import { Check, X, History, BarChart3, BarChart2 } from "lucide-react";
 import Link from "next/link";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -19,74 +19,6 @@ export interface ImpactRow {
   updatedAt: string;
 }
 
-// ── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_ROWS: ImpactRow[] = [
-  {
-    id: "imp1", kind: "earned",
-    title: "What are some trusted legit A+ social media marketing agencies?",
-    description: "Get your brand mentioned in [What are some trusted legit A+ social media marketing agencies?]. Or look out for similar content and join those conversations early.",
-    sourceUrl: "https://www.reddit.com/r/socialmedia/",
-    status: "todo", group: "UGC", type: "reddit.com", priority: "High",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "imp2", kind: "earned",
-    title: "The 10 Best Visibility Companies and Agencies for SEO and GEO?",
-    description: "Get your brand mentioned in [The 10 Best Visibility Companies and Agencies for SEO and GEO?]. Or look out for similar content and join those conversations early.",
-    sourceUrl: "https://www.reddit.com/r/b2bmarketing/",
-    status: "todo", group: "UGC", type: "reddit.com", priority: "Medium",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "imp3", kind: "earned",
-    title: "Best SEO Agencies 2026",
-    description: "Get featured in [Best SEO Agencies 2026]. Their listicles are regularly cited by LLMs.",
-    sourceUrl: "https://eubusinessnews.com/best-seo-agencies-2026",
-    status: "todo", group: "Editorial", type: "Listicle", priority: "Medium",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "imp4", kind: "earned",
-    title: "r/b2bmarketing",
-    description: "Participate in [r/b2bmarketing] and mention your own brand favorably.",
-    sourceUrl: "https://www.reddit.com/r/b2bmarketing/",
-    status: "todo", group: "UGC", type: "reddit.com", priority: "Medium",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "imp5", kind: "owned",
-    title: "Top U.S. Digital Marketing Agencies In 2026",
-    description: "Create content similar to [Top U.S. Digital Marketing Agencies In 2026] on disruptiveadvertising.com and other top-performing listicles.",
-    sourceUrl: "https://disruptiveadvertising.com/marketing/top-us-digital-marketing-agencies/",
-    status: "todo", group: "Owned", type: "Listicle", priority: "High",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "imp6", kind: "owned",
-    title: "Digital marketing agency",
-    description: "Incorporate 'Digital marketing agency' and other common phrases into the copy of your homepage.",
-    sourceUrl: null,
-    status: "todo", group: "Owned", type: "Homepage", priority: "Medium",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "imp7", kind: "earned",
-    title: "What are some AI SEO agencies? - Quora",
-    description: "Get your brand mentioned in answers to [What are some AI SEO agencies? - Quora]. Or look out for similar questions and answer them early.",
-    sourceUrl: "https://www.quora.com/What-are-some-AI-SEO-agencies",
-    status: "todo", group: "UGC", type: "quora.com", priority: "Low",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "imp8", kind: "earned",
-    title: "Best US-Based SEO Firms for Cleaning Services",
-    description: "Get your brand mentioned in [Best US-Based SEO Firms for Cleaning Services].",
-    sourceUrl: "https://medium.com/",
-    status: "todo", group: "UGC", type: "medium.com", priority: "Low",
-    updatedAt: new Date().toISOString(),
-  },
-];
 
 // ── Styles maps ──────────────────────────────────────────────────────────────
 
@@ -111,6 +43,38 @@ const TYPE_STYLE: Record<string, { bg: string; text: string }> = {
 
 function faviconUrl(domain: string) {
   return `https://www.google.com/s2/favicons?sz=64&domain=${domain}`;
+}
+
+function timeAgo(date: string): string {
+  const d = new Date(date);
+  const diff = Date.now() - d.getTime();
+  const secs = Math.floor(diff / 1000);
+  if (secs < 60) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function scoreFromPriority(priority: string): number {
+  if (priority === "High") return 3;
+  if (priority === "Medium") return 2;
+  return 1;
+}
+
+function ScoreBadge({ score }: { score: number }) {
+  const s =
+    score === 3 ? { bg: "#f0fdf4", color: "#16a34a", borderColor: "#bbf7d0" }
+    : score === 2 ? { bg: "#fefce8", color: "#ca8a04", borderColor: "#fef08a" }
+    : { bg: "#f4f4f5", color: "#71717a", borderColor: "#e4e4e7" };
+  return (
+    <span className="ac-score-badge" style={s} title={`Opportunity score: ${score}`}>
+      {score}
+    </span>
+  );
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -162,9 +126,13 @@ function DescriptionCell({ row }: { row: ImpactRow }) {
   const linkText = linkMatch ? linkMatch[1] : null;
   const before = linkText ? row.description.split(`[${linkText}]`)[0] : row.description;
   const after = linkText ? (row.description.split(`[${linkText}]`)[1] ?? "") : "";
+  const score = scoreFromPriority(row.priority);
 
   return (
     <div className="ac-list-text">
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+        <ScoreBadge score={score} />
+      </div>
       {linkText && row.sourceUrl ? (
         <>
           {before}
@@ -192,7 +160,7 @@ export default function ImpactClient({
   }) => Promise<void>;
 }) {
   const seed = useMemo(
-    () => (initialRows.length > 0 ? initialRows : MOCK_ROWS),
+    () => initialRows,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -252,10 +220,11 @@ export default function ImpactClient({
       <div><TypeBadge type={r.type} /></div>
       <div className="imp-row-actions">
         <StatusBadge status={r.status} />
+        <span className="ac-card-date" style={{ marginLeft: 4 }}>{timeAgo(r.updatedAt)}</span>
         <button
           className="ac-icon-btn-sm"
           title="Move back to Todo"
-          style={{ marginLeft: 6 }}
+          style={{ marginLeft: 2 }}
           onClick={() => handleUpdate(r, "todo")}
         >
           <History size={13} />
@@ -269,7 +238,10 @@ export default function ImpactClient({
 
       {/* Breadcrumb */}
       <div className="ac-breadcrumb">
-        <span className="ac-breadcrumb-part">Actions</span>
+        <span className="ac-breadcrumb-part" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <BarChart2 size={13} style={{ color: "#71717a" }} />
+          Actions
+        </span>
         <span className="ac-breadcrumb-sep">/</span>
         <span className="ac-breadcrumb-current">Impact</span>
       </div>

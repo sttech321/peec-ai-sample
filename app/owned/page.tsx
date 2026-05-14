@@ -4,7 +4,7 @@ import { db } from "../../db";
 import { ownedActions, projects } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
-import "../earned/earned.css"; // Reuse same styles
+import "../earned/earned.css";
 
 export default async function OwnedPage() {
   const activeProjectId = await getActiveProjectId();

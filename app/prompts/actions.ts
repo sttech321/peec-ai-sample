@@ -245,3 +245,52 @@ export async function removeTagFromPrompt(args: {
   revalidatePath("/prompts");
   return { ok: true };
 }
+
+/**
+ * Update prompt settings (Active toggle, Location, Tags) from the prompt detail
+ * settings modal. The `isActive` flag is read by the daily 6:00 AM UTC cron in
+ * `inngest/functions.ts` — when false, the cron skips this prompt.
+ */
+export async function updatePromptSettings(args: {
+  promptId: string;
+  isActive: boolean;
+  location: string;
+  tagIds: string[];
+}): Promise<{ ok: boolean; error?: string }> {
+  const workspaceId = WORKSPACE;
+  const location = (args.location || "US").toUpperCase().slice(0, 2);
+
+  await db
+    .update(prompts)
+    .set({ isActive: args.isActive, location })
+    .where(eq(prompts.id, args.promptId));
+
+  const existingLinks = await db
+    .select({ tagId: promptTags.tagId, id: promptTags.id })
+    .from(promptTags)
+    .where(eq(promptTags.promptId, args.promptId));
+
+  const existingTagIds = new Set(existingLinks.map((l) => l.tagId));
+  const wantedTagIds = new Set(args.tagIds);
+
+  const toAdd = [...wantedTagIds].filter((id) => !existingTagIds.has(id));
+  const toRemove = existingLinks.filter((l) => !wantedTagIds.has(l.tagId));
+
+  if (toAdd.length > 0) {
+    await db.insert(promptTags).values(
+      toAdd.map((tagId) => ({
+        workspaceId,
+        promptId: args.promptId,
+        tagId,
+      })),
+    );
+  }
+
+  for (const link of toRemove) {
+    await db.delete(promptTags).where(eq(promptTags.id, link.id));
+  }
+
+  revalidatePath("/prompts");
+  revalidatePath(`/prompts/${args.promptId}`);
+  return { ok: true };
+}
