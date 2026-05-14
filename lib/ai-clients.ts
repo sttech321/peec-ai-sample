@@ -4,6 +4,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export type EngineCitation = { url: string; domain: string; title: string };
 
+export { DEFAULT_ENGINES, type Engine } from "./engines";
+
 export type ErrorCode =
   | "MISSING_KEY"
   | "INVALID_KEY"
