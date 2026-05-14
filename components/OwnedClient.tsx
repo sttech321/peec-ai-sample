@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import {
   Check, X, Square, ChevronDown, Tag as TagIcon,
-  Layers, Crosshair, Info, Copy, Check as CheckIcon,
+  Layers, Crosshair, Info, Copy, Check as CheckIcon, BarChart2,
 } from "lucide-react";
 import Link from "next/link";
 import { updateOwnedActionStatus } from "../app/owned/actions";
@@ -26,80 +26,6 @@ interface Phrase { text: string; count: number; }
 interface Domain { name: string; count: number; }
 interface Source { title: string; url: string; domain: string; mentioned: string; retrievals: number; citationRate: number; }
 
-// ── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_ACTIONS: OwnedAction[] = [
-  {
-    id: "ow1", contentType: "Listicle",
-    title: "Digital marketing agencies",
-    description: "Take inspiration by articles around 'Digital marketing agencies' and other common phrases. Mention your own brand favorably.",
-    priority: "High", status: "todo", pageUrl: null,
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "ow2", contentType: "Listicle",
-    title: "Top U.S. Digital Marketing Agencies In 2026",
-    description: "Create content similar to [Top U.S. Digital Marketing Agencies In 2026] on disruptiveadvertising.com and other top-performing listicles.",
-    priority: "High", status: "todo", pageUrl: "https://disruptiveadvertising.com/marketing/top-us-digital-marketing-agencies/",
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "ow3", contentType: "Homepage",
-    title: "Digital marketing agency",
-    description: "Incorporate 'Digital marketing agency' and other common phrases into the copy of your homepage.",
-    priority: "Medium", status: "todo", pageUrl: null,
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "ow4", contentType: "Product Page",
-    title: "Lyfe marketing social media management",
-    description: "Take inspiration by product pages around 'Lyfe marketing social media management' and other common phrases. Mention your own brand favorably on these pages.",
-    priority: "Medium", status: "todo", pageUrl: null,
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "ow5", contentType: "Product Page",
-    title: "Web Design Company – 2026's Top Web Design and Development Agency | Coalition Technologies",
-    description: "Create content similar to [Web Design Company – 2026's Top Web Design and Development Agency | Coalition Technologies] on coalitiontechnologies.com and other top-performing product pages.",
-    priority: "Medium", status: "todo", pageUrl: "https://coalitiontechnologies.com/web-design",
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "ow6", contentType: "Comparison",
-    title: "SEO vs. UX: How to Bring Them Together for Higher Rankings",
-    description: "Create content similar to [SEO vs. UX: How to Bring Them Together for Higher Rankings] on seo.com and other top-performing comparison pages.",
-    priority: "Low", status: "todo", pageUrl: "https://seo.com/blog/seo-vs-ux/",
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "ow7", contentType: "How-To Guide",
-    title: "7 Ways to Boost SEO for Cleaning Services",
-    description: "Create content similar to [7 Ways to Boost SEO for Cleaning Services] on webfx.com and other top-performing how-to guides.",
-    priority: "Low", status: "todo", pageUrl: "https://webfx.com/blog/seo/seo-for-cleaning-services/",
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "ow8", contentType: "Category Page",
-    title: "Atlanta, GA – WebFX",
-    description: "Create content similar to [Atlanta, GA – WebFX] on webfx.com and other top-performing category pages.",
-    priority: "Low", status: "todo", pageUrl: "https://webfx.com/locations/atlanta-seo-company/",
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "ow9", contentType: "Article",
-    title: "Digital marketing agency need one",
-    description: "Take inspiration by articles around 'Digital marketing agency need one' and other common phrases. Mention your own brand favorably.",
-    priority: "Low", status: "todo", pageUrl: null,
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "ow10", contentType: "Article",
-    title: "SaaS SEO: How To Drive Pipeline Growth",
-    description: "Create content similar to [SaaS SEO: How To Drive Pipeline Growth] on siegemedia.com and other top-performing articles.",
-    priority: "Low", status: "todo", pageUrl: "https://siegemedia.com/strategy/saas-seo/",
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-];
 
 // Content-type metadata
 const TYPE_META: Record<string, { color: string; bg: string; dot: string }> = {
@@ -212,6 +138,38 @@ function faviconUrl(domain: string) {
   return `https://www.google.com/s2/favicons?sz=64&domain=${domain}`;
 }
 
+function timeAgo(date: Date | string): string {
+  const d = new Date(date);
+  const diff = Date.now() - d.getTime();
+  const secs = Math.floor(diff / 1000);
+  if (secs < 60) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function scoreFromPriority(priority: string): number {
+  if (priority === "High") return 3;
+  if (priority === "Medium") return 2;
+  return 1;
+}
+
+function ScoreBadge({ score }: { score: number }) {
+  const s =
+    score === 3 ? { bg: "#f0fdf4", color: "#16a34a", borderColor: "#bbf7d0" }
+    : score === 2 ? { bg: "#fefce8", color: "#ca8a04", borderColor: "#fef08a" }
+    : { bg: "#f4f4f5", color: "#71717a", borderColor: "#e4e4e7" };
+  return (
+    <span className="ac-score-badge" style={s} title={`Opportunity score: ${score}`}>
+      {score}
+    </span>
+  );
+}
+
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 function PriorityDot({ priority }: { priority: string }) {
@@ -256,6 +214,7 @@ function ActionCard({
   return (
     <div className={`ac-card ${action.status === "done" ? "ac-card-done" : action.status === "declined" ? "ac-card-declined" : ""}`}>
       <div className="ac-card-meta">
+        <ScoreBadge score={scoreFromPriority(action.priority)} />
         <PriorityDot priority={action.priority} />
         <TypeBadge type={action.contentType ?? "Other"} />
       </div>
@@ -285,12 +244,15 @@ function ActionCard({
             <X size={12} /> Decline
           </button>
         </div>
-        <button
-          className={`ac-action-btn ac-action-btn-todo ${action.status === "todo" ? "ac-action-btn-active" : ""}`}
-          onClick={() => onUpdate(action.id, "todo")}
-        >
-          <Square size={12} /> Todo
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="ac-card-date">{timeAgo(action.updatedAt)}</span>
+          <button
+            className={`ac-action-btn ac-action-btn-todo ${action.status === "todo" ? "ac-action-btn-active" : ""}`}
+            onClick={() => onUpdate(action.id, "todo")}
+          >
+            <Square size={12} /> Todo
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -446,14 +408,12 @@ export default function OwnedClient({
 }) {
   const seed = useMemo(
     () =>
-      initialActions.length > 0
-        ? initialActions.map((a) => ({
-            ...a,
-            contentType: inferContentType(a),
-            createdAt: new Date(a.createdAt),
-            updatedAt: new Date(a.updatedAt),
-          }))
-        : MOCK_ACTIONS,
+      initialActions.map((a) => ({
+        ...a,
+        contentType: inferContentType(a),
+        createdAt: new Date(a.createdAt),
+        updatedAt: new Date(a.updatedAt),
+      })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -563,7 +523,10 @@ export default function OwnedClient({
 
           {/* Breadcrumb */}
           <div className="ac-breadcrumb">
-            <button className="ac-breadcrumb-link" onClick={goOverview}>Actions</button>
+            <button className="ac-breadcrumb-link" onClick={goOverview}>
+              <span className="ac-breadcrumb-icon"><BarChart2 size={13} /></span>
+              Actions
+            </button>
             {selectedType && (
               <>
                 <span className="ac-breadcrumb-sep">/</span>
@@ -582,6 +545,9 @@ export default function OwnedClient({
 
           {/* Heading */}
           <div className="ac-content-heading">
+            <p className="ac-content-eyebrow">
+              {selectedType ? "Owned" : "Overview"}
+            </p>
             <h1 className="ac-content-title">
               {selectedType
                 ? selectedType

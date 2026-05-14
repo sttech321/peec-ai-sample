@@ -14,7 +14,10 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/owned)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/impact)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/crawlability)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/crawl-insights)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/crawl-insights)",
+      "WebFetch(domain:docs.peec.ai)",
+      "Bash(find \"d:\\\\peec ai 2026\\\\peec-ai-sample\\\\drizzle\\\\\" -name \"*.ts\" 2>&1 | head -20)",
+      "Bash(node scripts/clear-seed.mjs)"
     ]
   }
 }

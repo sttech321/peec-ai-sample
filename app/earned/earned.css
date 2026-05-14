@@ -26,6 +26,11 @@
 }
 .ac-breadcrumb-sep { color: #d4d4d8; }
 .ac-breadcrumb svg { color: #71717a; }
+.ac-breadcrumb-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #71717a;
+}
 
 /* Filter bar (just Tags + Models for Actions) */
 .ac-filter-bar {
@@ -160,9 +165,12 @@
 }
 
 .ac-content-eyebrow {
-  font-size: 13px;
+  font-size: 12px;
   color: #71717a;
-  margin: 0 0 4px;
+  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 .ac-content-title {
   font-size: 22px;
@@ -252,7 +260,7 @@
 /* Cards grid */
 .ac-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
 }
 
@@ -344,7 +352,7 @@
   color: #18181b;
 }
 .ac-card-body a {
-  color: #18181b;
+  color: #2563eb;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -542,16 +550,10 @@
   color: #3f3f46;
   border-color: #d4d4d8;
 }
-.ac-icon-btn-sm-danger:hover {
-  background: #fef2f2;
-  color: #b91c1c;
-  border-color: #fecaca;
-}
-.ac-icon-btn-sm-success:hover {
-  background: #ecfdf5;
-  color: #047857;
-  border-color: #a7f3d0;
-}
+.ac-icon-btn-sm-danger { border-color: #fecaca; color: #b91c1c; }
+.ac-icon-btn-sm-danger:hover { background: #fef2f2; border-color: #f87171; }
+.ac-icon-btn-sm-success { border-color: #bbf7d0; color: #15803d; }
+.ac-icon-btn-sm-success:hover { background: #f0fdf4; border-color: #4ade80; }
 
 /* History empty state buttons */
 .ac-empty-tab-btn {
@@ -830,14 +832,14 @@
 .imp-tabs {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid #e4e4e7;
+  border-bottom: 2px solid #f4f4f5;
   margin-bottom: 4px;
 }
 .imp-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 16px;
+  padding: 8px 14px;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -845,8 +847,8 @@
   font-weight: 500;
   color: #71717a;
   cursor: pointer;
-  transition: all 0.1s;
-  margin-bottom: -1px;
+  margin-bottom: -2px;
+  transition: color 0.1s;
 }
 .imp-tab:hover { color: #18181b; }
 .imp-tab-active {
@@ -861,7 +863,7 @@
   height: 18px;
   padding: 0 5px;
   background: #f4f4f5;
-  border-radius: 10px;
+  border-radius: 9px;
   font-size: 11px;
   font-weight: 600;
   color: #52525b;
@@ -875,30 +877,34 @@
 }
 .imp-head {
   display: grid;
-  grid-template-columns: 1fr 120px 160px 120px;
-  gap: 12px;
+  grid-template-columns: 1fr 120px 160px 100px;
+  gap: 16px;
   padding: 10px 16px;
   background: #fafafa;
+  border-bottom: 1px solid #e4e4e7;
   font-size: 12px;
   font-weight: 500;
   color: #71717a;
-  border-bottom: 1px solid #e4e4e7;
 }
 .imp-row {
   display: grid;
-  grid-template-columns: 1fr 120px 160px 120px;
-  gap: 12px;
+  grid-template-columns: 1fr 120px 160px 100px;
+  gap: 16px;
   padding: 14px 16px;
   border-bottom: 1px solid #f4f4f5;
   align-items: center;
+  font-size: 13px;
+  color: #3f3f46;
+  transition: background 0.1s;
 }
 .imp-row:last-child { border-bottom: none; }
 .imp-row:hover { background: #fafafa; }
+.imp-row a { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }
 .imp-row-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 6px;
 }
 
 /* Status badges in history */
@@ -918,6 +924,28 @@
 .imp-status-declined {
   background: #fef2f2;
   color: #b91c1c;
+}
+
+/* Relative timestamp shown inside action cards and history rows */
+.ac-card-date {
+  font-size: 11px;
+  color: #a1a1aa;
+  white-space: nowrap;
+}
+
+/* Opportunity score badge (1-3 scale from Get Inspired docs) */
+.ac-score-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid;
+  flex-shrink: 0;
 }
 
 /* Responsive */
@@ -940,5 +968,5 @@
   .ow-sources-head span:nth-child(3),
   .ow-sources-row span:nth-child(3) { display: none; }
   .imp-head,
-  .imp-row { grid-template-columns: 1fr 90px 120px 100px; }
+  .imp-row { grid-template-columns: 1fr 90px 120px 80px; }
 }

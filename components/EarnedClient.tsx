@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import {
   Check, X, Square, ChevronDown, Tag as TagIcon,
-  Layers, FileText, Info, TrendingUp,
+  Layers, FileText, Info, TrendingUp, BarChart2,
 } from "lucide-react";
 import Link from "next/link";
 import { updateActionStatus } from "../app/earned/actions";
@@ -23,156 +23,14 @@ interface EarnedAction {
   updatedAt: Date;
 }
 
-interface Channel { name: string; count: number; }
-interface Source {
-  title: string; url: string; domain: string;
-  mentions: number | null; retrievals: number; citationRate: number;
+interface ChannelRow { name: string; count: number; }
+interface SourceRow {
+  title: string;
+  url: string;
+  domain: string;
+  retrievals: number;
+  citationRate: number;
 }
-
-// ── Mock data (used when DB has no records) ──────────────────────────────────
-
-const MOCK_ACTIONS: EarnedAction[] = [
-  {
-    id: "m1", type: null, title: "Best digital marketing agency?",
-    description: "Get your brand mentioned in [Best digital marketing agency?]. Or look out for similar content and join those conversations early.",
-    priority: "Medium", status: "todo",
-    sourceUrl: "https://www.reddit.com/r/LawFirm/",
-    sourceDomain: "reddit.com", createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "m2", type: null, title: "r/b2bmarketing",
-    description: "Participate in [r/b2bmarketing] and mention your own brand favorably.",
-    priority: "Medium", status: "todo",
-    sourceUrl: "https://www.reddit.com/r/b2bmarketing/",
-    sourceDomain: "reddit.com", createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "m3", type: null, title: "Best saas seo",
-    description: "Create posts around the topic 'Best saas seo' and mention your own brand favorably.",
-    priority: "Medium", status: "todo",
-    sourceUrl: null, sourceDomain: "reddit.com",
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "m4", type: "Listicle", title: "Best SEO Agencies 2026",
-    description: "Get featured in [Best SEO Agencies 2026]. Their listicles are regularly cited by LLMs.",
-    priority: "Medium", status: "todo",
-    sourceUrl: "https://eubusinessnews.com/best-seo-agencies-2026",
-    sourceDomain: null, createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "m5", type: "Listicle", title: "Best SEO Agencies 2026",
-    description: "Contact the author of [Best SEO Agencies 2026] on eubusinessnews.com to be included in their listicle.",
-    priority: "Medium", status: "todo",
-    sourceUrl: "https://eubusinessnews.com/best-seo-agencies-2026",
-    sourceDomain: null, createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "m6", type: null, title: "7 Best PPC Agencies for 2026",
-    description: "Take inspiration from this review [7 Best PPC Agencies for 2026]. Create a similar review mentioning your brand.",
-    priority: "Low", status: "todo",
-    sourceUrl: "https://www.g2.com/",
-    sourceDomain: "g2.com", createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "m7", type: null, title: "Ppc agencies 2026 top picks",
-    description: "Create reviews around the topic 'Ppc agencies 2026 top picks' and mention your own brand favorably.",
-    priority: "Low", status: "todo",
-    sourceUrl: null, sourceDomain: "g2.com",
-    createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "m8", type: null, title: "Best US-Based SEO Firms for Cleaning Services",
-    description: "Get your brand mentioned in [Best US-Based SEO Firms for Cleaning Services].",
-    priority: "Low", status: "todo",
-    sourceUrl: "https://medium.com/",
-    sourceDomain: "medium.com", createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "m9", type: null, title: "@stoufferak on Medium",
-    description: "Contact @stoufferak on Medium and ask them to mention your brand favorably in their articles.",
-    priority: "Low", status: "todo",
-    sourceUrl: "https://medium.com/@stoufferak",
-    sourceDomain: "medium.com", createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "m10", type: null, title: "What are some AI SEO agencies? - Quora",
-    description: "Get your brand mentioned in answers to [What are some AI SEO agencies? - Quora]. Or look out for similar questions and answer them early.",
-    priority: "Low", status: "todo",
-    sourceUrl: "https://www.quora.com/",
-    sourceDomain: "quora.com", createdAt: new Date(), updatedAt: new Date(),
-  },
-  {
-    id: "m11", type: null, title: "Top 10 Enterprise SEO Companies",
-    description: "Take inspiration from [Top 10 Enterprise SEO Companies]. Can you create similar content on linkedin.com?",
-    priority: "Low", status: "todo",
-    sourceUrl: "https://www.linkedin.com/",
-    sourceDomain: "linkedin.com", createdAt: new Date(), updatedAt: new Date(),
-  },
-];
-
-// ── Static analytics data ────────────────────────────────────────────────────
-
-const TOP_CHANNELS: Record<string, Channel[]> = {
-  "reddit.com": [
-    { name: "r/b2bmarketing", count: 6 },
-    { name: "r/SaaS", count: 5 },
-    { name: "r/LawFirm", count: 4 },
-    { name: "r/DigitalMarketing", count: 3 },
-    { name: "r/growmybusiness", count: 3 },
-    { name: "r/SocialMediaMarketing", count: 3 },
-    { name: "r/AISEOTricks", count: 2 },
-  ],
-  "linkedin.com": [
-    { name: "Digital Marketing", count: 3 },
-    { name: "SEO Professionals", count: 2 },
-    { name: "B2B Growth", count: 2 },
-    { name: "Agency Leaders", count: 1 },
-  ],
-  "youtube.com": [
-    { name: "SEO Tips & Tricks", count: 4 },
-    { name: "Marketing Agencies", count: 3 },
-    { name: "Digital Marketing", count: 2 },
-  ],
-};
-
-const SOURCES_DATA: Record<string, Source[]> = {
-  "reddit.com": [
-    { title: "The 10 Best Visibility Companies and Agencies for SEO and GEO?", url: "reddit.com/r/b2bmarketing/...", domain: "reddit.com", mentions: null, retrievals: 4, citationRate: 0.8 },
-    { title: "Best digital marketing agency?", url: "reddit.com/r/LawFirm/...", domain: "reddit.com", mentions: null, retrievals: 4, citationRate: 2.0 },
-    { title: "Who are the top SEO agencies right now that actually deliver results...", url: "reddit.com/r/growmybusiness/...", domain: "reddit.com", mentions: null, retrievals: 3, citationRate: 1.0 },
-    { title: "Can anyone recommend marketing agencies or SaaS with expertise...", url: "reddit.com/r/DigitalMarketing/...", domain: "reddit.com", mentions: null, retrievals: 3, citationRate: 0.7 },
-  ],
-  "linkedin.com": [
-    { title: "Top 10 Enterprise SEO Companies", url: "linkedin.com/posts/...", domain: "linkedin.com", mentions: null, retrievals: 2, citationRate: 1.0 },
-    { title: "Top Website Design Services That Will Generate Leads For You (202...", url: "linkedin.com/pulse/...", domain: "linkedin.com", mentions: null, retrievals: 1, citationRate: 0.0 },
-    { title: "Top 15 PPC Companies: Clutch Global Spring 2025", url: "linkedin.com/pulse/...", domain: "linkedin.com", mentions: null, retrievals: 1, citationRate: 0.0 },
-    { title: "AI Optimization Agencies: Who Can Rank Your Brand on ChatGPT a...", url: "linkedin.com/pulse/...", domain: "linkedin.com", mentions: null, retrievals: 1, citationRate: 0.0 },
-    { title: "Top Amazon Agencies With the Team Depth to Handle 2026 Market...", url: "linkedin.com/pulse/...", domain: "linkedin.com", mentions: null, retrievals: 1, citationRate: 0.0 },
-    { title: "Best 6 Digital Marketing Agencies for Startups [UPDATED 2025]", url: "linkedin.com/pulse/...", domain: "linkedin.com", mentions: null, retrievals: 1, citationRate: 2.0 },
-  ],
-  "g2.com": [
-    { title: "7 Best PPC Agencies for 2026", url: "g2.com/categories/ppc/...", domain: "g2.com", mentions: null, retrievals: 3, citationRate: 0.8 },
-    { title: "Best SEO Software in 2026", url: "g2.com/categories/seo/...", domain: "g2.com", mentions: null, retrievals: 2, citationRate: 0.5 },
-  ],
-  "quora.com": [
-    { title: "What are some AI SEO agencies? - Quora", url: "quora.com/What-are-some-AI-SEO-agencies", domain: "quora.com", mentions: null, retrievals: 3, citationRate: 1.0 },
-    { title: "Best digital marketing agencies for B2B SaaS?", url: "quora.com/...", domain: "quora.com", mentions: null, retrievals: 2, citationRate: 0.5 },
-  ],
-  "medium.com": [
-    { title: "Best US-Based SEO Firms for Cleaning Services", url: "medium.com/@stoufferak/...", domain: "medium.com", mentions: null, retrievals: 2, citationRate: 0.5 },
-    { title: "Top Digital Marketing Agencies to Watch in 2026", url: "medium.com/...", domain: "medium.com", mentions: null, retrievals: 1, citationRate: 0.0 },
-  ],
-  "Listicle": [
-    { title: "Best SEO Agencies 2026", url: "eubusinessnews.com/best-seo-agencies-2026", domain: "eubusinessnews.com", mentions: null, retrievals: 5, citationRate: 1.2 },
-    { title: "Top U.S. Digital Marketing Agencies In 2026", url: "disruptiveadvertising.com/...", domain: "disruptiveadvertising.com", mentions: null, retrievals: 4, citationRate: 0.8 },
-    { title: "The 18 Best SEO Companies + Services of 2025", url: "searchbloom.com/...", domain: "searchbloom.com", mentions: null, retrievals: 3, citationRate: 0.5 },
-  ],
-  "Article": [
-    { title: "How AI is Changing SEO: What Agencies Need to Know", url: "searchengineland.com/...", domain: "searchengineland.com", mentions: null, retrievals: 3, citationRate: 0.7 },
-    { title: "The Future of Brand Visibility in AI Search", url: "moz.com/blog/...", domain: "moz.com", mentions: null, retrievals: 2, citationRate: 0.5 },
-  ],
-};
 
 // Platform badge colors
 const PLATFORM_BADGE: Record<string, { bg: string; text: string }> = {
@@ -197,6 +55,38 @@ const PLATFORM_DOT: Record<string, string> = {
 
 function faviconUrl(domain: string): string {
   return `https://www.google.com/s2/favicons?sz=64&domain=${domain}`;
+}
+
+function timeAgo(date: Date | string): string {
+  const d = new Date(date);
+  const diff = Date.now() - d.getTime();
+  const secs = Math.floor(diff / 1000);
+  if (secs < 60) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function scoreFromPriority(priority: string): number {
+  if (priority === "High") return 3;
+  if (priority === "Medium") return 2;
+  return 1;
+}
+
+function ScoreBadge({ score }: { score: number }) {
+  const s =
+    score === 3 ? { bg: "#f0fdf4", color: "#16a34a", borderColor: "#bbf7d0" }
+    : score === 2 ? { bg: "#fefce8", color: "#ca8a04", borderColor: "#fef08a" }
+    : { bg: "#f4f4f5", color: "#71717a", borderColor: "#e4e4e7" };
+  return (
+    <span className="ac-score-badge" style={s} title={`Opportunity score: ${score}`}>
+      {score}
+    </span>
+  );
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -230,11 +120,15 @@ function PlatformBadge({ domain, type }: { domain: string | null; type: string |
     );
   }
   if (type) {
+    const isReference = type === "Reference";
     const isContent = ["listicle", "article"].includes(type.toLowerCase());
     return (
       <span
         className="ac-platform-badge"
-        style={{ background: isContent ? "#ecfeff" : "#f5f3ff", color: isContent ? "#0e7490" : "#6d28d9" }}
+        style={{
+          background: isReference ? "#f0f9ff" : isContent ? "#ecfeff" : "#f5f3ff",
+          color: isReference ? "#0369a1" : isContent ? "#0e7490" : "#6d28d9",
+        }}
       >
         {type}
       </span>
@@ -260,6 +154,7 @@ function ActionCard({
   return (
     <div className={`ac-card ${action.status === "done" ? "ac-card-done" : action.status === "declined" ? "ac-card-declined" : ""}`}>
       <div className="ac-card-meta">
+        <ScoreBadge score={scoreFromPriority(action.priority)} />
         <PriorityDot priority={action.priority} />
         <PlatformBadge domain={action.sourceDomain} type={action.type} />
       </div>
@@ -289,20 +184,22 @@ function ActionCard({
             <X size={12} /> Decline
           </button>
         </div>
-        <button
-          className={`ac-action-btn ac-action-btn-todo ${action.status === "todo" ? "ac-action-btn-active" : ""}`}
-          onClick={() => onUpdate(action.id, "todo")}
-        >
-          <Square size={12} /> Todo
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="ac-card-date">{timeAgo(action.updatedAt)}</span>
+          <button
+            className={`ac-action-btn ac-action-btn-todo ${action.status === "todo" ? "ac-action-btn-active" : ""}`}
+            onClick={() => onUpdate(action.id, "todo")}
+          >
+            <Square size={12} /> Todo
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function TopChannelsChart({ domain }: { domain: string }) {
+function TopChannelsChart({ domain, channels }: { domain: string; channels: ChannelRow[] }) {
   const [showAll, setShowAll] = useState(false);
-  const channels = TOP_CHANNELS[domain] ?? [];
   if (channels.length === 0) return null;
   const max = Math.max(...channels.map((c) => c.count));
   const visible = showAll ? channels : channels.slice(0, 6);
@@ -340,43 +237,42 @@ function TopChannelsChart({ domain }: { domain: string }) {
   );
 }
 
-function SourcesTable({ dataKey }: { dataKey: string }) {
-  const sources = SOURCES_DATA[dataKey] ?? [];
-  if (sources.length === 0) return null;
-
+function SourcesTable({ rows }: { rows: SourceRow[] }) {
   return (
     <div className="ac-section">
       <div className="ac-section-head">
         <h3 className="ac-section-title">Sources</h3>
         <span className="ac-section-note">Not mentioning your brand</span>
       </div>
-      <div className="ac-list">
-        <div className="ac-list-head ac-list-head-earned">
-          <span>URL</span>
-          <span>Mentions</span>
-          <span>Retrievals ↓</span>
-          <span>Citation rate</span>
-        </div>
-        {sources.map((s, i) => (
-          <div key={i} className="ac-list-row ac-list-row-earned">
-            <div className="ac-list-text">
-              <div style={{ fontWeight: 500, marginBottom: 2, color: "#18181b" }}>{s.title}</div>
-              <div className="ac-list-url">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={faviconUrl(s.domain)} alt=""
-                  style={{ width: 11, height: 11, borderRadius: 2, flexShrink: 0 }}
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                />
-                {s.url}
-              </div>
-            </div>
-            <span className="ac-list-num">{s.mentions ?? "—"}</span>
-            <span className="ac-list-num ac-list-num-bold">{s.retrievals}</span>
-            <span className="ac-list-num">{s.citationRate.toFixed(1)}</span>
+      {rows.length === 0 ? (
+        <p className="ac-empty-inline">No scan data yet. Sources will appear after your first AI scan.</p>
+      ) : (
+        <div className="ac-list">
+          <div className="ac-list-head ac-list-head-earned">
+            <span>URL</span>
+            <span>Retrievals ↓</span>
+            <span>Citation rate</span>
           </div>
-        ))}
-      </div>
+          {rows.map((s, i) => (
+            <div key={i} className="ac-list-row ac-list-row-earned">
+              <div className="ac-list-text">
+                <div style={{ fontWeight: 500, marginBottom: 2, color: "#18181b" }}>{s.title}</div>
+                <div className="ac-list-url">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={faviconUrl(s.domain)} alt=""
+                    style={{ width: 11, height: 11, borderRadius: 2, flexShrink: 0 }}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                  />
+                  {s.url}
+                </div>
+              </div>
+              <span className="ac-list-num ac-list-num-bold">{s.retrievals}</span>
+              <span className="ac-list-num">{s.citationRate.toFixed(1)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -386,19 +282,21 @@ function SourcesTable({ dataKey }: { dataKey: string }) {
 export default function EarnedClient({
   initialActions,
   projectName: _projectName,
+  sourcesMap,
+  channelsMap,
 }: {
   initialActions: any[];
   projectName: string;
+  sourcesMap: Record<string, SourceRow[]>;
+  channelsMap: Record<string, ChannelRow[]>;
 }) {
   const seed = useMemo(
     () =>
-      initialActions.length > 0
-        ? initialActions.map((a) => ({
-            ...a,
-            createdAt: new Date(a.createdAt),
-            updatedAt: new Date(a.updatedAt),
-          }))
-        : MOCK_ACTIONS,
+      initialActions.map((a) => ({
+        ...a,
+        createdAt: new Date(a.createdAt),
+        updatedAt: new Date(a.updatedAt),
+      })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -417,12 +315,15 @@ export default function EarnedClient({
     }
   };
 
-  const { ugcDomains, editorialTypes } = useMemo(() => {
+  const { ugcDomains, editorialTypes, referenceCount } = useMemo(() => {
     const ugc = new Map<string, number>();
     const ed = new Map<string, number>();
+    let refCount = 0;
     for (const a of actions) {
       if (a.sourceDomain) {
         ugc.set(a.sourceDomain, (ugc.get(a.sourceDomain) ?? 0) + 1);
+      } else if (a.type === "Reference") {
+        refCount++;
       } else if (a.type) {
         ed.set(a.type, (ed.get(a.type) ?? 0) + 1);
       }
@@ -430,6 +331,7 @@ export default function EarnedClient({
     return {
       ugcDomains: Array.from(ugc.entries()).sort((a, b) => b[1] - a[1]),
       editorialTypes: Array.from(ed.entries()).sort((a, b) => b[1] - a[1]),
+      referenceCount: refCount,
     };
   }, [actions]);
 
@@ -540,6 +442,25 @@ export default function EarnedClient({
               ))}
             </>
           )}
+
+          {referenceCount > 0 && (
+            <>
+              <div className="ac-subnav-section-label">
+                Reference
+                <Info size={11} style={{ marginLeft: 3, color: "#c4c4cc" }} />
+              </div>
+              <button
+                className={`ac-subnav-item ${selectedType === "Reference" ? "ac-subnav-item-active" : ""}`}
+                onClick={() => selectType("Reference")}
+              >
+                <span className="ac-subnav-item-content">
+                  <span className="ac-subnav-dot" style={{ background: "#0369a1" }} />
+                  <span className="ac-subnav-label">Reference</span>
+                </span>
+                <span className="ac-subnav-count">{referenceCount}</span>
+              </button>
+            </>
+          )}
         </aside>
 
         {/* Main content */}
@@ -547,7 +468,10 @@ export default function EarnedClient({
 
           {/* Breadcrumb */}
           <div className="ac-breadcrumb">
-            <button className="ac-breadcrumb-link" onClick={goOverview}>Actions</button>
+            <button className="ac-breadcrumb-link" onClick={goOverview}>
+              <span className="ac-breadcrumb-icon"><BarChart2 size={13} /></span>
+              Actions
+            </button>
             {selectedDomain && (
               <>
                 <span className="ac-breadcrumb-sep">/</span>
@@ -588,9 +512,12 @@ export default function EarnedClient({
               </div>
             )}
             {isOverview && (
-              <h1 className="ac-content-title">
-                Address all suggestions and fill gaps in your earned content
-              </h1>
+              <>
+                <p className="ac-content-eyebrow">Overview</p>
+                <h1 className="ac-content-title">
+                  Address all suggestions and fill gaps in your earned content
+                </h1>
+              </>
             )}
           </div>
 
@@ -651,11 +578,24 @@ export default function EarnedClient({
           </div>
 
           {/* Top Channels (domain detail only) */}
-          {selectedDomain && <TopChannelsChart domain={selectedDomain} />}
+          {selectedDomain && (
+            <TopChannelsChart
+              domain={selectedDomain}
+              channels={channelsMap[selectedDomain] ?? []}
+            />
+          )}
 
           {/* Sources table (domain or type detail) */}
-          {selectedDomain && <SourcesTable dataKey={selectedDomain} />}
-          {selectedType && <SourcesTable dataKey={selectedType} />}
+          {selectedDomain && (
+            <SourcesTable rows={sourcesMap[selectedDomain] ?? []} />
+          )}
+          {selectedType && (
+            <SourcesTable
+              rows={selectedType === "Reference"
+                ? (sourcesMap["Reference"] ?? [])
+                : (sourcesMap["Editorial"] ?? [])}
+            />
+          )}
 
         </section>
       </div>
