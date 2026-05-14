@@ -76,6 +76,60 @@
   border-color: #1e293b;
 }
 
+.pd-topbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pd-run-scan-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: #6366f1;
+  color: #fff;
+  border: 1px solid #6366f1;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+  box-shadow: 0 1px 2px rgba(99, 102, 241, 0.18);
+}
+
+.pd-run-scan-btn:hover:not(:disabled) {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+
+.pd-run-scan-btn:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.pd-scan-status {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pd-scan-status-error {
+  color: #ef4444;
+}
+
+.pd-spin {
+  animation: pd-spin 0.9s linear infinite;
+}
+
+@keyframes pd-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Filters Bar ─────────────────────────────────────────────────────────── */
 .pd-filters {
   display: flex;
@@ -114,7 +168,7 @@
   /* border: 1px solid #e5e9f0; */
   /* border-radius: 12px; */
 }
-
+   
 .pd-header-label {
   font-size: 11px;
   font-weight: 500;

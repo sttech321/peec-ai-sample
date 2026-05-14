@@ -5,7 +5,6 @@ import {
   citations,
   brandMentions,
   brands,
-  brandSuggestions,
   prompts,
 } from "../db/schema";
 import { and, eq } from "drizzle-orm";
@@ -78,7 +77,7 @@ export async function runPipelineForOneEngine(job: PipelineJob): Promise<void> {
   const extractedBrands = await extractBrandsWithLLM(aiResponse.text);
   if (extractedBrands.length === 0) return;
 
-  // 5. Persist brand mentions / suggestions
+  // 5. Persist brand mentions (auto-create brand rows on first sight).
   const [promptRecord] = await db
     .select()
     .from(prompts)
@@ -87,53 +86,43 @@ export async function runPipelineForOneEngine(job: PipelineJob): Promise<void> {
   const projectId = promptRecord.projectId;
 
   for (const brand of extractedBrands) {
-    const brandName =
-      brand.brandId || brand.name || brand.mentionText || "Unknown Brand";
+    const rawName = brand.brandId || brand.name || brand.mentionText;
+    const brandName = typeof rawName === "string" ? rawName.trim() : "";
+    // Skip empty / placeholder extractions so we don't pollute the brands table.
+    if (!brandName) continue;
 
+    let brandId: string;
     const existingBrand = await db
-      .select()
+      .select({ id: brands.id })
       .from(brands)
       .where(and(eq(brands.projectId, projectId), eq(brands.name, brandName)));
 
     if (existingBrand.length > 0) {
-      await db.insert(brandMentions).values({
-        workspaceId,
-        chatId,
-        brandId: existingBrand[0].id,
-        position: brand.position || 1,
-        sentiment: brand.sentiment || 50,
-        confidence: brand.confidence || 0.8,
-        mentionText: brand.mentionText || brandName,
-      });
+      brandId = existingBrand[0].id;
     } else {
-      const existingSuggestion = await db
-        .select()
-        .from(brandSuggestions)
-        .where(
-          and(
-            eq(brandSuggestions.projectId, projectId),
-            eq(brandSuggestions.name, brandName),
-          ),
-        );
-
-      if (existingSuggestion.length > 0) {
-        await db
-          .update(brandSuggestions)
-          .set({
-            mentions: existingSuggestion[0].mentions + 1,
-            updatedAt: new Date(),
-          })
-          .where(eq(brandSuggestions.id, existingSuggestion[0].id));
-      } else {
-        await db.insert(brandSuggestions).values({
+      const [created] = await db
+        .insert(brands)
+        .values({
           workspaceId,
           projectId,
           name: brandName,
-          mentions: 1,
-          status: "pending",
-        });
-      }
+          isOwn: false,
+          aliases: [],
+          domains: [],
+        })
+        .returning({ id: brands.id });
+      brandId = created.id;
     }
+
+    await db.insert(brandMentions).values({
+      workspaceId,
+      chatId,
+      brandId,
+      position: brand.position || 1,
+      sentiment: brand.sentiment || 50,
+      confidence: brand.confidence || 0.8,
+      mentionText: brand.mentionText || brandName,
+    });
   }
 }
 
