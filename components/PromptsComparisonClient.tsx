@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   ChevronUp,
@@ -18,8 +19,11 @@ import {
   Archive,
   Building2,
   Check,
+  Loader2,
+  Play,
 } from "lucide-react";
 import EngineIcon from "./EngineIcon";
+import { DEFAULT_ENGINES } from "../lib/engines";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface PromptBrand {
@@ -85,6 +89,15 @@ interface AvailableBrand {
   domain: string | null;
 }
 
+interface SetupHints {
+  brandsTracked: number;
+  ownBrandsTracked: number;
+  pendingSuggestions: number;
+  pendingSuggestionMentions: number;
+  recentChatsTotal: number;
+  recentChatsErrored: number;
+}
+
 interface Props {
   prompts: PromptMetric[];
   totalCount: number;
@@ -93,7 +106,17 @@ interface Props {
   availableBrands: AvailableBrand[];
   aggregates: Aggregates;
   projectName: string;
+  setupHints: SetupHints;
   addPromptAction: (formData: FormData) => Promise<void>;
+  addPromptsBulkAction: (args: {
+    texts: string[];
+    topicId: string | null;
+    location: string;
+    tagIds: string[];
+  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
+  addPromptsFromCsvAction: (args: {
+    csvText: string;
+  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
   runNowAction: (
     promptId: string,
     query: string,
@@ -115,6 +138,22 @@ interface Props {
     promptId: string;
     tagId: string;
   }) => Promise<{ ok: boolean; error?: string }>;
+  batchAssignTagAction: (args: {
+    promptIds: string[];
+    tagName: string;
+    color?: string;
+  }) => Promise<{ ok: boolean; assigned: number; error?: string }>;
+  batchAssignTopicAction: (args: {
+    promptIds: string[];
+    topicId: string;
+  }) => Promise<{ ok: boolean; updated: number; error?: string }>;
+  batchSetActiveAction: (args: {
+    promptIds: string[];
+    isActive: boolean;
+  }) => Promise<{ ok: boolean; updated: number }>;
+  batchDeleteAction: (args: {
+    promptIds: string[];
+  }) => Promise<{ ok: boolean; deleted: number }>;
 }
 
 const TOPIC_LOCATIONS: { code: string; name: string; flag: string }[] = [
@@ -147,7 +186,7 @@ const TOPIC_LANGUAGES: { code: string; name: string }[] = [
   { code: "ar", name: "Arabic" },
 ];
 
-const ALL_ENGINES = ["ChatGPT", "Claude", "Perplexity", "Gemini", "AI Overviews"];
+const ALL_ENGINES: readonly string[] = DEFAULT_ENGINES;
 
 type DatePreset = "7" | "14" | "30" | "90" | "180" | "365" | "custom" | "all";
 
@@ -559,12 +598,19 @@ export default function PromptsComparisonClient({
   availableBrands,
   aggregates,
   projectName,
+  setupHints,
   addPromptAction,
+  addPromptsBulkAction,
+  addPromptsFromCsvAction,
   runNowAction,
   addBrandAction,
   createTopicAction,
   assignTagAction,
   removeTagAction,
+  batchAssignTagAction,
+  batchAssignTopicAction,
+  batchSetActiveAction,
+  batchDeleteAction,
 }: Props) {
   // null = all brands; otherwise filter to selected brand IDs
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
@@ -580,9 +626,24 @@ export default function PromptsComparisonClient({
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedTopicId, setSelectedTopicId] = useState<string | "all" | "none">("all");
   const [selectedTagIds, setSelectedTagIds] = useState<string[] | null>(null); // null = all
-  const [selectedModels, setSelectedModels] = useState<string[]>(ALL_ENGINES);
+  const [selectedModels, setSelectedModels] = useState<string[]>([...ALL_ENGINES]);
   const [dateRange, setDateRange] = useState<DateRange>(() => makeDateRange("7"));
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+
+  // Bulk-crawl state for the "Crawl Now" button. Progress is "N of M completed"
+  // — we fire prompts in small parallel batches so a 100-prompt project doesn't
+  // create 100 simultaneous engine calls (which would trip rate limits per
+  // peec-clone-handoff/03-ai-engines-and-apis.md).
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [crawlState, setCrawlState] = useState<{
+    running: boolean;
+    done: number;
+    total: number;
+  }>({ running: false, done: 0, total: 0 });
+  // Set of prompt IDs currently being crawled by the per-row button — lets us
+  // show a spinner on the specific row without re-rendering the whole table.
+  const [rowCrawling, setRowCrawling] = useState<Set<string>>(new Set());
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -749,6 +810,60 @@ export default function PromptsComparisonClient({
   const allOnPageSelected =
     paginated.length > 0 && paginated.every((p) => selectedRows.has(p.id));
 
+  // Crawl the currently-filtered prompts across the currently-selected engines.
+  // We run in batches of 4 so a 100-prompt project doesn't fire 600 simultaneous
+  // engine calls and trip rate limits. After all batches finish we refresh the
+  // server component to pull the new chats / metrics into view.
+  async function runBulkCrawl() {
+    if (crawlState.running) return;
+    if (filtered.length === 0) return;
+    const engines = selectedModels.length > 0 ? selectedModels : [...ALL_ENGINES];
+    const confirmed = window.confirm(
+      `Run a fresh crawl for ${filtered.length} prompt${filtered.length === 1 ? "" : "s"} × ${engines.length} engine${engines.length === 1 ? "" : "s"}?\n\nThis hits paid AI APIs.`,
+    );
+    if (!confirmed) return;
+
+    setCrawlState({ running: true, done: 0, total: filtered.length });
+
+    const BATCH = 4;
+    let done = 0;
+    for (let i = 0; i < filtered.length; i += BATCH) {
+      const batch = filtered.slice(i, i + BATCH);
+      await Promise.allSettled(
+        batch.map((p) => runNowAction(p.id, p.query, engines)),
+      );
+      done += batch.length;
+      setCrawlState({ running: true, done, total: filtered.length });
+    }
+
+    setCrawlState({ running: false, done: 0, total: 0 });
+    startTransition(() => router.refresh());
+  }
+
+  // Crawl one prompt across the currently-selected engines. Used by the
+  // per-row Crawl button — keeps the row spinner local while the request flies.
+  async function crawlOne(promptId: string, query: string) {
+    if (rowCrawling.has(promptId)) return;
+    const engines = selectedModels.length > 0 ? selectedModels : [...ALL_ENGINES];
+    setRowCrawling((prev) => {
+      const next = new Set(prev);
+      next.add(promptId);
+      return next;
+    });
+    try {
+      await runNowAction(promptId, query, engines);
+    } catch (e) {
+      console.error("[crawlOne] failed:", e);
+    } finally {
+      setRowCrawling((prev) => {
+        const next = new Set(prev);
+        next.delete(promptId);
+        return next;
+      });
+      startTransition(() => router.refresh());
+    }
+  }
+
   return (
     <div className="pp-page">
       {/* ── Breadcrumb / title ─────────────────────────────────────────── */}
@@ -756,6 +871,8 @@ export default function PromptsComparisonClient({
         <Layers size={14} />
         <span>Prompts</span>
       </div>
+
+      <SetupHintsBanner hints={setupHints} promptCount={prompts.length} />
 
       {/* ── Filter bar ────────────────────────────────────────────────── */}
       <div className="pp-filter-bar">
@@ -947,6 +1064,33 @@ export default function PromptsComparisonClient({
                 <span className="pp-counter-dot" />
                 {activeCount} / {totalCount}
               </span>
+              <button
+                className="pp-add-btn"
+                onClick={runBulkCrawl}
+                disabled={crawlState.running || filtered.length === 0}
+                title={
+                  filtered.length === 0
+                    ? "No prompts match the current filter"
+                    : `Crawl ${filtered.length} prompt(s) across ${selectedModels.length || ALL_ENGINES.length} engine(s)`
+                }
+                style={{
+                  background: crawlState.running ? "#94a3b8" : "#10b981",
+                  color: "white",
+                  marginRight: 8,
+                }}
+              >
+                {crawlState.running ? (
+                  <>
+                    <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+                    Crawling {crawlState.done}/{crawlState.total}
+                  </>
+                ) : (
+                  <>
+                    <Play size={13} />
+                    Crawl Now
+                  </>
+                )}
+              </button>
               <button className="pp-add-btn" onClick={() => setShowAddForm(true)}>
                 <Plus size={13} />
                 Add Prompt
@@ -1000,6 +1144,26 @@ export default function PromptsComparisonClient({
               </div>
             </div>
           </div>
+
+          {/* Batch-actions toolbar — visible when at least one row is selected */}
+          {selectedRows.size > 0 && (
+            <BatchActionsBar
+              selectedCount={selectedRows.size}
+              selectedIds={[...selectedRows]}
+              availableTags={availableTags}
+              topics={topics}
+              activeTab={activeTab}
+              onClear={() => setSelectedRows(new Set())}
+              assignTagAction={batchAssignTagAction}
+              assignTopicAction={batchAssignTopicAction}
+              setActiveAction={batchSetActiveAction}
+              deleteAction={batchDeleteAction}
+              onAfterAction={() => {
+                setSelectedRows(new Set());
+                startTransition(() => router.refresh());
+              }}
+            />
+          )}
 
           {/* Table */}
           <div className="pp-table-wrap">
@@ -1058,12 +1222,13 @@ export default function PromptsComparisonClient({
                   >
                     SOV {renderSortIcon("sov")}
                   </th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {activeTab !== "active" || paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="pp-empty-cell">
+                    <td colSpan={11} className="pp-empty-cell">
                       <div className="pp-empty">
                         <div className="pp-empty-icon">
                           <Layers size={28} />
@@ -1180,6 +1345,24 @@ export default function PromptsComparisonClient({
                       <td>
                         <span className="pp-metric-val">{p.sov}%</span>
                       </td>
+                      <td>
+                        <button
+                          className="pp-row-crawl-btn"
+                          disabled={rowCrawling.has(p.id) || crawlState.running}
+                          onClick={() => crawlOne(p.id, p.query)}
+                          title={`Run this prompt across ${(selectedModels.length || ALL_ENGINES.length)} engine(s)`}
+                        >
+                          {rowCrawling.has(p.id) ? (
+                            <Loader2
+                              size={13}
+                              style={{ animation: "spin 1s linear infinite" }}
+                            />
+                          ) : (
+                            <Play size={13} />
+                          )}
+                          <span>{rowCrawling.has(p.id) ? "Crawling…" : "Crawl"}</span>
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -1267,44 +1450,20 @@ export default function PromptsComparisonClient({
         />
       )}
 
-      {/* Add Prompt Modal */}
+      {/* Add Prompt Modal (Manual + Bulk Upload) */}
       {showAddForm && (
-        <div
-          className="pp-modal-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowAddForm(false);
+        <AddPromptModal
+          topics={topics}
+          availableTags={availableTags}
+          locations={TOPIC_LOCATIONS}
+          onClose={() => setShowAddForm(false)}
+          addBulkAction={addPromptsBulkAction}
+          fromCsvAction={addPromptsFromCsvAction}
+          onDone={() => {
+            setShowAddForm(false);
+            startTransition(() => router.refresh());
           }}
-        >
-          <div className="pp-modal-card">
-            <div className="pp-modal-title">Add New Prompt</div>
-            <form
-              action={async (formData) => {
-                await addPromptAction(formData);
-                setShowAddForm(false);
-              }}
-            >
-              <input
-                className="pp-modal-input"
-                name="query"
-                placeholder="e.g. Best CRM software for small business 2026"
-                required
-                autoFocus
-              />
-              <div className="pp-modal-actions">
-                <button
-                  type="button"
-                  className="pp-modal-cancel"
-                  onClick={() => setShowAddForm(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="pp-modal-submit">
-                  Add Prompt
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        />
       )}
     </div>
   );
@@ -1964,4 +2123,528 @@ const TAG_COLOR_MAP: Record<string, string> = {
 
 function tagColor(name: string): string {
   return TAG_COLOR_MAP[name?.toLowerCase()] ?? "#6b7280";
+}
+
+// ── Setup hints banner ────────────────────────────────────────────────────
+// Surfaces the most common reasons the metrics columns stay at 0% even after
+// a successful crawl: no tracked brands, pending suggestions, or engine
+// failures. Each hint is independently dismissible to noise.
+function SetupHintsBanner({
+  hints,
+  promptCount,
+}: {
+  hints: SetupHints;
+  promptCount: number;
+}) {
+  const showNoBrands =
+    promptCount > 0 && hints.recentChatsTotal > 0 && hints.brandsTracked === 0;
+  const showSuggestions =
+    hints.brandsTracked === 0 && hints.pendingSuggestions > 0;
+  const errorRate =
+    hints.recentChatsTotal > 0
+      ? hints.recentChatsErrored / hints.recentChatsTotal
+      : 0;
+  const showHighErrorRate = errorRate >= 0.5 && hints.recentChatsTotal >= 2;
+
+  if (!showNoBrands && !showSuggestions && !showHighErrorRate) return null;
+
+  return (
+    <div className="pp-hints">
+      {showNoBrands && (
+        <div className="pp-hint pp-hint-warn">
+          <strong>No tracked brands.</strong> Your prompts have been crawled
+          ({hints.recentChatsTotal} chat{hints.recentChatsTotal === 1 ? "" : "s"} in the last 7 days),
+          but Visibility / Sentiment / Position / SOV only populate when an extracted
+          brand matches one in your <a href="/brands">Brands</a> list.{" "}
+          {hints.pendingSuggestions > 0 ? (
+            <>
+              The LLM extracted{" "}
+              <a href="/brands"><strong>{hints.pendingSuggestions} brand suggestion{hints.pendingSuggestions === 1 ? "" : "s"}</strong></a>
+              {" "}— review and accept them to start tracking.
+            </>
+          ) : (
+            <>Add your own brand + competitors at <a href="/brands">Brands</a>.</>
+          )}
+        </div>
+      )}
+
+      {!showNoBrands && showSuggestions && (
+        <div className="pp-hint pp-hint-info">
+          <strong>{hints.pendingSuggestions} pending brand suggestion{hints.pendingSuggestions === 1 ? "" : "s"}</strong>
+          {" "}from recent crawls. <a href="/brands">Review them</a> to expand tracking.
+        </div>
+      )}
+
+      {showHighErrorRate && (
+        <div className="pp-hint pp-hint-error">
+          <strong>{hints.recentChatsErrored} of {hints.recentChatsTotal} recent chats failed</strong>
+          {" "}({Math.round(errorRate * 100)}%). Most common causes: missing or rate-limited API keys.
+          Open a chat with <code>[ERROR:…]</code> in the response to see the exact reason, or check
+          your <code>.env.local</code> for placeholder values like <code>...</code>.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Add Prompt Modal ──────────────────────────────────────────────────────
+// Two tabs: "Manual" (paste one prompt per line, set location/topic/tags) and
+// "Bulk Upload" (drop a CSV). Per Peec docs the manual form supports both
+// single-line and multi-line input — we use a textarea so both work.
+function AddPromptModal({
+  topics,
+  availableTags,
+  locations,
+  onClose,
+  addBulkAction,
+  fromCsvAction,
+  onDone,
+}: {
+  topics: Topic[];
+  availableTags: AvailableTag[];
+  locations: { code: string; name: string; flag: string }[];
+  onClose: () => void;
+  addBulkAction: (args: {
+    texts: string[];
+    topicId: string | null;
+    location: string;
+    tagIds: string[];
+  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
+  fromCsvAction: (args: {
+    csvText: string;
+  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
+  onDone: () => void;
+}) {
+  const [tab, setTab] = useState<"manual" | "csv">("manual");
+  const [text, setText] = useState("");
+  const [topicId, setTopicId] = useState<string>("");
+  const [location, setLocation] = useState("US");
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvPreview, setCsvPreview] = useState<string[][] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const lines = useMemo(
+    () => text.split("\n").map((s) => s.trim()).filter((s) => s.length > 0),
+    [text],
+  );
+  const overLimit = lines.filter((l) => l.length > 200);
+
+  async function handleCsvFile(f: File) {
+    setCsvFile(f);
+    setError(null);
+    const txt = await f.text();
+    const rows = txt
+      .split(/\r?\n/)
+      .map((r) => r.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, "")))
+      .filter((r) => r.some((c) => c.length > 0));
+    setCsvPreview(rows.slice(0, 6));
+  }
+
+  async function submitManual() {
+    if (lines.length === 0) {
+      setError("Enter at least one prompt");
+      return;
+    }
+    if (overLimit.length > 0) {
+      setError(`${overLimit.length} prompt(s) exceed the 200-character limit`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await addBulkAction({
+      texts: lines,
+      topicId: topicId || null,
+      location,
+      tagIds,
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error ?? "Failed to add prompts");
+      return;
+    }
+    onDone();
+  }
+
+  async function submitCsv() {
+    if (!csvFile) {
+      setError("Choose a CSV file");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const csvText = await csvFile.text();
+    const result = await fromCsvAction({ csvText });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error ?? "Failed to import CSV");
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <div
+      className="pp-modal-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="pp-modal-card pp-modal-wide">
+        <div className="pp-modal-title">Add prompts</div>
+
+        <div className="pp-modal-tabs">
+          <button
+            className={`pp-modal-tab ${tab === "manual" ? "pp-modal-tab-active" : ""}`}
+            onClick={() => setTab("manual")}
+            type="button"
+          >
+            Manual
+          </button>
+          <button
+            className={`pp-modal-tab ${tab === "csv" ? "pp-modal-tab-active" : ""}`}
+            onClick={() => setTab("csv")}
+            type="button"
+          >
+            Bulk Upload
+          </button>
+        </div>
+
+        {tab === "manual" ? (
+          <>
+            <label className="pp-modal-label">
+              Prompts (one per line, max 200 chars each)
+            </label>
+            <textarea
+              className="pp-modal-textarea"
+              rows={6}
+              placeholder={"Best CRM for SaaS startups\nWhat AI writing tools should I use?\nCompare top project management apps"}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              autoFocus
+            />
+            <div className="pp-modal-hint">
+              {lines.length} prompt{lines.length === 1 ? "" : "s"} ready
+              {overLimit.length > 0 && (
+                <span style={{ color: "#dc2626" }}>
+                  {" "}— {overLimit.length} over 200 chars
+                </span>
+              )}
+            </div>
+
+            <div className="pp-modal-grid">
+              <div>
+                <label className="pp-modal-label">Location (IP Address)</label>
+                <select
+                  className="pp-modal-select"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                >
+                  {locations.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.flag} {l.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="pp-modal-label">Topic</label>
+                <select
+                  className="pp-modal-select"
+                  value={topicId}
+                  onChange={(e) => setTopicId(e.target.value)}
+                >
+                  <option value="">General Topic (default)</option>
+                  {topics.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <label className="pp-modal-label">Tags (optional)</label>
+            <div className="pp-modal-tags">
+              {availableTags.length === 0 ? (
+                <span className="pp-modal-empty">
+                  No tags yet — create them on the Tags page
+                </span>
+              ) : (
+                availableTags.map((t) => {
+                  const on = tagIds.includes(t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() =>
+                        setTagIds(
+                          on
+                            ? tagIds.filter((id) => id !== t.id)
+                            : [...tagIds, t.id],
+                        )
+                      }
+                      className={`pp-modal-tag-chip ${on ? "pp-modal-tag-chip-on" : ""}`}
+                    >
+                      {on && <Check size={11} />} {t.name}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <label className="pp-modal-label">CSV file</label>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleCsvFile(f);
+              }}
+            />
+            <div className="pp-modal-hint">
+              Format: header row + one prompt per row. Columns: prompt, location (ISO-2), topic, tag, tag, …
+            </div>
+            {csvPreview && csvPreview.length > 0 && (
+              <div className="pp-csv-preview">
+                <div className="pp-modal-hint">Preview (first {csvPreview.length} rows):</div>
+                <table className="pp-csv-preview-table">
+                  <tbody>
+                    {csvPreview.map((row, i) => (
+                      <tr key={i} className={i === 0 ? "pp-csv-header-row" : ""}>
+                        {row.map((cell, j) => (
+                          <td key={j}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {error && <div className="pp-modal-error">{error}</div>}
+
+        <div className="pp-modal-actions">
+          <button
+            type="button"
+            className="pp-modal-cancel"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="pp-modal-submit"
+            disabled={busy}
+            onClick={tab === "manual" ? submitManual : submitCsv}
+          >
+            {busy ? (
+              <>
+                <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+                {" "}Adding…
+              </>
+            ) : tab === "manual" ? (
+              `Add ${lines.length || ""} prompt${lines.length === 1 ? "" : "s"}`.trim()
+            ) : (
+              "Import CSV"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Batch-actions toolbar ──────────────────────────────────────────────────
+// Renders above the prompts table when at least one row is checked. Per Peec
+// docs, available actions depend on the current tab (Active vs Archived).
+function BatchActionsBar({
+  selectedCount,
+  selectedIds,
+  availableTags,
+  topics,
+  activeTab,
+  onClear,
+  assignTagAction,
+  assignTopicAction,
+  setActiveAction,
+  deleteAction,
+  onAfterAction,
+}: {
+  selectedCount: number;
+  selectedIds: string[];
+  availableTags: AvailableTag[];
+  topics: Topic[];
+  activeTab: "active" | "suggested" | "archived";
+  onClear: () => void;
+  assignTagAction: (args: {
+    promptIds: string[];
+    tagName: string;
+    color?: string;
+  }) => Promise<{ ok: boolean; assigned: number; error?: string }>;
+  assignTopicAction: (args: {
+    promptIds: string[];
+    topicId: string;
+  }) => Promise<{ ok: boolean; updated: number; error?: string }>;
+  setActiveAction: (args: {
+    promptIds: string[];
+    isActive: boolean;
+  }) => Promise<{ ok: boolean; updated: number }>;
+  deleteAction: (args: {
+    promptIds: string[];
+  }) => Promise<{ ok: boolean; deleted: number }>;
+  onAfterAction: () => void;
+}) {
+  const [showTagPicker, setShowTagPicker] = useState(false);
+  const [showTopicPicker, setShowTopicPicker] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function pickTag(name: string) {
+    if (!name.trim()) return;
+    setBusy(true);
+    await assignTagAction({ promptIds: selectedIds, tagName: name.trim() });
+    setBusy(false);
+    setShowTagPicker(false);
+    setTagInput("");
+    onAfterAction();
+  }
+
+  async function pickTopic(topicId: string) {
+    setBusy(true);
+    await assignTopicAction({ promptIds: selectedIds, topicId });
+    setBusy(false);
+    setShowTopicPicker(false);
+    onAfterAction();
+  }
+
+  async function toggleActive(isActive: boolean) {
+    setBusy(true);
+    await setActiveAction({ promptIds: selectedIds, isActive });
+    setBusy(false);
+    onAfterAction();
+  }
+
+  async function deleteSelected() {
+    if (
+      !window.confirm(
+        `Delete ${selectedCount} prompt${selectedCount === 1 ? "" : "s"} and all associated chats / mentions? This cannot be undone.`,
+      )
+    )
+      return;
+    setBusy(true);
+    await deleteAction({ promptIds: selectedIds });
+    setBusy(false);
+    onAfterAction();
+  }
+
+  return (
+    <div className="pp-batch-bar">
+      <span className="pp-batch-count">
+        {selectedCount} selected
+      </span>
+
+      <div className="pp-batch-actions">
+        <div className="pp-batch-action-wrap">
+          <button
+            className="pp-batch-btn"
+            disabled={busy}
+            onClick={() => setShowTagPicker((v) => !v)}
+          >
+            <TagIcon size={13} /> Assign tag
+          </button>
+          {showTagPicker && (
+            <div className="pp-batch-popover">
+              <input
+                className="pp-batch-input"
+                placeholder="New tag or existing"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") pickTag(tagInput);
+                }}
+                autoFocus
+              />
+              <div className="pp-batch-popover-list">
+                {availableTags.map((t) => (
+                  <button
+                    key={t.id}
+                    className="pp-batch-popover-item"
+                    onClick={() => pickTag(t.name)}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="pp-batch-action-wrap">
+          <button
+            className="pp-batch-btn"
+            disabled={busy}
+            onClick={() => setShowTopicPicker((v) => !v)}
+          >
+            <Layers size={13} /> Move to topic
+          </button>
+          {showTopicPicker && (
+            <div className="pp-batch-popover">
+              <div className="pp-batch-popover-list">
+                {topics.length === 0 ? (
+                  <div className="pp-modal-empty">No topics yet</div>
+                ) : (
+                  topics.map((t) => (
+                    <button
+                      key={t.id}
+                      className="pp-batch-popover-item"
+                      onClick={() => pickTopic(t.id)}
+                    >
+                      {t.name} <span style={{ opacity: 0.5 }}>({t.count})</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {activeTab === "active" ? (
+          <button
+            className="pp-batch-btn"
+            disabled={busy}
+            onClick={() => toggleActive(false)}
+          >
+            <Archive size={13} /> Deactivate
+          </button>
+        ) : (
+          <button
+            className="pp-batch-btn"
+            disabled={busy}
+            onClick={() => toggleActive(true)}
+          >
+            <Check size={13} /> Activate
+          </button>
+        )}
+
+        <button
+          className="pp-batch-btn pp-batch-btn-danger"
+          disabled={busy}
+          onClick={deleteSelected}
+        >
+          Delete
+        </button>
+
+        <button className="pp-batch-btn-clear" onClick={onClear} disabled={busy}>
+          Clear
+        </button>
+      </div>
+    </div>
+  );
 }
