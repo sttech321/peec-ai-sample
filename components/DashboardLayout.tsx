@@ -116,19 +116,6 @@ export default async function DashboardLayout({
 
         {/* Header */}
         <header className="h-14 flex items-center justify-between px-6 border-b border-zinc-200 z-10 shrink-0 bg-white">
-          <div className="relative w-80">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <input
-              type="text"
-              placeholder="Search metrics, brands, or prompts..."
-              className="w-full bg-zinc-50 border border-zinc-200 text-sm rounded-lg pl-10 pr-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all placeholder:text-zinc-400 text-zinc-800"
-            />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-zinc-100 rounded px-1.5 py-0.5">
-              <Command className="w-3 h-3 text-zinc-500 mr-1" />
-              <span className="text-xs font-medium text-zinc-500">K</span>
-            </div>
-          </div>
-
           <div className="flex items-center space-x-3">
             <button className="text-zinc-500 hover:text-zinc-900 transition-colors relative">
               <Bell className="w-5 h-5" />

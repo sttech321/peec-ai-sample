@@ -44,6 +44,10 @@ export const prompts = pgTable("prompts", {
   topicId: uuid("topic_id").notNull().references(() => topics.id, { onDelete: "cascade" }),
   query: text("query").notNull(),
   volumeTier: varchar("volume_tier", { length: 50 }).notNull(), // Very High, High, Medium, Low
+  // When false, the daily 6:00 AM UTC cron skips this prompt.
+  isActive: boolean("is_active").default(true).notNull(),
+  // ISO 3166-1 alpha-2 country code used as the location signal for prompt runs.
+  location: varchar("location", { length: 2 }).default("US").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   workspaceIdx: index("prompts_workspace_idx").on(table.workspaceId),
