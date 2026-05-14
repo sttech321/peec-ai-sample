@@ -114,64 +114,50 @@ export const runPromptPipeline = inngest.createFunction(
       return await extractBrandsWithLLM(aiResponse.text);
     });
 
-    // 5. Persist Brand Mentions
+    // 5. Persist Brand Mentions — auto-create the brand row on first sight so
+    //    the prompt dashboard (which reads brand_mentions JOIN brands) is
+    //    populated immediately, without a manual promotion step.
     if (extractedBrands.length > 0) {
       await step.run("persist-brand-mentions", async () => {
         const { brands, brandMentions, prompts } = await import("../db/schema");
         const { eq, and } = await import("drizzle-orm");
 
-        // Find project ID from prompt
         const promptRecord = await db.select().from(prompts).where(eq(prompts.id, promptId));
         const projectId = promptRecord[0].projectId;
 
         for (const brand of extractedBrands) {
-           let brandId = "";
-           const brandName = brand.brandId || brand.name || brand.mentionText || "Unknown Brand";
-           
-           // 1. Check if brand exists in tracking
-           const existingBrand = await db.select().from(brands).where(
+           const rawName = brand.brandId || brand.name || brand.mentionText;
+           const brandName = typeof rawName === "string" ? rawName.trim() : "";
+           if (!brandName) continue;
+
+           let brandId: string;
+           const existingBrand = await db.select({ id: brands.id }).from(brands).where(
               and(eq(brands.projectId, projectId), eq(brands.name, brandName))
            );
-           
+
            if (existingBrand.length > 0) {
              brandId = existingBrand[0].id;
-             
-             // Persist Mention for tracked brand
-             await db.insert(brandMentions).values({
-               workspaceId,
-               chatId,
-               brandId,
-               position: brand.position || 1,
-               sentiment: brand.sentiment || 50,
-               confidence: brand.confidence || 0.8,
-               mentionText: brand.mentionText || brandName
-             });
            } else {
-             // 2. Not tracked -> Check if already suggested
-             const { brandSuggestions } = await import("../db/schema");
-             const existingSuggestion = await db.select().from(brandSuggestions).where(
-               and(eq(brandSuggestions.projectId, projectId), eq(brandSuggestions.name, brandName))
-             );
-
-             if (existingSuggestion.length > 0) {
-               // Increment mention count
-               await db.update(brandSuggestions)
-                 .set({ 
-                   mentions: existingSuggestion[0].mentions + 1,
-                   updatedAt: new Date()
-                 })
-                 .where(eq(brandSuggestions.id, existingSuggestion[0].id));
-             } else {
-               // New suggestion
-               await db.insert(brandSuggestions).values({
-                 workspaceId,
-                 projectId,
-                 name: brandName,
-                 mentions: 1,
-                 status: 'pending'
-               });
-             }
+             const [created] = await db.insert(brands).values({
+               workspaceId,
+               projectId,
+               name: brandName,
+               isOwn: false,
+               aliases: [],
+               domains: [],
+             }).returning({ id: brands.id });
+             brandId = created.id;
            }
+
+           await db.insert(brandMentions).values({
+             workspaceId,
+             chatId,
+             brandId,
+             position: brand.position || 1,
+             sentiment: brand.sentiment || 50,
+             confidence: brand.confidence || 0.8,
+             mentionText: brand.mentionText || brandName
+           });
         }
       });
     }

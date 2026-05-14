@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
-  Settings, ChevronDown, Sparkles, MessageSquare,
+  Settings, ChevronDown, Sparkles, MessageSquare, Play, Loader2,
 } from "lucide-react";
 import ChatModal from "./ChatModal";
 import EngineIcon from "./EngineIcon";
@@ -89,10 +90,13 @@ function getCategoryLabel(cat: string | null, domain: string, projectName: strin
 }
 
 export default function PromptDetailClient({ prompt, chatFacts, projectBrands, availableTags, selectedTagIds }: Props) {
+  const router = useRouter();
   const [resolution, setResolution] = useState<Resolution>("W");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<ChatRecordView | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanStatus, setScanStatus] = useState<string | null>(null);
 
   const allAvailableModels = useMemo(() => {
     const set = new Set<string>();
@@ -111,6 +115,34 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
     setSelectedModels((prev) =>
       prev.includes(model) ? prev.filter((m) => m !== model) : [...prev, model],
     );
+  };
+
+  const runScan = async () => {
+    if (isScanning) return;
+    setIsScanning(true);
+    setScanStatus(`Querying ${selectedModels.length} engine${selectedModels.length === 1 ? "" : "s"}…`);
+    try {
+      const engines = selectedModels.join(",");
+      const res = await fetch(
+        `/api/run-daily-scan?promptId=${encodeURIComponent(prompt.id)}&engines=${encodeURIComponent(engines)}`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `Scan failed (HTTP ${res.status})`);
+      }
+      setScanStatus(
+        data.mode === "inngest"
+          ? `Dispatched ${data.dispatched} jobs — results stream in shortly.`
+          : `Completed ${data.dispatched} engine calls. Refreshing…`,
+      );
+      router.refresh();
+      window.setTimeout(() => setScanStatus(null), 4000);
+    } catch (err) {
+      setScanStatus(err instanceof Error ? `Error: ${err.message}` : "Scan failed");
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   const stableBrandColors = useMemo(() => {
@@ -186,13 +218,40 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
           </span>
         </div>
 
-        <button
-          className="pd-settings-btn"
-          onClick={() => setIsSettingsOpen(true)}
-        >
-          <Settings size={14} strokeWidth={2} />
-          <span>Settings</span>
-        </button>
+        <div className="pd-topbar-actions">
+          {scanStatus && (
+            <span
+              className={`pd-scan-status ${scanStatus.startsWith("Error") ? "pd-scan-status-error" : ""}`}
+            >
+              {scanStatus}
+            </span>
+          )}
+          <button
+            className="pd-run-scan-btn"
+            onClick={runScan}
+            disabled={isScanning || selectedModels.length === 0}
+            title="Query selected AI engines now and refresh data"
+          >
+            {isScanning ? (
+              <>
+                <Loader2 size={14} strokeWidth={2} className="pd-spin" />
+                <span>Running…</span>
+              </>
+            ) : (
+              <>
+                <Play size={14} strokeWidth={2} />
+                <span>Run scan</span>
+              </>
+            )}
+          </button>
+          <button
+            className="pd-settings-btn"
+            onClick={() => setIsSettingsOpen(true)}
+          >
+            <Settings size={14} strokeWidth={2} />
+            <span>Settings</span>
+          </button>
+        </div>
       </div>
 
       <div className="pd-filters">
@@ -378,7 +437,13 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
                   );
                 })}
                 {brands.length === 0 && (
-                  <tr><td colSpan={6} className="pd-empty">No brands extracted yet</td></tr>
+                  <tr>
+                    <td colSpan={6} className="pd-empty">
+                      {isScanning
+                        ? "Querying engines — brands will appear once responses are parsed…"
+                        : "No brands extracted yet. Click “Run scan” above to query the selected AI engines."}
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
