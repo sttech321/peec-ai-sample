@@ -5,13 +5,14 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
-  Settings, ChevronDown, Flag,
+  Settings, ChevronDown, Sparkles, MessageSquare,
 } from "lucide-react";
 import ChatModal from "./ChatModal";
 import EngineIcon from "./EngineIcon";
 import DomainFavicon from "./DomainFavicon";
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
 import BrandsDropdown from "./BrandsDropdown";
+import PromptSettingsModal from "./PromptSettingsModal";
 import {
   ChatFact, ChatRecordView, Resolution,
   aggregateBrands, aggregateDomains, totalCitations, toChatRecords,
@@ -24,17 +25,28 @@ interface ProjectBrand {
 }
 
 interface PromptInfo {
+  id: string;
   query: string;
   createdAt: string;
   volumeTier: string;
   topicName: string;
   projectName: string;
+  isActive: boolean;
+  location: string;
+}
+
+interface ProjectTag {
+  id: string;
+  name: string;
+  color: string;
 }
 
 interface Props {
   prompt: PromptInfo;
   chatFacts: ChatFact[];
   projectBrands: ProjectBrand[];
+  availableTags: ProjectTag[];
+  selectedTagIds: string[];
 }
 
 const DOMAIN_TYPE_COLORS: Record<string, string> = {
@@ -47,6 +59,17 @@ function formatCitationCount(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
   if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "k";
   return String(n);
+}
+
+const VOLUME_TIER_LEVEL: Record<string, number> = {
+  "Very High": 4,
+  High: 3,
+  Medium: 2,
+  Low: 1,
+};
+
+function volumeLevel(tier: string): number {
+  return VOLUME_TIER_LEVEL[tier] ?? 2;
 }
 
 function getCategoryLabel(cat: string | null, domain: string, projectName: string): string {
@@ -65,10 +88,11 @@ function getCategoryLabel(cat: string | null, domain: string, projectName: strin
   return map[cat.toLowerCase()] || "Other";
 }
 
-export default function PromptDetailClient({ prompt, chatFacts, projectBrands }: Props) {
+export default function PromptDetailClient({ prompt, chatFacts, projectBrands, availableTags, selectedTagIds }: Props) {
   const [resolution, setResolution] = useState<Resolution>("W");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<ChatRecordView | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const allAvailableModels = useMemo(() => {
     const set = new Set<string>();
@@ -139,17 +163,35 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands }:
   return (
     <div className="prompt-detail-page">
       {selectedChat && <ChatModal chat={selectedChat} onClose={() => setSelectedChat(null)} />}
+      {isSettingsOpen && (
+        <PromptSettingsModal
+          promptId={prompt.id}
+          initialActive={prompt.isActive}
+          initialLocation={prompt.location}
+          availableTags={availableTags}
+          selectedTagIds={selectedTagIds}
+          onClose={() => setIsSettingsOpen(false)}
+        />
+      )}
+      {/* ── Top bar ───────────────────────────────────────── */}
       <div className="pd-topbar">
         <div className="pd-breadcrumb">
+          <MessageSquare size={13} className="pd-breadcrumb-icon" />
           <a href="/prompts" className="pd-breadcrumb-link">Prompts</a>
-          <span className="pd-breadcrumb-sep">&gt;</span>
+          <span className="pd-breadcrumb-sep">›</span>
           <span className="pd-breadcrumb-current">
-            {prompt.query.length > 50 ? prompt.query.slice(0, 50) + "..." : prompt.query}
+            {prompt.query.length > 52
+              ? prompt.query.slice(0, 52) + "..."
+              : prompt.query}
           </span>
         </div>
-        <button className="pd-settings-btn">
-          <Settings size={14} />
-          Settings
+
+        <button
+          className="pd-settings-btn"
+          onClick={() => setIsSettingsOpen(true)}
+        >
+          <Settings size={14} strokeWidth={2} />
+          <span>Settings</span>
         </button>
       </div>
 
@@ -167,6 +209,7 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands }:
             className="pd-filter-chip"
             onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
           >
+            <Sparkles size={11} />
             {selectedModels.length === allAvailableModels.length ? "All Models" : `${selectedModels.length} Models`} <ChevronDown size={11} />
           </button>
 
@@ -205,31 +248,71 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands }:
         </div>
       </div>
 
+      {/* ── Header Card ───────────────────────────────────── */}
       <div className="pd-prompt-header">
         <span className="pd-header-label">Prompt</span>
+
         <h1 className="pd-prompt-title">{prompt.query}</h1>
-        <div className="pd-meta-row">
+
+        <div className="pd-meta-grid">
           <div className="pd-meta-item">
             <span className="pd-meta-label">Date added</span>
-            <span className="pd-meta-value pd-meta-link">{timeAgo}</span>
+            <span className="pd-meta-value">{timeAgo}</span>
           </div>
+
           <div className="pd-meta-item">
             <span className="pd-meta-label">Topic</span>
-            <span className="pd-meta-value">{prompt.topicName || "—"}</span>
-          </div>
-          <div className="pd-meta-item">
-            <span className="pd-meta-label">Volume</span>
-            <span className="pd-meta-value">{prompt.volumeTier || "n/l"}</span>
-          </div>
-          <div className="pd-meta-item">
-            <span className="pd-meta-label">Location</span>
-            <span className="pd-meta-value pd-location">
-              <Flag size={12} className="pd-flag-icon" /> US
+            <span className="pd-meta-value">
+              {prompt.topicName || "—"}
             </span>
           </div>
+
+          <div className="pd-meta-item">
+            <span className="pd-meta-label">Volume</span>
+
+            <span className="pd-meta-value">
+              <span
+                className="pd-volume-bars"
+                aria-label={prompt.volumeTier || "Medium"}
+              >
+                {[1, 2, 3, 4].map((i) => (
+                  <span
+                    key={i}
+                    className={`pd-volume-bar ${
+                      i <= volumeLevel(prompt.volumeTier)
+                        ? "pd-volume-bar-on"
+                        : ""
+                    }`}
+                  />
+                ))}
+              </span>
+            </span>
+          </div>
+
+          <div className="pd-meta-item">
+            <span className="pd-meta-label">Location</span>
+
+            <span className="pd-meta-value pd-location">
+              <img
+                src={`https://flagcdn.com/w40/${(
+                  prompt.location || "us"
+                ).toLowerCase()}.png`}
+                alt=""
+                width={16}
+                height={12}
+                className="pd-flag-img"
+              />
+
+              {(prompt.location || "US").toUpperCase()}
+            </span>
+          </div>
+
           <div className="pd-meta-item">
             <span className="pd-meta-label">Status</span>
-            <span className="pd-status-badge">Active</span>
+
+            <span className="pd-status-badge">
+              {prompt.isActive ? "Active" : "Paused"}
+            </span>
           </div>
         </div>
       </div>

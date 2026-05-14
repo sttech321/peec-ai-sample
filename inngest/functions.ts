@@ -1,15 +1,16 @@
 import { inngest } from "./client";
 import { db } from "../db";
 import { chats, sources, citations, brandMentions, prompts } from "../db/schema";
+import { eq } from "drizzle-orm";
 
 export const scheduleDailyScans = inngest.createFunction(
-  { 
+  {
     id: "schedule-daily-scans",
     triggers: [{ cron: "TZ=UTC 0 6 * * *" }]
   },
   async ({ step }) => {
     const allPrompts = await step.run("fetch-all-prompts", async () => {
-      return await db.select().from(prompts);
+      return await db.select().from(prompts).where(eq(prompts.isActive, true));
     });
 
     const engines = ["ChatGPT", "Claude", "Perplexity", "Gemini", "AI Overviews"];
