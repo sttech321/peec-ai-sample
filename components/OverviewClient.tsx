@@ -12,6 +12,7 @@ import EngineIcon from "./EngineIcon";
 import DomainFavicon from "./DomainFavicon";
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
 import BrandsDropdown from "./BrandsDropdown";
+import { guessBrandDomain } from "../lib/brand-domain";
 import {
   ChatFact, ChatRecordView, Resolution,
   aggregateBrands, aggregateDomains, totalCitations, toChatRecords,
@@ -61,6 +62,32 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands }
   const [resolution, setResolution] = useState<Resolution>("W");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<ChatRecordView | null>(null);
+  const [onlyOwnMentions, setOnlyOwnMentions] = useState(false);
+
+  const ownBrandNames = useMemo(
+    () => new Set(projectBrands.filter((b) => b.isOwn).map((b) => b.name)),
+    [projectBrands],
+  );
+
+  function sentimentDotColor(score: number): string {
+    if (score >= 65) return "#10b981";
+    if (score >= 50) return "#eab308";
+    if (score > 0) return "#ef4444";
+    return "#cbd5e1";
+  }
+
+  function formatTimeAgo(iso: string): string {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    if (diffMs < 0) return "just now";
+    const hours = Math.floor(diffMs / 3600000);
+    if (hours < 1) {
+      const mins = Math.max(1, Math.floor(diffMs / 60000));
+      return `${mins} min ago`;
+    }
+    if (hours < 24) return `${hours} hr ago`;
+    const days = Math.floor(hours / 24);
+    return days === 1 ? "1 d ago" : `${days} d ago`;
+  }
 
   const allAvailableModels = useMemo(() => {
     const set = new Set<string>();
@@ -117,6 +144,14 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands }
     records.sort((a, b) => new Date(b.runDate).getTime() - new Date(a.runDate).getTime());
     return records.slice(0, 50);
   }, [filteredChats]);
+
+  const visibleRecentChats = useMemo(() => {
+    if (!onlyOwnMentions) return recentChats;
+    if (ownBrandNames.size === 0) return recentChats;
+    return recentChats.filter((c) =>
+      c.brandsFound.some((name) => ownBrandNames.has(name)),
+    );
+  }, [recentChats, onlyOwnMentions, ownBrandNames]);
 
   const totalMentions = brands.reduce((s, b) => s + b.count, 0);
   const maxDomainCount = domains.length > 0 ? domains[0].count : 1;
@@ -192,7 +227,7 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands }
                     <tr key={b.name}>
                       <td className="pd-rank">{i + 1}</td>
                       <td className="pd-brand-cell">
-                        <span className="pd-brand-dot" style={{ background: b.color }}></span>
+                        <DomainFavicon domain={guessBrandDomain(b.name)} size={16} />
                         {b.name}
                       </td>
                       <td><span className="pd-vis-value">{vis}%</span></td>
@@ -235,7 +270,7 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands }
                   return (
                     <tr key={i}>
                       <td className="pd-domain-cell">
-                        <span className="pd-domain-favicon" style={{ background: DOMAIN_TYPE_COLORS[typeLabel] || "#6366f1" }}></span>
+                        <DomainFavicon domain={d.domain} size={16} />
                         {d.domain}
                       </td>
                       <td>{pct}%</td>
@@ -298,28 +333,40 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands }
         <div className="pd-domains-header-row">
           <div>
             <h2 className="pd-section-title">Recent Chats</h2>
-            <p className="pd-section-subtitle">Where AI gets its information about this brand</p>
+            <p className="pd-section-subtitle">Your latest AI responses across all prompts.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] text-slate-400 font-medium">{projectName} mentioned</span>
-            <div className="w-8 h-4 bg-slate-800 rounded-full relative p-0.5 cursor-pointer">
-              <div className="w-3 h-3 bg-slate-500 rounded-full"></div>
-            </div>
-          </div>
+          <button
+            type="button"
+            className={`pd-recent-toggle ${onlyOwnMentions ? "pd-recent-toggle-on" : ""}`}
+            onClick={() => setOnlyOwnMentions((v) => !v)}
+            disabled={ownBrandNames.size === 0}
+            title={
+              ownBrandNames.size === 0
+                ? "Mark a brand as 'own' on the Brands page to enable this filter"
+                : `Show only chats mentioning ${projectName}`
+            }
+          >
+            <span className="pd-recent-toggle-label">
+              {projectName} mentioned
+            </span>
+            <span className="pd-recent-toggle-track">
+              <span className="pd-recent-toggle-thumb" />
+            </span>
+          </button>
         </div>
 
-        {recentChats.length === 0 ? (
+        {visibleRecentChats.length === 0 ? (
           <div className="pd-empty-chats">
-            🔍 No recent chats recorded yet.
+            {onlyOwnMentions
+              ? `🔍 No recent chats mention ${projectName} yet.`
+              : "🔍 No recent chats recorded yet."}
           </div>
         ) : (
           <div className="pd-recent-chats-scroll custom-scrollbar">
-            {recentChats.map((chat) => {
-              const runDate = new Date(chat.runDate);
-              const diffMs = Date.now() - runDate.getTime();
-              const diffHr = Math.floor(diffMs / 3600000);
-              const timeAgo = diffHr > 24 ? `${Math.floor(diffHr / 24)} d ago` : `${diffHr} hr ago`;
+            {visibleRecentChats.map((chat) => {
+              const timeAgo = formatTimeAgo(chat.runDate);
               const snippet = chat.rawResponse ? chat.rawResponse.slice(0, 150) + "..." : "No response content...";
+              const ownMentioned = chat.brandsFound.some((n) => ownBrandNames.has(n));
 
               return (
                 <div
@@ -330,18 +377,34 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands }
                   <div className="pd-chat-card-header">
                     <EngineIcon engine={chat.engine} />
                     <span className="pd-chat-engine-name">{chat.engine}</span>
+                    {ownMentioned && chat.avgPosition > 0 && (
+                      <span className="pd-chat-position">
+                        #{chat.avgPosition.toFixed(1)}
+                      </span>
+                    )}
                   </div>
                   <div className="pd-chat-query">{chat.query}</div>
                   <div className="pd-chat-snippet">{snippet}</div>
                   <div className="pd-chat-footer">
                     <div className="pd-chat-mentions">
-                      {chat.brandsFound.slice(0, 3).map((b, i) => (
-                        <div key={i} className="pd-mention-dot" title={b} style={{ background: "#cbd5e1" }}>
-                          {b.charAt(0)}
-                        </div>
+                      {chat.brandsFound.slice(0, 3).map((b) => (
+                        <DomainFavicon
+                          key={b}
+                          domain={guessBrandDomain(b)}
+                          size={18}
+                        />
                       ))}
                       {chat.brandsFound.length > 3 && (
                         <span className="pd-mention-more">+{chat.brandsFound.length - 3}</span>
+                      )}
+                      {chat.avgSentiment > 0 && (
+                        <span
+                          className="pd-chat-sentiment"
+                          style={{ background: sentimentDotColor(chat.avgSentiment) }}
+                          title={`Sentiment ${chat.avgSentiment.toFixed(0)}`}
+                        >
+                          {chat.avgSentiment.toFixed(0)}
+                        </span>
                       )}
                     </div>
                     <span className="pd-chat-time">{timeAgo}</span>
