@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSignUp } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const isClerkEnabled =
@@ -11,7 +11,11 @@ const isClerkEnabled =
   !(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "").includes("dummy");
 
 export default function SignUpPage() {
-  return isClerkEnabled ? <SignUpWithClerk /> : <SignUpCustom />;
+  return (
+    <Suspense>
+      {isClerkEnabled ? <SignUpWithClerk /> : <SignUpCustom />}
+    </Suspense>
+  );
 }
 
 /* ── Real Clerk sign-up ── */
@@ -50,19 +54,41 @@ function SignUpWithClerk() {
     }
   };
 
-  return <AuthForm mode="signup" email="" loading={loading} error={error} devLink={null}
-    onEmailChange={() => {}} onSubmit={handleMagicLink} onOAuth={handleOAuth} />;
+  return <AuthForm mode="signup" email={email} loading={loading} error={error} devLink={null}
+    onEmailChange={setEmail} onSubmit={handleMagicLink} onOAuth={handleOAuth} />;
 }
 
-/* ── Custom magic link sign-up (no Clerk) ── */
+/* ── Custom sign-up (no Clerk) ── */
 function SignUpCustom() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [devLink, setDevLink] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
-  const handleOAuth = () => setError("OAuth requires Clerk configuration. Use email magic link below.");
+  // Show errors passed back from OAuth callbacks
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (!err) return;
+    const msgs: Record<string, string> = {
+      google_not_configured: "Google sign-in is not configured yet. Use email magic link below.",
+      microsoft_not_configured: "Microsoft sign-in is not configured yet. Use email magic link below.",
+      oauth_denied: "You cancelled the sign-in. Try again.",
+      invalid_state: "Sign-in session expired. Please try again.",
+      oauth_failed: "Sign-in failed. Please try again or use the magic link.",
+    };
+    setError(msgs[err] ?? "Something went wrong. Please try again.");
+  }, [searchParams]);
+
+  const handleOAuth = (strategy: "oauth_google" | "oauth_microsoft") => {
+    setError(null);
+    if (strategy === "oauth_google") {
+      window.location.href = "/api/auth/oauth/google";
+    } else {
+      window.location.href = "/api/auth/oauth/microsoft";
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,9 +162,15 @@ function AuthForm({ mode, email, loading, error, devLink, onEmailChange, onSubmi
       <p className="su-sub">{isSignUp ? "Sign up" : "Log in"} using Google or Microsoft.</p>
 
       <div className="su-oauth">
-        <button className="su-oauth-btn" onClick={() => onOAuth("oauth_google")}><GoogleIcon /> {isSignUp ? "Sign up" : "Log in"} with Google</button>
-        <button className="su-oauth-btn" onClick={() => onOAuth("oauth_microsoft")}><MicrosoftIcon /> {isSignUp ? "Sign up" : "Log in"} with Microsoft</button>
-        <button className="su-oauth-btn su-oauth-btn--sso" onClick={() => onOAuth("oauth_google")}>{isSignUp ? "Sign up" : "Log in"} with SSO</button>
+        <button className="su-oauth-btn" onClick={() => onOAuth("oauth_google")}>
+          <GoogleIcon /> {isSignUp ? "Sign up" : "Log in"} with Google
+        </button>
+        <button className="su-oauth-btn" onClick={() => onOAuth("oauth_microsoft")}>
+          <MicrosoftIcon /> {isSignUp ? "Sign up" : "Log in"} with Microsoft
+        </button>
+        <button className="su-oauth-btn su-oauth-btn--sso" onClick={() => onOAuth("oauth_google")}>
+          {isSignUp ? "Sign up" : "Log in"} with SSO
+        </button>
       </div>
 
       <p className="su-divider">Or continue with</p>
@@ -151,6 +183,12 @@ function AuthForm({ mode, email, loading, error, devLink, onEmailChange, onSubmi
           <span className="su-hint">Please use your work email address.</span>
         </div>
         {error && <div className="su-error" style={{ marginBottom: 12 }}>{error}</div>}
+        {devLink && (
+          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 12px", marginBottom: 12 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#15803d", marginBottom: 4 }}>DEV MODE</p>
+            <a href={devLink} style={{ fontSize: 12, color: "#15803d", wordBreak: "break-all", textDecoration: "underline" }}>{devLink}</a>
+          </div>
+        )}
         <button type="submit" className="su-magic-btn" disabled={loading || !email.trim()}>
           <span className="su-magic-icon">✦</span>
           {loading ? "Sending…" : "Send Magic Link"}

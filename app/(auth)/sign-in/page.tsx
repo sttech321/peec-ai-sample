@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSignIn } from "@clerk/nextjs";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const isClerkEnabled =
@@ -10,7 +11,11 @@ const isClerkEnabled =
   !(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "").includes("dummy");
 
 export default function SignInPage() {
-  return isClerkEnabled ? <SignInWithClerk /> : <SignInCustom />;
+  return (
+    <Suspense>
+      {isClerkEnabled ? <SignInWithClerk /> : <SignInCustom />}
+    </Suspense>
+  );
 }
 
 /* ── Real Clerk sign-in ── */
@@ -60,13 +65,35 @@ function SignInWithClerk() {
 
 /* ── Custom magic link sign-in (no Clerk) ── */
 function SignInCustom() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [devLink, setDevLink] = useState<string | null>(null);
 
-  const handleOAuth = () => setError("OAuth requires Clerk configuration. Use email magic link below.");
+  // Show errors passed back from OAuth callbacks
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (!err) return;
+    const msgs: Record<string, string> = {
+      google_not_configured: "Google sign-in is not configured yet. Use email magic link below.",
+      microsoft_not_configured: "Microsoft sign-in is not configured yet. Use email magic link below.",
+      oauth_denied: "You cancelled the sign-in. Try again.",
+      invalid_state: "Sign-in session expired. Please try again.",
+      oauth_failed: "Sign-in failed. Please try again or use the magic link.",
+    };
+    setError(msgs[err] ?? "Something went wrong. Please try again.");
+  }, [searchParams]);
+
+  const handleOAuth = (strategy: "oauth_google" | "oauth_microsoft") => {
+    setError(null);
+    if (strategy === "oauth_google") {
+      window.location.href = "/api/auth/oauth/google";
+    } else {
+      window.location.href = "/api/auth/oauth/microsoft";
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
