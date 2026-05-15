@@ -3,6 +3,7 @@
 import { db } from "../../db";
 import { projects, topics, prompts, brands, brandProfiles } from "../../db/schema";
 import { WORKSPACE } from "../../lib/project-context";
+import { verifySession, SESSION_COOKIE, SETUP_DONE_COOKIE } from "../../lib/session";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { BrandProfile, COUNTRY_OPTIONS, EMPTY_BRAND_PROFILE } from "../../lib/brand-profile-types";
@@ -156,17 +157,22 @@ export async function finalizeSetup(args: {
     return { ok: false, error: "Select at least one prompt" };
   }
 
+  // Resolve workspace ID from session cookie, fall back to hardcoded constant
+  const cookieStore = await cookies();
+  const rawSession = cookieStore.get(SESSION_COOKIE)?.value;
+  const sessionData = rawSession ? verifySession(rawSession) : null;
+  const workspaceId = sessionData?.email ?? WORKSPACE;
+
   // 1. Create project
   const [project] = await db
     .insert(projects)
-    .values({ workspaceId: WORKSPACE, name: args.brandName.trim() })
+    .values({ workspaceId, name: args.brandName.trim() })
     .returning();
 
-  // 2. Brand profile (jsonb) — migrate legacy `regions` into `targetMarkets`
-  // so the profile page sees the selected countries.
+  // 2. Brand profile
   const migratedProfile = migrateRegionsToMarkets(args.profile);
   await db.insert(brandProfiles).values({
-    workspaceId: WORKSPACE,
+    workspaceId,
     projectId: project.id,
     data: {
       ...migratedProfile,
@@ -175,9 +181,9 @@ export async function finalizeSetup(args: {
     },
   });
 
-  // 3. Own brand row (so the brand appears in dropdowns as "You")
+  // 3. Own brand row
   await db.insert(brands).values({
-    workspaceId: WORKSPACE,
+    workspaceId,
     projectId: project.id,
     name: args.brandName.trim(),
     isOwn: true,
@@ -189,11 +195,7 @@ export async function finalizeSetup(args: {
   for (const topic of selectedTopics) {
     const [topicRow] = await db
       .insert(topics)
-      .values({
-        workspaceId: WORKSPACE,
-        projectId: project.id,
-        name: topic.name,
-      })
+      .values({ workspaceId, projectId: project.id, name: topic.name })
       .returning();
 
     const selectedPrompts = topic.prompts.filter((p) => p.selected);
@@ -201,7 +203,7 @@ export async function finalizeSetup(args: {
 
     await db.insert(prompts).values(
       selectedPrompts.map((p) => ({
-        workspaceId: WORKSPACE,
+        workspaceId,
         projectId: project.id,
         topicId: topicRow.id,
         query: p.text,
@@ -210,12 +212,10 @@ export async function finalizeSetup(args: {
     );
   }
 
-  // 5. Switch active project cookie
-  const cookieStore = await cookies();
-  cookieStore.set(ACTIVE_PROJECT_COOKIE, project.id, {
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365,
-  });
+  // 5. Set active project + mark setup as complete
+  const yearMaxAge = 60 * 60 * 24 * 365;
+  cookieStore.set(ACTIVE_PROJECT_COOKIE, project.id, { path: "/", maxAge: yearMaxAge });
+  cookieStore.set(SETUP_DONE_COOKIE, "1", { path: "/", maxAge: yearMaxAge });
 
   revalidatePath("/", "layout");
 

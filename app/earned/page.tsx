@@ -4,6 +4,7 @@ import { db } from "../../db";
 import { projects, earnedActions, sources, chats, prompts, citations } from "../../db/schema";
 import { eq, sql } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
+import { MOCK_EARNED_ACTIONS, MOCK_SOURCES_MAP, MOCK_CHANNELS_MAP } from "../../lib/mock-actions";
 import "./earned.css";
 
 export default async function EarnedPage() {
@@ -82,13 +83,18 @@ export default async function EarnedPage() {
       .slice(0, 10);
   }
 
+  const useMock = actions.length === 0;
+  const finalActions = useMock ? MOCK_EARNED_ACTIONS : actions;
+  const finalSourcesMap = useMock ? MOCK_SOURCES_MAP : sourcesMap;
+  const finalChannelsMap = useMock ? MOCK_CHANNELS_MAP : channelsMap;
+
   return (
     <DashboardLayout currentPath="/earned">
       <EarnedClient
-        initialActions={actions}
+        initialActions={finalActions as any[]}
         projectName={projectName}
-        sourcesMap={sourcesMap}
-        channelsMap={channelsMap}
+        sourcesMap={finalSourcesMap}
+        channelsMap={finalChannelsMap}
       />
     </DashboardLayout>
   );

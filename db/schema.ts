@@ -239,6 +239,48 @@ export const analyticsSnapshots = pgTable("analytics_snapshots", {
   dateIdx: index("analytics_snapshots_date_idx").on(table.snapshotDate),
 }));
 
+// Workspace members (accepted invites)
+export const workspaceMembers = pgTable("workspace_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  role: varchar("role", { length: 50 }).notNull(),
+  invitedBy: varchar("invited_by", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  workspaceIdx: index("workspace_members_workspace_idx").on(t.workspaceId),
+  uniqueMember: uniqueIndex("workspace_members_unique").on(t.workspaceId, t.email),
+}));
+
+// Pending workspace invitations
+export const workspaceInvitations = pgTable("workspace_invitations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  role: varchar("role", { length: 50 }).notNull(),
+  token: varchar("token", { length: 128 }).notNull(),
+  invitedBy: varchar("invited_by", { length: 255 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  tokenIdx: uniqueIndex("workspace_invitations_token_idx").on(t.token),
+  workspaceIdx: index("workspace_invitations_workspace_idx").on(t.workspaceId),
+}));
+
+// Magic link tokens for custom email auth
+export const magicLinkTokens = pgTable("magic_link_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: varchar("email", { length: 255 }).notNull(),
+  token: varchar("token", { length: 128 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: uniqueIndex("magic_link_tokens_token_idx").on(table.token),
+  emailIdx: index("magic_link_tokens_email_idx").on(table.email),
+}));
+
 // Competitors (Module 6)
 export const competitors = pgTable("competitors", {
   id: uuid("id").primaryKey().defaultRandom(),

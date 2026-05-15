@@ -1,138 +1,136 @@
 import React from "react";
 import Link from "next/link";
-import { 
-  ShieldCheck, 
-  Zap, 
-  BarChart3, 
-  Search, 
-  ArrowRight,
-  Sparkles,
-  Target,
-  Globe
-} from "lucide-react";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white selection:bg-indigo-500/30">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-[#f5f5f5] text-[#1a1a1a]">
+      {/* Nav */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-[#e8e8e8]">
+        <div className="max-w-7xl mx-auto px-6 h-[60px] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
-              <Sparkles className="text-white" size={18} />
-            </div>
-            <span className="text-lg font-bold tracking-tight">PEEC AI</span>
-          </div>
-          
-          <div className="hidden md:flex items-center gap-8">
-            <Link href="#features" className="text-sm text-slate-400 hover:text-white transition-colors">Features</Link>
-            <Link href="#how-it-works" className="text-sm text-slate-400 hover:text-white transition-colors">How it works</Link>
-            <Link href="#pricing" className="text-sm text-slate-400 hover:text-white transition-colors">Pricing</Link>
+            <PeecLogo />
+            <span className="text-[15px] font-semibold tracking-tight text-[#1a1a1a]">Peec AI</span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <Link href="/login" className="text-sm text-slate-400 hover:text-white transition-colors">Login</Link>
-            <Link href="/" className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 rounded-full text-sm font-semibold transition-all">
-              Go to App
+          <div className="hidden md:flex items-center gap-1">
+            {["Pricing", "Resources", "Partnerships", "MCP", "Careers"].map((item) => (
+              <Link
+                key={item}
+                href="#"
+                className="px-3 py-1.5 text-sm text-[#555] hover:text-[#1a1a1a] transition-colors rounded-md hover:bg-[#f0f0f0]"
+              >
+                {item}
+              </Link>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link
+              href="/sign-in"
+              className="px-4 py-[7px] text-sm font-medium text-[#333] border border-[#d8d8d8] rounded-md bg-white hover:bg-[#f5f5f5] transition-colors"
+            >
+              Log in
+            </Link>
+            <Link
+              href="/sign-up"
+              className="px-4 py-[7px] text-sm font-semibold text-white bg-[#1a1a1a] rounded-md hover:bg-[#333] transition-colors"
+            >
+              Sign up
             </Link>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="relative pt-40 pb-20 px-6 overflow-hidden">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-indigo-500/10 blur-[120px] rounded-full -z-10" />
-        
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-indigo-400 mb-8 animate-fade-in">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-            </span>
-            New: Generative Engine Optimization (GEO) actions are now in beta
+      {/* Hero */}
+      <section className="pt-32 pb-16 px-6">
+        <div className="max-w-3xl mx-auto text-center">
+          {/* Hiring badge */}
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-[#e0e0e0] text-xs font-medium text-[#444] mb-8 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            We are hiring
           </div>
-          
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8 bg-clip-text text-transparent bg-gradient-to-b from-white to-white/50">
-            Win the heart of <br /> AI Search Engines.
+
+          {/* Headline */}
+          <h1 className="text-[56px] md:text-[68px] font-bold leading-[1.08] tracking-[-0.03em] mb-6">
+            <span className="text-[#1a1a1a]">AI search analytics</span>
+            <br />
+            <span className="text-[#aaa]">for marketing teams</span>
           </h1>
-          
-          <p className="text-xl text-slate-400 mb-12 max-w-2xl mx-auto leading-relaxed">
-            PEEC helps brands track and improve their visibility inside ChatGPT, Gemini, Claude, and Perplexity. Stop guessing, start optimizing.
+
+          {/* Subtitle */}
+          <p className="text-[16px] text-[#666] mb-8 leading-relaxed max-w-xl mx-auto">
+            Track, analyze, and improve brand performance on AI search platforms
+            <br />
+            through key metrics like{" "}
+            <MetricPill icon="👁" label="Visibility" />{" "}
+            <span className="text-[#999]">,</span>{" "}
+            <MetricPill icon="📍" label="Position" />{" "}
+            <span className="text-[#999]">, and</span>{" "}
+            <MetricPill icon="😊" label="Sentiment" />
           </p>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/" className="group px-8 py-4 bg-white text-black rounded-full font-bold text-lg hover:bg-white/90 transition-all flex items-center gap-2">
-              Start tracking for free
-              <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
+
+          {/* CTAs */}
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <Link
+              href="#"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-[#333] bg-white border border-[#d8d8d8] rounded-md hover:bg-[#f5f5f5] transition-colors shadow-sm"
+            >
+              <span className="text-[#aaa]">◻</span> Talk to Sales
             </Link>
-            <Link href="#pricing" className="px-8 py-4 bg-white/5 border border-white/10 rounded-full font-bold text-lg hover:bg-white/10 transition-all">
-              View demo
+            <Link
+              href="/sign-up"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#1a1a1a] rounded-md hover:bg-[#333] transition-colors shadow-sm"
+            >
+              Start Free Trial
             </Link>
           </div>
         </div>
 
-        {/* Dashboard Preview */}
-        <div className="mt-24 max-w-6xl mx-auto rounded-3xl border border-white/10 bg-[#141418] shadow-2xl overflow-hidden relative group">
-          <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
-          <img 
-            src="https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=2574&auto=format&fit=crop" 
-            alt="Dashboard Preview" 
-            className="w-full grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700"
-          />
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] opacity-100 group-hover:opacity-0 transition-opacity">
-             <div className="bg-white/10 border border-white/20 px-6 py-3 rounded-2xl text-lg font-semibold backdrop-blur-xl">
-               Peek inside the dashboard
-             </div>
-          </div>
+        {/* Dashboard preview */}
+        <div className="mt-16 max-w-5xl mx-auto">
+          <DashboardPreview />
         </div>
       </section>
 
-      {/* Features */}
-      <section id="features" className="py-32 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-20">
-            <h2 className="text-3xl md:text-5xl font-bold mb-4">Enterprise AI Visibility Intelligence</h2>
-            <p className="text-slate-400">Everything you need to master GenAI Search.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <FeatureCard 
-              icon={<Target className="text-indigo-400" />}
-              title="Visibility Tracking"
-              description="Track how often your brand is mentioned across all major LLMs and AI search engines."
-            />
-            <FeatureCard 
-              icon={<Zap className="text-emerald-400" />}
-              title="Actionable Insights"
-              description="Daily recommendations to improve your off-page and on-page AI search presence."
-            />
-            <FeatureCard 
-              icon={<Search className="text-blue-400" />}
-              title="Competitor Overlap"
-              description="See where your competitors are winning in AI answers and how to leapfrog them."
-            />
+      {/* Social proof logos */}
+      <section className="py-16 px-6 border-t border-[#e8e8e8] bg-white">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-center text-sm text-[#999] mb-8 font-medium">
+            Trusted by +1500 marketing teams
+          </p>
+          <div className="grid grid-cols-2 gap-8">
+            <div>
+              <p className="text-xs font-semibold text-[#aaa] mb-4 text-center">Brands</p>
+              <div className="grid grid-cols-2 gap-4">
+                {["Breitling", "Attio", "Squarespace", "Brevo", "n8n", "ElevenLabs"].map((b) => (
+                  <div key={b} className="flex items-center justify-center h-10 text-sm font-semibold text-[#555]">{b}</div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-[#aaa] mb-4 text-center">Agencies</p>
+              <div className="grid grid-cols-2 gap-4">
+                {["Seer", "Eskimoz", "Omniscient", "We Comms", "FirstPage", "Jin Global"].map((a) => (
+                  <div key={a} className="flex items-center justify-center h-10 text-sm font-semibold text-[#555]">{a}</div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-20 border-t border-white/5 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
+      <footer className="py-8 border-t border-[#e8e8e8] bg-white px-6">
+        <div className="max-w-7xl mx-auto flex items-center justify-between text-sm text-[#999]">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
-              <Sparkles className="text-white" size={18} />
-            </div>
-            <span className="text-lg font-bold tracking-tight">PEEC AI</span>
+            <PeecLogo size={20} />
+            <span className="font-semibold text-[#555]">Peec AI</span>
           </div>
-          
-          <div className="text-sm text-slate-500">
-            © 2026 PEEC AI Tracker. Built for the future of search.
-          </div>
-
-          <div className="flex gap-6 text-sm text-slate-400">
-             <Link href="#">Privacy</Link>
-             <Link href="#">Terms</Link>
-             <Link href="#">Twitter</Link>
+          <span>© 2026 Peec AI. All rights reserved.</span>
+          <div className="flex gap-6">
+            <Link href="#" className="hover:text-[#555] transition-colors">Privacy</Link>
+            <Link href="#" className="hover:text-[#555] transition-colors">Terms</Link>
+            <Link href="#" className="hover:text-[#555] transition-colors">Imprint</Link>
           </div>
         </div>
       </footer>
@@ -140,14 +138,146 @@ export default function LandingPage() {
   );
 }
 
-function FeatureCard({ icon, title, description }: any) {
+function PeecLogo({ size = 24 }: { size?: number }) {
+  const s = size / 2 - 1;
   return (
-    <div className="p-8 rounded-3xl bg-white/5 border border-white/10 hover:border-indigo-500/50 transition-all group">
-      <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-        {icon}
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect x="2" y="2" width={s} height={s} fill="#1a1a1a" rx="1" />
+      <rect x={2 + s + 2} y="2" width={s} height={s} fill="#1a1a1a" rx="1" />
+      <rect x="2" y={2 + s + 2} width={s} height={s} fill="#1a1a1a" rx="1" />
+      <rect x={2 + s + 2} y={2 + s + 2} width={s} height={s} fill="#1a1a1a" rx="1" />
+    </svg>
+  );
+}
+
+function MetricPill({ icon, label }: { icon: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-[#d8d8d8] bg-white text-[13px] text-[#333] font-medium">
+      <span>{icon}</span> {label}
+    </span>
+  );
+}
+
+function DashboardPreview() {
+  return (
+    <div className="bg-white rounded-2xl border border-[#e0e0e0] shadow-xl overflow-hidden">
+      {/* Top bar */}
+      <div className="border-b border-[#eee] px-4 py-3 flex items-center gap-3 bg-[#fafafa]">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+          <div className="w-3 h-3 rounded-full bg-[#febc2e]" />
+          <div className="w-3 h-3 rounded-full bg-[#28c840]" />
+        </div>
+        <div className="flex gap-2">
+          {["Attio", "Last 7 days", "All tags", "All Models"].map((t) => (
+            <span key={t} className="px-2.5 py-1 text-xs font-medium text-[#555] border border-[#e0e0e0] rounded bg-white">{t}</span>
+          ))}
+        </div>
+        <span className="ml-auto text-xs text-[#999]">↑ Export</span>
       </div>
-      <h3 className="text-xl font-bold mb-3">{title}</h3>
-      <p className="text-slate-400 leading-relaxed">{description}</p>
+
+      <div className="flex">
+        {/* Sidebar */}
+        <div className="w-44 border-r border-[#eee] p-3 bg-[#fafafa]">
+          <div className="text-xs font-semibold text-[#aaa] mb-3 px-2">Pages</div>
+          {[
+            { label: "Overview", active: true },
+            { label: "Prompts", active: false },
+            { label: "Sources", active: false },
+            { label: "Models", active: false },
+            { label: "Settings", active: false },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className={`px-2 py-1.5 text-xs rounded mb-0.5 font-medium ${
+                item.active ? "bg-[#eee] text-[#1a1a1a]" : "text-[#666]"
+              }`}
+            >
+              {item.label}
+            </div>
+          ))}
+        </div>
+
+        {/* Main content */}
+        <div className="flex-1 p-4">
+          {/* Stats row */}
+          <div className="text-xs text-[#999] mb-4">
+            Overview · Attio&apos;s Visibility trending up by 5.2% this month &nbsp;
+            <span className="font-medium text-[#555]">Visibility: 3/14 ↓</span> ·{" "}
+            <span className="font-medium text-[#555]">Sentiment: 2/14 ↑</span> ·{" "}
+            <span className="font-medium text-[#555]">Position: 5/14 ↑</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Chart */}
+            <div className="border border-[#eee] rounded-xl p-3">
+              <div className="flex gap-3 mb-3">
+                {["Visibility", "Sentiment", "Position"].map((t) => (
+                  <span key={t} className="text-xs text-[#666] font-medium">{t}</span>
+                ))}
+              </div>
+              <div className="h-32 relative">
+                <svg viewBox="0 0 300 80" className="w-full h-full" preserveAspectRatio="none">
+                  <polyline points="0,60 50,50 100,45 150,35 200,30 250,28 300,25" fill="none" stroke="#ef4444" strokeWidth="2" />
+                  <polyline points="0,65 50,58 100,55 150,48 200,44 250,42 300,40" fill="none" stroke="#3b82f6" strokeWidth="2" />
+                  <polyline points="0,68 50,63 100,60 150,58 200,55 250,52 300,50" fill="none" stroke="#f59e0b" strokeWidth="2" />
+                  <polyline points="0,72 50,70 100,68 150,66 200,65 250,64 300,63" fill="none" stroke="#10b981" strokeWidth="2" />
+                </svg>
+                {/* Tooltip */}
+                <div className="absolute top-2 left-[45%] bg-[#1a1a1a] text-white text-[10px] rounded-lg p-2 shadow-lg min-w-[110px]">
+                  <div className="font-semibold mb-1 text-[#aaa]">March 2025</div>
+                  {[["HubSpot","72%","#ef4444"],["Salesforce","65%","#3b82f6"],["Attio","54%","#f59e0b"],["Zero","33%","#f59e0b"],["Pipedrive","28%","#10b981"]].map(([name,pct,color]) => (
+                    <div key={name} className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-sm inline-block" style={{background:color}} />
+                        <span>{name}</span>
+                      </div>
+                      <span className="font-semibold">{pct}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-between text-[10px] text-[#bbb] mt-1">
+                {["Jan","Feb","Mar","Apr","May","Jun"].map(m=><span key={m}>{m}</span>)}
+              </div>
+            </div>
+
+            {/* Competitors table */}
+            <div className="border border-[#eee] rounded-xl p-3">
+              <div className="font-semibold text-xs text-[#333] mb-1">Attio&apos;s competitors</div>
+              <div className="text-[10px] text-[#aaa] mb-3">Compare Attio with it&apos;s competitors</div>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="text-[#aaa] border-b border-[#eee]">
+                    <th className="text-left pb-1.5 font-medium">#</th>
+                    <th className="text-left pb-1.5 font-medium">Brand</th>
+                    <th className="text-left pb-1.5 font-medium">Visibility</th>
+                    <th className="text-left pb-1.5 font-medium">Sentiment</th>
+                    <th className="text-left pb-1.5 font-medium">Position</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ["1","HubSpot","65%","86","2.7",false,false],
+                    ["2","Salesforce","62%","62","2.9",true,true],
+                    ["3","Attio","47%","89","3.6",false,false],
+                    ["4","Pipedrive","41%","76","3.9",true,false],
+                    ["5","Zero","28%","88","2.3",false,false],
+                  ].map(([n,name,vis,sent,pos,sentDown,posDown]) => (
+                    <tr key={String(name)} className="border-b border-[#f5f5f5]">
+                      <td className="py-1.5 text-[#aaa]">{n}</td>
+                      <td className="py-1.5 font-medium text-[#333]">{String(name)}</td>
+                      <td className="py-1.5">{String(vis)}</td>
+                      <td className={`py-1.5 ${sentDown ? "text-red-500" : ""}`}>{String(sent)}</td>
+                      <td className={`py-1.5 ${posDown ? "text-red-500" : ""}`}>{String(pos)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
