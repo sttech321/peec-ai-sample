@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Check, X, Square, ChevronDown, Tag as TagIcon,
   Layers, Info, TrendingUp, BarChart2, ExternalLink, Zap, Copy,
+  RefreshCw, Play, AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { updateActionStatus } from "../app/earned/actions";
@@ -78,6 +80,32 @@ function scoreFromPriority(priority: string): number {
   if (priority === "High") return 3;
   if (priority === "Medium") return 2;
   return 1;
+}
+
+// ── Animated Counter ──────────────────────────────────────────────────────────
+
+function AnimatedCount({ value }: { value: number }) {
+  const [display, setDisplay] = useState(0);
+  const prevRef = useRef(0);
+
+  useEffect(() => {
+    const start = prevRef.current;
+    const end = value;
+    if (start === end) return;
+    const duration = 400;
+    const startTime = performance.now();
+    const step = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(start + (end - start) * eased));
+      if (progress < 1) requestAnimationFrame(step);
+      else prevRef.current = end;
+    };
+    requestAnimationFrame(step);
+  }, [value]);
+
+  return <>{display}</>;
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -376,6 +404,143 @@ function TopDomainsPanel({ contentType, domainsMap }: { contentType: string; dom
   );
 }
 
+// ── Smart Empty State ─────────────────────────────────────────────────────────
+
+function EmptyState({
+  sourcesCount,
+  promptCount,
+}: {
+  sourcesCount: number;
+  promptCount: number;
+}) {
+  const router = useRouter();
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const handleGenerate = useCallback(async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/actions/generate", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Generation failed. Please try again.");
+        return;
+      }
+      if (data.alreadyGenerated) {
+        router.refresh();
+        return;
+      }
+      setDone(true);
+      setTimeout(() => router.refresh(), 800);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }, [router]);
+
+  if (promptCount === 0) {
+    return (
+      <div className="ac-empty">
+        <div className="ac-empty-icon"><Zap size={20} /></div>
+        <h2 className="ac-empty-title">Set up prompts first</h2>
+        <p className="ac-empty-sub">
+          Add AI prompts so the system can scan ChatGPT, Claude, Perplexity, and Gemini for brand mentions and citation gaps.
+        </p>
+        <div className="ac-empty-actions">
+          <Link href="/setup" className="ac-empty-btn ac-empty-btn-primary">Run Setup Wizard</Link>
+          <Link href="/prompts" className="ac-empty-btn">Go to Prompts</Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (sourcesCount === 0) {
+    return (
+      <div className="ac-empty">
+        <div className="ac-empty-icon"><Play size={20} /></div>
+        <h2 className="ac-empty-title">Run AI scans first</h2>
+        <p className="ac-empty-sub">
+          You have {promptCount} prompt{promptCount !== 1 ? "s" : ""} ready. Run your first AI scan to fetch responses from ChatGPT, Claude, Gemini, and Perplexity.
+        </p>
+        <div className="ac-empty-actions">
+          <Link href="/prompts" className="ac-empty-btn ac-empty-btn-primary">
+            <Play size={13} /> Go to Prompts &amp; Scan
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ac-empty">
+      <div className="ac-empty-icon" style={{ background: done ? "#ecfdf5" : undefined, color: done ? "#047857" : undefined }}>
+        {done ? <Check size={20} /> : <RefreshCw size={20} className={generating ? "ac-spin" : ""} />}
+      </div>
+      <h2 className="ac-empty-title">
+        {done ? "Recommendations generated!" : "Generate earned recommendations"}
+      </h2>
+      <p className="ac-empty-sub">
+        {done
+          ? "Reloading your recommendations…"
+          : `${sourcesCount} citation source${sourcesCount !== 1 ? "s" : ""} found. Analyze competitor gaps and generate GEO action recommendations.`}
+      </p>
+      {error && (
+        <div className="ac-error-banner">
+          <AlertCircle size={13} />
+          {error}
+        </div>
+      )}
+      {!done && (
+        <div className="ac-empty-actions">
+          <button
+            className="ac-empty-btn ac-empty-btn-primary"
+            onClick={handleGenerate}
+            disabled={generating}
+          >
+            {generating ? (
+              <><RefreshCw size={13} className="ac-spin" /> Generating…</>
+            ) : (
+              <><Zap size={13} /> Generate Recommendations</>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Stat Card ────────────────────────────────────────────────────────────────
+
+function StatCard({
+  label,
+  value,
+  active,
+  onClick,
+  accent,
+}: {
+  label: string;
+  value: number;
+  active?: boolean;
+  onClick?: () => void;
+  accent?: string;
+}) {
+  return (
+    <div
+      className={`ac-metric${active ? " ac-metric-active" : ""}${onClick ? " ac-metric-clickable" : ""}`}
+      onClick={onClick}
+      style={active && accent ? { borderColor: accent, background: "#fafafa" } : undefined}
+    >
+      <span className="ac-metric-label">{label}</span>
+      <span className="ac-metric-value" style={active && accent ? { color: accent } : undefined}>
+        <AnimatedCount value={value} />
+      </span>
+    </div>
+  );
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 export default function EarnedClient({
@@ -385,6 +550,8 @@ export default function EarnedClient({
   channelsMap,
   phrasesMap = {},
   domainsMap = {},
+  sourcesCount = 0,
+  promptCount = 0,
 }: {
   initialActions: any[];
   projectName: string;
@@ -392,6 +559,8 @@ export default function EarnedClient({
   channelsMap: Record<string, ChannelRow[]>;
   phrasesMap?: Record<string, Phrase[]>;
   domainsMap?: Record<string, Domain[]>;
+  sourcesCount?: number;
+  promptCount?: number;
 }) {
   const seed = useMemo(
     () =>
@@ -408,10 +577,11 @@ export default function EarnedClient({
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "todo" | "done" | "declined">("all");
+  const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
 
   const handleStatusUpdate = async (id: string, newStatus: string) => {
     setActions((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a)),
+      prev.map((a) => (a.id === id ? { ...a, status: newStatus, updatedAt: new Date() } : a)),
     );
     if (!id.startsWith("m")) {
       await updateActionStatus(id, newStatus);
@@ -443,11 +613,12 @@ export default function EarnedClient({
       if (statusFilter === "todo" && a.status !== "todo") return false;
       if (statusFilter === "done" && a.status !== "done") return false;
       if (statusFilter === "declined" && a.status !== "declined") return false;
+      if (priorityFilter && a.priority !== priorityFilter) return false;
       if (selectedDomain && a.sourceDomain !== selectedDomain) return false;
       if (selectedType && a.type !== selectedType) return false;
       return true;
     });
-  }, [actions, statusFilter, selectedDomain, selectedType]);
+  }, [actions, statusFilter, priorityFilter, selectedDomain, selectedType]);
 
   const stats = useMemo(
     () => ({
@@ -455,15 +626,27 @@ export default function EarnedClient({
       done: actions.filter((a) => a.status === "done").length,
       skipped: actions.filter((a) => a.status === "declined").length,
       todo: actions.filter((a) => a.status === "todo").length,
+      high: actions.filter((a) => a.priority === "High").length,
+      medium: actions.filter((a) => a.priority === "Medium").length,
+      low: actions.filter((a) => a.priority === "Low").length,
     }),
     [actions],
   );
 
   const isOverview = !selectedDomain && !selectedType;
 
-  const selectDomain = (d: string) => { setSelectedDomain(d); setSelectedType(null); setStatusFilter("all"); };
-  const selectType = (t: string) => { setSelectedType(t); setSelectedDomain(null); setStatusFilter("all"); };
-  const goOverview = () => { setSelectedDomain(null); setSelectedType(null); setStatusFilter("all"); };
+  const selectDomain = (d: string) => { setSelectedDomain(d); setSelectedType(null); setStatusFilter("all"); setPriorityFilter(null); };
+  const selectType = (t: string) => { setSelectedType(t); setSelectedDomain(null); setStatusFilter("all"); setPriorityFilter(null); };
+  const goOverview = () => { setSelectedDomain(null); setSelectedType(null); setStatusFilter("all"); setPriorityFilter(null); };
+
+  const handleStatClick = (filter: typeof statusFilter | null, priority?: string) => {
+    goOverview();
+    if (priority) {
+      setPriorityFilter((prev) => prev === priority ? null : priority);
+    } else if (filter) {
+      setStatusFilter((prev) => prev === filter ? "all" : filter);
+    }
+  };
 
   return (
     <div className="ac-page">
@@ -626,38 +809,61 @@ export default function EarnedClient({
 
           {/* Stats row (overview only, when there is data) */}
           {isOverview && actions.length > 0 && (
-            <div className="ac-metrics">
-              <div className="ac-metric">
-                <span className="ac-metric-label">All earned actions</span>
-                <span className="ac-metric-value">{stats.total}</span>
-              </div>
-              <div className="ac-metric">
-                <span className="ac-metric-label">Done actions</span>
-                <span className="ac-metric-value">{stats.done}</span>
-              </div>
-              <div className="ac-metric">
-                <span className="ac-metric-label">Skipped actions</span>
-                <span className="ac-metric-value">{stats.skipped}</span>
-              </div>
-              <div className="ac-metric">
-                <span className="ac-metric-label">Todo actions</span>
-                <span className="ac-metric-value">{stats.todo}</span>
-              </div>
+            <div className="ac-metrics ac-metrics-expanded">
+              <StatCard
+                label="All earned actions"
+                value={stats.total}
+                active={!statusFilter || statusFilter === "all"}
+                onClick={() => handleStatClick("all")}
+              />
+              <StatCard
+                label="Todo actions"
+                value={stats.todo}
+                active={statusFilter === "todo" && !priorityFilter}
+                accent="#2563eb"
+                onClick={() => handleStatClick("todo")}
+              />
+              <StatCard
+                label="Done actions"
+                value={stats.done}
+                active={statusFilter === "done" && !priorityFilter}
+                accent="#047857"
+                onClick={() => handleStatClick("done")}
+              />
+              <StatCard
+                label="Skipped actions"
+                value={stats.skipped}
+                active={statusFilter === "declined" && !priorityFilter}
+                accent="#b91c1c"
+                onClick={() => handleStatClick("declined")}
+              />
+              <StatCard
+                label="High priority"
+                value={stats.high}
+                active={priorityFilter === "High"}
+                accent="#16a34a"
+                onClick={() => handleStatClick(null, "High")}
+              />
+              <StatCard
+                label="Medium priority"
+                value={stats.medium}
+                active={priorityFilter === "Medium"}
+                accent="#ca8a04"
+                onClick={() => handleStatClick(null, "Medium")}
+              />
+              <StatCard
+                label="Low priority"
+                value={stats.low}
+                active={priorityFilter === "Low"}
+                accent="#71717a"
+                onClick={() => handleStatClick(null, "Low")}
+              />
             </div>
           )}
 
           {/* Recommendations */}
           {actions.length === 0 ? (
-            <div className="ac-empty">
-              <div className="ac-empty-icon"><Zap size={20} /></div>
-              <h2 className="ac-empty-title">No earned recommendations yet</h2>
-              <p className="ac-empty-sub">
-                Run AI scans on your prompts to generate earned action recommendations.
-              </p>
-              <div className="ac-empty-actions">
-                <Link href="/prompts" className="ac-empty-btn ac-empty-btn-primary">Go to Prompts</Link>
-              </div>
-            </div>
+            <EmptyState sourcesCount={sourcesCount} promptCount={promptCount} />
           ) : (
             <div className="ac-recs">
               <div className="ac-recs-head">
@@ -667,16 +873,26 @@ export default function EarnedClient({
                     Act on these suggestions to increase your AI search visibility.
                   </p>
                 </div>
-                <div className="ac-status-toggle">
-                  {(["all", "todo", "done", "declined"] as const).map((f) => (
+                <div className="ac-recs-head-right">
+                  {priorityFilter && (
                     <button
-                      key={f}
-                      className={`ac-status-btn ${statusFilter === f ? "ac-status-btn-active" : ""}`}
-                      onClick={() => setStatusFilter(f)}
+                      className="ac-filter-active-chip"
+                      onClick={() => setPriorityFilter(null)}
                     >
-                      {f.charAt(0).toUpperCase() + f.slice(1)}
+                      {priorityFilter} priority <X size={11} />
                     </button>
-                  ))}
+                  )}
+                  <div className="ac-status-toggle">
+                    {(["all", "todo", "done", "declined"] as const).map((f) => (
+                      <button
+                        key={f}
+                        className={`ac-status-btn ${statusFilter === f && !priorityFilter ? "ac-status-btn-active" : ""}`}
+                        onClick={() => { setStatusFilter(f); setPriorityFilter(null); }}
+                      >
+                        {f === "declined" ? "Skipped" : f.charAt(0).toUpperCase() + f.slice(1)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

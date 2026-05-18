@@ -7,6 +7,8 @@ import { getActiveProjectId } from "../../lib/project-context";
 import { classifyDomain, inferContentType } from "../../lib/actions-generator";
 import "./earned.css";
 
+export const dynamic = "force-dynamic";
+
 export default async function EarnedPage() {
   const activeProjectId = await getActiveProjectId();
 
@@ -21,6 +23,12 @@ export default async function EarnedPage() {
     .select()
     .from(earnedActions)
     .where(eq(earnedActions.projectId, activeProjectId));
+
+  // Count how many prompts exist (to know if user has set up any)
+  const [{ promptCount }] = await db
+    .select({ promptCount: sql<number>`count(*)::int` })
+    .from(prompts)
+    .where(eq(prompts.projectId, activeProjectId)) as any[];
 
   // Own-brand domains to exclude from competitor lists
   const ownBrandsRows = await db
@@ -163,6 +171,8 @@ export default async function EarnedPage() {
         channelsMap={channelsMap}
         phrasesMap={phrasesMap}
         domainsMap={domainsMap}
+        sourcesCount={rawSources.length}
+        promptCount={promptCount as number}
       />
     </DashboardLayout>
   );
