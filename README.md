@@ -470,3 +470,4 @@ See [`docs/handoff/`](docs/handoff/) for deeper reference:
 - [`03-ai-engines-and-apis.md`](docs/handoff/03-ai-engines-and-apis.md) — Which AI APIs to use and why
 - [`07-gotchas-and-learnings.md`](docs/handoff/07-gotchas-and-learnings.md) — Hard-won lessons before scoping
 - [`08-llm-citation-outreach.md`](docs/handoff/08-llm-citation-outreach.md) — Outreach playbook (get cited in AI answers)
+
