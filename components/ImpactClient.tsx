@@ -29,16 +29,20 @@ const GROUP_STYLE: Record<string, { bg: string; text: string }> = {
 };
 
 const TYPE_STYLE: Record<string, { bg: string; text: string }> = {
-  "reddit.com":   { bg: "#fff7ed", text: "#c2410c" },
-  "linkedin.com": { bg: "#eff6ff", text: "#1d4ed8" },
-  "g2.com":       { bg: "#fef2f2", text: "#b91c1c" },
-  "quora.com":    { bg: "#fef2f2", text: "#b91c1c" },
-  "medium.com":   { bg: "#f4f4f5", text: "#3f3f46" },
-  "youtube.com":  { bg: "#fef2f2", text: "#b91c1c" },
-  "Listicle":     { bg: "#ecfeff", text: "#0e7490" },
-  "Article":      { bg: "#f5f3ff", text: "#6d28d9" },
-  "Homepage":     { bg: "#fff7ed", text: "#c2410c" },
-  "Product Page": { bg: "#fffbeb", text: "#a16207" },
+  "reddit.com":    { bg: "#fff7ed", text: "#c2410c" },
+  "linkedin.com":  { bg: "#eff6ff", text: "#1d4ed8" },
+  "g2.com":        { bg: "#fef2f2", text: "#b91c1c" },
+  "quora.com":     { bg: "#fef2f2", text: "#b91c1c" },
+  "medium.com":    { bg: "#f4f4f5", text: "#3f3f46" },
+  "youtube.com":   { bg: "#fef2f2", text: "#b91c1c" },
+  "Listicle":      { bg: "#ecfeff", text: "#0e7490" },
+  "Article":       { bg: "#f5f3ff", text: "#6d28d9" },
+  "Homepage":      { bg: "#fff7ed", text: "#c2410c" },
+  "Product Page":  { bg: "#fffbeb", text: "#a16207" },
+  "How-To Guide":  { bg: "#f0fdf4", text: "#166534" },
+  "Category Page": { bg: "#fdf4ff", text: "#7e22ce" },
+  "Comparison":    { bg: "#eff6ff", text: "#1e40af" },
+  "On-page":       { bg: "#fef3c7", text: "#92400e" },
 };
 
 function faviconUrl(domain: string) {
@@ -58,6 +62,20 @@ function timeAgo(date: string): string {
   if (days < 30) return `${days}d ago`;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+
+function dateGroupLabel(isoDate: string): string {
+  const d = new Date(isoDate);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = todayStart.getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round(diff / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days <= 7) return "Earlier this week";
+  return "Older";
+}
+
+const DATE_GROUP_ORDER = ["Today", "Yesterday", "Earlier this week", "Older"];
 
 function scoreFromPriority(priority: string): number {
   if (priority === "High") return 3;
@@ -315,7 +333,20 @@ export default function ImpactClient({
               <span>Type</span>
               <span style={{ textAlign: "right" }}>Status</span>
             </div>
-            {historyRows.map(renderHistoryRow)}
+            {(() => {
+              const grouped = new Map<string, ImpactRow[]>();
+              for (const r of historyRows) {
+                const label = dateGroupLabel(r.updatedAt);
+                if (!grouped.has(label)) grouped.set(label, []);
+                grouped.get(label)!.push(r);
+              }
+              return DATE_GROUP_ORDER
+                .filter((label) => grouped.has(label))
+                .flatMap((label) => [
+                  <div key={`dg-${label}`} className="imp-date-group">{label}</div>,
+                  ...grouped.get(label)!.map(renderHistoryRow),
+                ]);
+            })()}
           </div>
         )
       )}

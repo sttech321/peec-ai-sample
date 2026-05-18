@@ -34,7 +34,10 @@
       "Bash(New-Item -ItemType Directory -Force \"d:\\\\peec ai 2026\\\\peec-ai-sample\\\\app\\\\api\\\\members\\\\[id]\")",
       "Bash(Write-Host \"dirs created\")",
       "Bash(mkdir -p \"d:/peec ai 2026/peec-ai-sample/app/api/members/invite/accept\" && mkdir -p \"d:/peec ai 2026/peec-ai-sample/app/api/members/[id]\" && echo \"done\")",
-      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(p.dependencies.next || p.devDependencies.next\\)\")"
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(p.dependencies.next || p.devDependencies.next\\)\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\peec ai 2026\\\\peec-ai-sample\\\\app\\\\api\" -Recurse)",
+      "Bash(ConvertTo-Json -Depth 10)",
+      "Bash(New-Item -ItemType Directory -Force \"d:\\\\peec ai 2026\\\\peec-ai-sample\\\\app\\\\api\\\\actions\\\\generate\")"
     ],
     "additionalDirectories": [
       "d:\\peec ai 2026\\peec-ai-sample\\app\\api\\members"

@@ -5,7 +5,6 @@ import { earnedActions, ownedActions } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import { updateImpactActionStatus } from "./actions";
-import { MOCK_IMPACT_ROWS } from "../../lib/mock-actions";
 import "../earned/earned.css";
 
 export default async function ImpactPage() {
@@ -49,14 +48,10 @@ export default async function ImpactPage() {
     })),
   ];
 
-  const finalRows: ImpactRow[] = rows.length === 0
-    ? MOCK_IMPACT_ROWS as ImpactRow[]
-    : rows;
-
   return (
     <DashboardLayout currentPath="/impact">
       <ImpactClient
-        initialRows={finalRows}
+        initialRows={rows}
         updateStatusAction={updateImpactActionStatus}
       />
     </DashboardLayout>

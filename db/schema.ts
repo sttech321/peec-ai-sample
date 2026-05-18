@@ -281,6 +281,20 @@ export const magicLinkTokens = pgTable("magic_link_tokens", {
   emailIdx: index("magic_link_tokens_email_idx").on(table.email),
 }));
 
+// Action History (audit log of every status change on earned/owned actions)
+export const actionHistory = pgTable("action_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  actionId: uuid("action_id").notNull(),
+  actionKind: varchar("action_kind", { length: 10 }).notNull(), // 'earned' | 'owned'
+  status: varchar("status", { length: 20 }).notNull(),          // 'todo' | 'done' | 'declined'
+  changedBy: varchar("changed_by", { length: 255 }),
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
+}, (t) => ({
+  actionIdx: index("action_history_action_idx").on(t.actionId),
+  workspaceIdx: index("action_history_workspace_idx").on(t.workspaceId),
+}));
+
 // Competitors (Module 6)
 export const competitors = pgTable("competitors", {
   id: uuid("id").primaryKey().defaultRandom(),

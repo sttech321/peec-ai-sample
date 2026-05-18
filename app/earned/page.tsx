@@ -1,10 +1,10 @@
 import DashboardLayout from "../../components/DashboardLayout";
 import EarnedClient from "../../components/EarnedClient";
 import { db } from "../../db";
-import { projects, earnedActions, sources, chats, prompts, citations } from "../../db/schema";
-import { eq, sql } from "drizzle-orm";
+import { projects, earnedActions, sources, chats, prompts, citations, brandMentions, brands } from "../../db/schema";
+import { eq, sql, and } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
-import { MOCK_EARNED_ACTIONS, MOCK_SOURCES_MAP, MOCK_CHANNELS_MAP } from "../../lib/mock-actions";
+import { classifyDomain, inferContentType } from "../../lib/actions-generator";
 import "./earned.css";
 
 export default async function EarnedPage() {
@@ -22,55 +22,101 @@ export default async function EarnedPage() {
     .from(earnedActions)
     .where(eq(earnedActions.projectId, activeProjectId));
 
-  // Query sources for this project (sources → chats → prompts → project)
+  // Own-brand domains to exclude from competitor lists
+  const ownBrandsRows = await db
+    .select({ domains: brands.domains })
+    .from(brands)
+    .where(and(eq(brands.projectId, activeProjectId), eq(brands.isOwn, true)));
+  const ownDomains = new Set(ownBrandsRows.flatMap((b) => b.domains ?? []));
+
+  // Query sources with retrieval + citation + brand mention counts
   const rawSources = await db
     .select({
       url: sources.url,
       title: sql<string | null>`MAX(${sources.title})`,
       domain: sources.domain,
-      category: sql<string | null>`MAX(${sources.category})`,
-      retrievals: sql<number>`count(*)::int`,
+      retrievals: sql<number>`count(distinct ${sources.id})::int`,
       citationCount: sql<number>`count(distinct ${citations.id})::int`,
+      mentionCount: sql<number>`count(distinct ${brandMentions.id})::int`,
     })
     .from(sources)
     .innerJoin(chats, eq(chats.id, sources.chatId))
     .innerJoin(prompts, eq(prompts.id, chats.promptId))
     .leftJoin(citations, eq(citations.sourceId, sources.id))
+    .leftJoin(brandMentions, eq(brandMentions.chatId, sources.chatId))
     .where(eq(prompts.projectId, activeProjectId))
     .groupBy(sources.url, sources.domain)
-    .orderBy(sql`count(*) desc`)
+    .orderBy(sql`count(distinct ${sources.id}) desc`)
     .limit(300) as any[];
 
-  type SourceRow = { title: string; url: string; domain: string; retrievals: number; citationRate: number };
+  // Query prompt queries — used as "phrases" in editorial detail panels
+  const promptRows = await db
+    .select({ query: prompts.query })
+    .from(prompts)
+    .where(eq(prompts.projectId, activeProjectId))
+    .limit(100);
+
+  type SourceRow = { title: string; url: string; domain: string; retrievals: number; citationRate: number; mentions: number };
   type ChannelRow = { name: string; count: number };
+
   const sourcesMap: Record<string, SourceRow[]> = {};
   const channelCounters: Record<string, Map<string, number>> = {};
+  const editorialDomainCounts: Record<string, Map<string, number>> = {};
 
   for (const row of rawSources) {
+    // Skip own-brand domains
+    if (ownDomains.has(row.domain as string)) continue;
+
     const s: SourceRow = {
       title: (row.title as string | null) ?? (row.url as string),
       url: row.url as string,
       domain: row.domain as string,
       retrievals: row.retrievals as number,
+      mentions: row.mentionCount as number,
       citationRate: (row.retrievals as number) > 0
         ? (row.citationCount as number) / (row.retrievals as number)
         : 0,
     };
 
+    // Classify by domain — category column is never populated by the pipeline
+    const cat = classifyDomain(row.domain as string);
     const key =
-      row.category === "reference" ? "Reference"
-      : row.category === "ugc" ? (row.domain as string)
+      cat === "reference" ? "Reference"
+      : cat === "ugc" ? (row.domain as string)
       : "Editorial";
 
     if (!sourcesMap[key]) sourcesMap[key] = [];
     sourcesMap[key].push(s);
 
-    if (row.category === "ugc" && row.domain === "reddit.com") {
+    if (cat === "editorial") {
+      // Also index by inferred content type so the type detail view shows relevant sources
+      const contentType = inferContentType((row.title as string | null) ?? (row.url as string));
+      if (!sourcesMap[contentType]) sourcesMap[contentType] = [];
+      sourcesMap[contentType].push(s);
+
+      // Track domain retrieval counts per editorial content type
+      if (!editorialDomainCounts[contentType]) editorialDomainCounts[contentType] = new Map();
+      const dm = editorialDomainCounts[contentType];
+      dm.set(row.domain as string, (dm.get(row.domain as string) ?? 0) + (row.retrievals as number));
+    }
+
+    // Reddit: extract subreddits for top channels
+    if (cat === "ugc" && row.domain === "reddit.com") {
       const m = (row.url as string).match(/reddit\.com\/r\/([^/?#]+)/i);
       if (m) {
         if (!channelCounters["reddit.com"]) channelCounters["reddit.com"] = new Map();
         const ch = `r/${m[1]}`;
         channelCounters["reddit.com"].set(ch, (channelCounters["reddit.com"].get(ch) ?? 0) + (row.retrievals as number));
+      }
+    }
+
+    // LinkedIn: extract company/school/group paths for top channels
+    if (cat === "ugc" && row.domain === "linkedin.com") {
+      const m = (row.url as string).match(/linkedin\.com\/(company|school|groups)\/([^/?#]+)/i);
+      if (m) {
+        if (!channelCounters["linkedin.com"]) channelCounters["linkedin.com"] = new Map();
+        const ch = `${m[1]}/${m[2]}`;
+        channelCounters["linkedin.com"].set(ch, (channelCounters["linkedin.com"].get(ch) ?? 0) + (row.retrievals as number));
       }
     }
   }
@@ -83,18 +129,40 @@ export default async function EarnedPage() {
       .slice(0, 10);
   }
 
-  const useMock = actions.length === 0;
-  const finalActions = useMock ? MOCK_EARNED_ACTIONS : actions;
-  const finalSourcesMap = useMock ? MOCK_SOURCES_MAP : sourcesMap;
-  const finalChannelsMap = useMock ? MOCK_CHANNELS_MAP : channelsMap;
+  // Build domainsMap per editorial content type
+  const domainsMap: Record<string, { name: string; count: number }[]> = {};
+  for (const [type, m] of Object.entries(editorialDomainCounts)) {
+    domainsMap[type] = Array.from(m.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([name, count]) => ({ name, count }));
+  }
+
+  // Build phrasesMap from prompt queries (same list for all editorial content types)
+  const phraseCounts = new Map<string, number>();
+  for (const p of promptRows) {
+    const phrase = (p.query as string).trim().slice(0, 60);
+    phraseCounts.set(phrase, (phraseCounts.get(phrase) ?? 0) + 1);
+  }
+  const topPhrasesList = Array.from(phraseCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([text, count]) => ({ text, count }));
+
+  const phrasesMap: Record<string, { text: string; count: number }[]> = {};
+  ["How-To Guide", "Article", "Listicle", "Comparison", "Category Page", "Product Page", "Homepage"].forEach((t) => {
+    phrasesMap[t] = topPhrasesList;
+  });
 
   return (
     <DashboardLayout currentPath="/earned">
       <EarnedClient
-        initialActions={finalActions as any[]}
+        initialActions={actions as any[]}
         projectName={projectName}
-        sourcesMap={finalSourcesMap}
-        channelsMap={finalChannelsMap}
+        sourcesMap={sourcesMap as any}
+        channelsMap={channelsMap}
+        phrasesMap={phrasesMap}
+        domainsMap={domainsMap}
       />
     </DashboardLayout>
   );
