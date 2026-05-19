@@ -12,6 +12,7 @@ import { ChatFact } from "../lib/chat-aggregations";
 interface ProjectBrand {
   name: string;
   isOwn: boolean;
+  domains?: string[];
 }
 
 interface Props {

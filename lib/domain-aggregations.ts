@@ -121,6 +121,7 @@ export function countByDomainType(
     Reference: 0,
     UGC: 0,
     Institutional: 0,
+    Related: 0,
     Other: 0,
     Related: 0,
   };
