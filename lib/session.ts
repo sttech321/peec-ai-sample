@@ -8,7 +8,7 @@ export const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 export interface SessionPayload {
   email: string;
   workspaceId: string; // owner's email — may differ for invited members
-  role: string;        // 'owner' | 'company_member' | 'project_member' | 'project_viewer'  
+  role: string;        // 'owner' | 'company_member' | 'project_member' | 'project_viewer
 }
 
 export function signSession(data: SessionPayload): string {
