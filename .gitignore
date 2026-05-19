@@ -45,3 +45,5 @@ scratch_*.ts
 test-db.js
 setup-db.js
 image.png
+temp_auto_push.bat
+temp_interactive_push.bat

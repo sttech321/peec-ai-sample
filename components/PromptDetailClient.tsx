@@ -173,6 +173,34 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
     }
   };
 
+  const runScan = async () => {
+    if (isScanning) return;
+    setIsScanning(true);
+    setScanStatus(`Querying ${selectedModels.length} engine${selectedModels.length === 1 ? "" : "s"}…`);
+    try {
+      const engines = selectedModels.join(",");
+      const res = await fetch(
+        `/api/run-daily-scan?promptId=${encodeURIComponent(prompt.id)}&engines=${encodeURIComponent(engines)}`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `Scan failed (HTTP ${res.status})`);
+      }
+      setScanStatus(
+        data.mode === "inngest"
+          ? `Dispatched ${data.dispatched} jobs — results stream in shortly.`
+          : `Completed ${data.dispatched} engine calls. Refreshing…`,
+      );
+      router.refresh();
+      window.setTimeout(() => setScanStatus(null), 4000);
+    } catch (err) {
+      setScanStatus(err instanceof Error ? `Error: ${err.message}` : "Scan failed");
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   const stableBrandColors = useMemo(() => {
     const all = aggregateBrands(chatFacts, 20);
     const map: Record<string, string> = {};

@@ -1430,6 +1430,24 @@ export default function PromptsComparisonClient({
                           <span>{rowCrawling.has(p.id) ? "Crawling…" : "Crawl"}</span>
                         </button>
                       </td>
+                      <td>
+                        <button
+                          className="pp-row-crawl-btn"
+                          disabled={rowCrawling.has(p.id) || crawlState.running}
+                          onClick={() => crawlOne(p.id, p.query)}
+                          title={`Run this prompt across ${(selectedModels.length || ALL_ENGINES.length)} engine(s)`}
+                        >
+                          {rowCrawling.has(p.id) ? (
+                            <Loader2
+                              size={13}
+                              style={{ animation: "spin 1s linear infinite" }}
+                            />
+                          ) : (
+                            <Play size={13} />
+                          )}
+                          <span>{rowCrawling.has(p.id) ? "Crawling…" : "Crawl"}</span>
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
