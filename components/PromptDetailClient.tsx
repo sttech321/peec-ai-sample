@@ -228,7 +228,7 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
   const top7 = useMemo(() => fullRanking.slice(0, 7), [fullRanking]);
 
   // Brands that we want on the chart/table but aren't in the top 7. Renders as
-  // overflow rows at the bottom of the table with their real rank.
+  // overflow rows at the bottom of the table with their real rank.   
   const overflowBrands = useMemo(() => {
     const top7Names = new Set(top7.map((b) => b.name));
     return fullRanking.filter(
