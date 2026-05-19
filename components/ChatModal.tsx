@@ -23,6 +23,7 @@ interface ChatRecord {
 
 interface Props {
   chat: ChatRecord;
+  ownBrand?: string;
   onClose: () => void;
 }
 
@@ -31,32 +32,51 @@ const ENGINE_COLORS: Record<string, string> = {
   Gemini: "#8b5cf6", "AI Overviews": "#ef4444", Groq: "#f97316",
 };
 
-export default function ChatModal({ chat, onClose }: Props) {
-  // Prevent clicks inside modal from closing it
+export default function ChatModal({ chat, ownBrand, onClose }: Props) {
   const handleContentClick = (e: React.MouseEvent) => e.stopPropagation();
 
-  // Format the raw response text (simple markdown-like handling)
+  // Build a combined regex for **bold** and brand names, then render inline nodes
+  function renderInline(text: string): React.ReactNode[] {
+    const brands = chat.brandsFound;
+    const ownLower = ownBrand?.toLowerCase();
+
+    const escaped = brands
+      .slice()
+      .sort((a, b) => b.length - a.length)
+      .map((b) => b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+
+    const brandPart = escaped.length > 0 ? "|" + escaped.join("|") : "";
+    const regex = new RegExp(`(\\*\\*.*?\\*\\*${brandPart})`, "gi");
+
+    return text.split(regex).filter(Boolean).map((part, j) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={j} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>;
+      }
+      const matchedBrand = brands.find((b) => b.toLowerCase() === part.toLowerCase());
+      if (matchedBrand) {
+        const isOwn = ownLower && matchedBrand.toLowerCase() === ownLower;
+        return (
+          <mark key={j} className={isOwn ? "cm-brand-own" : "cm-brand-other"}>
+            {part}
+          </mark>
+        );
+      }
+      return part;
+    });
+  }
+
   const renderResponse = (text: string | null | undefined) => {
     if (!text) return <p className="text-slate-400 italic">No response content available.</p>;
-    
-    return text.split('\n').map((line, i) => {
-      if (line.startsWith('# ')) return <h1 key={i} className="text-2xl font-bold mt-6 mb-4">{line.replace('# ', '')}</h1>;
-      if (line.startsWith('## ')) return <h2 key={i} className="text-xl font-bold mt-5 mb-3">{line.replace('## ', '')}</h2>;
-      if (line.startsWith('### ')) return <h3 key={i} className="text-lg font-bold mt-4 mb-2">{line.replace('### ', '')}</h3>;
-      if (line.startsWith('- ') || line.startsWith('* ')) {
-        return <li key={i} className="ml-4 mb-1 list-disc pl-2">{line.substring(2)}</li>;
-      }
-      if (line.trim() === '') return <div key={i} className="h-4" />;
-      
-      // Bold text handling
-      const formattedLine = line.split(/(\*\*.*?\*\*)/g).map((part, j) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={j} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>;
-        }
-        return part;
-      });
 
-      return <p key={i} className="mb-3 leading-relaxed text-slate-700">{formattedLine}</p>;
+    return text.split("\n").map((line, i) => {
+      if (line.startsWith("# "))  return <h1  key={i} className="text-2xl font-bold mt-6 mb-4">{renderInline(line.slice(2))}</h1>;
+      if (line.startsWith("## ")) return <h2  key={i} className="text-xl font-bold mt-5 mb-3">{renderInline(line.slice(3))}</h2>;
+      if (line.startsWith("### "))return <h3  key={i} className="text-lg font-bold mt-4 mb-2">{renderInline(line.slice(4))}</h3>;
+      if (line.startsWith("- ") || line.startsWith("* ")) {
+        return <li key={i} className="ml-4 mb-1 list-disc pl-2">{renderInline(line.substring(2))}</li>;
+      }
+      if (line.trim() === "") return <div key={i} className="h-4" />;
+      return <p key={i} className="mb-3 leading-relaxed text-slate-700">{renderInline(line)}</p>;
     });
   };
 
@@ -204,18 +224,26 @@ export default function ChatModal({ chat, onClose }: Props) {
       </div>
 
       <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 5px;
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+
+        :global(.cm-brand-own) {
+          background: #fef08a;
+          color: #713f12;
+          border-radius: 3px;
+          padding: 0 2px;
+          font-weight: 600;
+          text-decoration: none;
         }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #e2e8f0;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #cbd5e1;
+        :global(.cm-brand-other) {
+          background: #e0e7ff;
+          color: #3730a3;
+          border-radius: 3px;
+          padding: 0 2px;
+          font-weight: 500;
+          text-decoration: none;
         }
       `}</style>
     </div>

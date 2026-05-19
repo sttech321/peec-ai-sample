@@ -88,6 +88,7 @@ export default function UrlsClient({
   const [domainTypeOpen, setDomainTypeOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [moverTab, setMoverTab] = useState<"top" | "trending" | "losing" | "new">("top");
 
   const allEngines = useMemo(() => {
     const set = new Set<string>();
@@ -166,6 +167,33 @@ export default function UrlsClient({
 
   // ── Top 5 URLs feed the retrieval line chart
   const topUrls = useMemo(() => brandSelectionApplied.slice(0, 5), [brandSelectionApplied]);
+
+  // ── URL Movers
+  const urlMoversData = useMemo(() => {
+    switch (moverTab) {
+      case "top":
+        return brandSelectionApplied.slice(0, 5);
+      case "trending":
+        return brandSelectionApplied
+          .filter((u) => u.retrievals > u.retrievalsPrev)
+          .sort((a, b) => (b.retrievals - b.retrievalsPrev) - (a.retrievals - a.retrievalsPrev))
+          .slice(0, 5);
+      case "losing":
+        return brandSelectionApplied
+          .filter((u) => u.retrievals < u.retrievalsPrev)
+          .sort((a, b) => (a.retrievals - a.retrievalsPrev) - (b.retrievals - b.retrievalsPrev))
+          .slice(0, 5);
+      case "new":
+        return brandSelectionApplied
+          .filter((u) => u.retrievalsPrev === 0 && u.retrievals > 0)
+          .slice(0, 5);
+    }
+  }, [brandSelectionApplied, moverTab]);
+
+  const urlMoversMax = useMemo(
+    () => Math.max(1, ...urlMoversData.map((u) => u.retrievals)),
+    [urlMoversData],
+  );
   const topUrlKeys = useMemo(
     () =>
       topUrls.map((u) =>
@@ -361,6 +389,51 @@ export default function UrlsClient({
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* URL Movers */}
+      <h2 className="urls-section-title">URL Movers</h2>
+      <p className="urls-section-subtitle">
+        Pages with the most significant changes in AI retrievals
+      </p>
+      <div className="movers-card">
+        <div className="movers-tabs">
+          {(["top", "trending", "losing", "new"] as const).map((tab) => (
+            <button
+              key={tab}
+              className={`movers-tab ${moverTab === tab ? "movers-tab--active" : ""}`}
+              onClick={() => setMoverTab(tab)}
+            >
+              {tab === "top" ? "Top" : tab === "trending" ? "Trending" : tab === "losing" ? "Losing" : "New"}
+            </button>
+          ))}
+        </div>
+        <div className="movers-list">
+          {urlMoversData.length === 0 && (
+            <div className="movers-empty">No URLs in this category for the selected period.</div>
+          )}
+          {urlMoversData.map((u, i) => {
+            const key = u.url || `${u.domain}__noURL__${u.title ?? ""}`;
+            const delta = u.retrievals - u.retrievalsPrev;
+            const barWidth = (u.retrievals / urlMoversMax) * 100;
+            return (
+              <div key={key} className="movers-row">
+                <span className="movers-rank">{i + 1}</span>
+                <img src={faviconUrl(u.domain)} alt="" width={14} height={14} className="urls-favicon" />
+                <span className="movers-domain">{u.title || displayUrl(u.url, u.domain)}</span>
+                <div className="movers-bar-wrap">
+                  <div className="movers-bar-fill" style={{ width: `${barWidth}%` }} />
+                </div>
+                <span className="movers-count">{u.retrievals}</span>
+                {(moverTab === "trending" || moverTab === "losing") && delta !== 0 && (
+                  <span className={`movers-delta urls-num-delta tone-${delta > 0 ? "up" : "down"}`}>
+                    {delta > 0 ? "+" : ""}{delta}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

@@ -23,6 +23,7 @@ import {
   ChatFact, ChatRecordView, Resolution,
   aggregateBrands, aggregateDomains, totalCitations, toChatRecords,
   buildVisibilitySeries, filterByEngines, filterByDateRange, aggregateByCategory,
+  previousPeriod,
 } from "../lib/chat-aggregations";
 
 interface ProjectBrand {
@@ -77,6 +78,20 @@ const VOLUME_TIER_LEVEL: Record<string, number> = {
 
 function volumeLevel(tier: string): number {
   return VOLUME_TIER_LEVEL[tier] ?? 2;
+}
+
+function formatDelta(diff: number, suffix = "%"): { text: string; cls: "up" | "down" | "flat" } {
+  if (!isFinite(diff) || Math.abs(diff) < 0.05) return { text: `0${suffix}`, cls: "flat" };
+  const sign = diff > 0 ? "+" : "";
+  return { text: `${sign}${diff.toFixed(1)}${suffix}`, cls: diff > 0 ? "up" : "down" };
+}
+
+function formatTimeAgo(dateStr: string): string {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const diffHr = Math.floor(diffMs / 3600000);
+  if (diffHr < 1) return "just now";
+  if (diffHr < 24) return `${diffHr} hr ago`;
+  return `${Math.floor(diffHr / 24)} day ago`;
 }
 
 function getCategoryLabel(cat: string | null, domain: string, projectName: string): string {
@@ -144,6 +159,7 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
   const [selectedModels, setSelectedModels] = useState<string[]>(allAvailableModels);
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
   const [selectedBrands, setSelectedBrands] = useState<string[] | null>(null);
+  const [mentionedOnly, setMentionedOnly] = useState(false);
 
   const runScan = async () => {
     if (isScanning) return;
@@ -261,11 +277,109 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
     [filteredChats, brands, resolution, dateRange],
   );
 
-  const recentChats = useMemo(() => {
+  // ── Previous period (for delta indicators) ──────────────────────────────────
+  const filteredPrevious = useMemo(() => {
+    if (dateRange.preset === "all") return [];
+    const prev = previousPeriod(dateRange);
+    return filterByDateRange(filterByEngines(chatFacts, selectedModels), prev);
+  }, [chatFacts, selectedModels, dateRange]);
+
+  const prevFullRanking = useMemo(
+    () => aggregateBrands(filteredPrevious, 500, undefined, stableBrandColors),
+    [filteredPrevious, stableBrandColors],
+  );
+  const prevByName = useMemo(() => {
+    const map = new Map<string, { count: number; sentiment: number; position: number }>();
+    prevFullRanking.forEach((b) => map.set(b.name, { count: b.count, sentiment: b.sentiment, position: b.position }));
+    return { map, total: filteredPrevious.length };
+  }, [prevFullRanking, filteredPrevious]);
+
+  // ── Own brand ────────────────────────────────────────────────────────────────
+  const ownBrand = useMemo(
+    () => projectBrands.find((b) => b.isOwn)?.name ?? null,
+    [projectBrands],
+  );
+
+  // ── SOV maps (all brands, both periods) ─────────────────────────────────────
+  const sowMap = useMemo(() => {
+    let totalMentions = 0;
+    const hits = new Map<string, number>();
+    for (const c of filteredChats) {
+      const seen = new Set<string>();
+      for (const b of c.brands) {
+        if (seen.has(b.name)) continue;
+        seen.add(b.name);
+        totalMentions++;
+        hits.set(b.name, (hits.get(b.name) ?? 0) + 1);
+      }
+    }
+    const m = new Map<string, number>();
+    for (const [name, h] of hits) m.set(name, totalMentions > 0 ? (h / totalMentions) * 100 : 0);
+    return m;
+  }, [filteredChats]);
+
+  const prevSowMap = useMemo(() => {
+    let totalMentions = 0;
+    const hits = new Map<string, number>();
+    for (const c of filteredPrevious) {
+      const seen = new Set<string>();
+      for (const b of c.brands) {
+        if (seen.has(b.name)) continue;
+        seen.add(b.name);
+        totalMentions++;
+        hits.set(b.name, (hits.get(b.name) ?? 0) + 1);
+      }
+    }
+    const m = new Map<string, number>();
+    for (const [name, h] of hits) m.set(name, totalMentions > 0 ? (h / totalMentions) * 100 : 0);
+    return m;
+  }, [filteredPrevious]);
+
+  // ── Common Terms from rawResponse (bigrams, for Fanout Queries section) ──────
+  const commonTerms = useMemo(() => {
+    const stop = new Set(["the","a","an","and","or","but","in","on","at","to","for","of","with","by","from","is","are","was","were","be","been","have","has","had","do","does","did","will","would","could","should","may","might","it","this","that","these","those","we","you","he","she","they","your","their","its","our","as","if","not","can","how","what","which","when","where","who","more","also","up","out","about","into","them","than","other","such","some","most","all","any","both","each","many","well","just","very","one","two","three","help","use","using","used","new","best","top","good","great","first","need","make","get","work","include","provide","offer","create","often","look","based","way","through","ai","like","know","brands"]);
+    const counts = new Map<string, number>();
+    for (const c of filteredChats) {
+      if (!c.rawResponse) continue;
+      const words = c.rawResponse.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 3 && !stop.has(w));
+      for (let i = 0; i < words.length - 1; i++) {
+        const bigram = `${words[i]} ${words[i + 1]}`;
+        counts.set(bigram, (counts.get(bigram) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([text, count]) => ({ text, count }));
+  }, [filteredChats]);
+
+  // ── Enriched recent chats ────────────────────────────────────────────────────
+  interface EnrichedChat extends ChatRecordView {
+    isMentioned: boolean;
+    ownPosition: number | null;
+  }
+  const chatFactById = useMemo(() => {
+    const m = new Map<string, ChatFact>();
+    for (const c of filteredChats) m.set(c.id, c);
+    return m;
+  }, [filteredChats]);
+
+  const recentChatsData = useMemo((): EnrichedChat[] => {
     const records = toChatRecords(filteredChats);
     records.sort((a, b) => new Date(b.runDate).getTime() - new Date(a.runDate).getTime());
-    return records;
-  }, [filteredChats]);
+    return records.map((chat) => {
+      const fact = chatFactById.get(chat.id);
+      const ownLower = ownBrand?.toLowerCase();
+      const ownFact = ownLower && fact ? fact.brands.find((b) => b.name.toLowerCase() === ownLower) : undefined;
+      return {
+        ...chat,
+        isMentioned: ownLower ? chat.brandsFound.some((b) => b.toLowerCase() === ownLower) : false,
+        ownPosition: ownFact?.position ?? null,
+      };
+    });
+  }, [filteredChats, chatFactById, ownBrand]);
+
+  const displayedChats = useMemo(
+    () => (mentionedOnly ? recentChatsData.filter((c) => c.isMentioned) : recentChatsData),
+    [recentChatsData, mentionedOnly],
+  );
 
   // ── Brand vs Source visibility ───────────────────────────────────────────
   // Spec: a chat counts toward "brand visibility" if any own brand is named in
@@ -359,7 +473,7 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
 
   return (
     <div className="prompt-detail-page">
-      {selectedChat && <ChatModal chat={selectedChat} onClose={() => setSelectedChat(null)} />}
+      {selectedChat && <ChatModal chat={selectedChat} ownBrand={ownBrand ?? undefined} onClose={() => setSelectedChat(null)} />}
       {isSettingsOpen && (
         <PromptSettingsModal
           promptId={prompt.id}
@@ -542,13 +656,23 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
               <thead>
                 <tr>
                   <th></th><th>Brand</th>
-                  <th>Visibility <ChevronDown size={9} style={{ display: "inline" }} /></th>
-                  <th>SOV</th><th>Brand count</th><th>Position</th>
+                  <th className="pd-th-num">Visibility <ChevronDown size={9} style={{ display: "inline" }} /></th>
+                  <th className="pd-th-num">SOV</th>
+                  <th className="pd-th-num">Sentiment</th>
+                  <th className="pd-th-num">Position</th>
                 </tr>
               </thead>
               <tbody>
                 {brands.map((b, i) => {
-                  const vis = totalMentions > 0 ? Math.round((b.count / totalMentions) * 100) : 0;
+                  const vis = filteredChats.length > 0 ? Math.round((b.count / filteredChats.length) * 100) : 0;
+                  const sov = Math.round(sowMap.get(b.name) ?? 0);
+                  const prevData = prevByName.map.get(b.name);
+                  const prevVis = prevByName.total > 0 ? Math.round(((prevData?.count ?? 0) / prevByName.total) * 100) : 0;
+                  const prevSov = Math.round(prevSowMap.get(b.name) ?? 0);
+                  const visDelta = formatDelta(vis - prevVis);
+                  const sovDelta = formatDelta(sov - prevSov);
+                  const sentDelta = formatDelta(b.sentiment - (prevData?.sentiment ?? b.sentiment));
+                  const posDelta = formatDelta((prevData?.position ?? b.position) - b.position, "");
                   const isOverflow = i >= top7.length;
                   const realRank = rankByName.get(b.name) ?? i + 1;
                   const isFirstOverflow = isOverflow && i === top7.length;
@@ -571,10 +695,22 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
                             <span className="pd-brand-you-badge">You</span>
                           )}
                         </td>
-                        <td><span className="pd-vis-value">{vis}%</span></td>
-                        <td>{vis}%</td>
-                        <td><span className="pd-brand-count-badge">{b.count}</span></td>
-                        <td>#{b.position ? b.position.toFixed(1) : "—"}</td>
+                        <td className="pd-td-num">
+                          <span className="pd-vis-value">{vis}%</span>
+                          {dateRange.preset !== "all" && <span className={`pd-delta pd-delta-${visDelta.cls}`}>{visDelta.text}</span>}
+                        </td>
+                        <td className="pd-td-num">
+                          <span className="pd-vis-value">{sov}%</span>
+                          {dateRange.preset !== "all" && <span className={`pd-delta pd-delta-${sovDelta.cls}`}>{sovDelta.text}</span>}
+                        </td>
+                        <td className="pd-td-num">
+                          <span className="pd-vis-value">{b.sentiment ? b.sentiment.toFixed(0) : "—"}</span>
+                          {dateRange.preset !== "all" && b.sentiment > 0 && <span className={`pd-delta pd-delta-${sentDelta.cls}`}>{sentDelta.text}</span>}
+                        </td>
+                        <td className="pd-td-num">
+                          <span className="pd-vis-value">#{b.position ? b.position.toFixed(1) : "—"}</span>
+                          {dateRange.preset !== "all" && b.position > 0 && <span className={`pd-delta pd-delta-${posDelta.cls}`}>{posDelta.text}</span>}
+                        </td>
                       </tr>
                     </React.Fragment>
                   );
@@ -583,8 +719,8 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
                   <tr>
                     <td colSpan={6} className="pd-empty">
                       {isScanning
-                        ? "Querying engines — brands will appear once responses are parsed…"
-                        : "No brands extracted yet. Click “Run scan” above to query the selected AI engines."}
+                        ? 'Querying engines — brands will appear once responses are parsed…'
+                        : 'No brands extracted yet. Click "Run scan" above to query the selected AI engines.'}
                     </td>
                   </tr>
                 )}
@@ -677,61 +813,164 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
         </div>
       </div>
 
+      {/* ── Fanout Queries / Common Terms ────────────────────────────────── */}
+      <div className="pd-section">
+        <h2 className="pd-section-title">Fanout Queries</h2>
+        <p className="pd-section-subtitle">Common themes extracted from AI responses for this prompt</p>
+        <div className="pd-fanout-grid">
+          <div className="pd-fanout-card">
+            <div className="pd-fanout-card-header">
+              <span className="pd-fanout-card-title">Common Terms</span>
+            </div>
+            {commonTerms.length === 0 ? (
+              <div className="pd-fanout-empty">No data yet — run a scan to extract terms.</div>
+            ) : (
+              <div className="pd-common-terms-list">
+                {commonTerms.map(({ text, count }, i) => {
+                  const maxCount = commonTerms[0]?.count ?? 1;
+                  const pct = Math.round((count / maxCount) * 100);
+                  return (
+                    <div key={i} className="pd-common-term-row">
+                      <span className="pd-common-term-label">{text}</span>
+                      <div className="pd-common-term-bar-wrap">
+                        <div className="pd-common-term-bar" style={{ width: `${pct}%` }}></div>
+                      </div>
+                      <span className="pd-common-term-count">{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="pd-fanout-card">
+            <div className="pd-fanout-card-header">
+              <span className="pd-fanout-card-title">Latest Queries</span>
+            </div>
+            {recentChatsData.length === 0 ? (
+              <div className="pd-fanout-empty">No queries yet.</div>
+            ) : (
+              <div>
+                {recentChatsData.slice(0, 8).map((chat) => (
+                  <div key={chat.id} className="pd-fanout-query-row" onClick={() => setSelectedChat(chat)}>
+                    <EngineIcon engine={chat.engine} />
+                    <span className="pd-fanout-query-text">
+                      {chat.rawResponse
+                        ? chat.rawResponse.replace(/#+\s/g, "").slice(0, 90) + "…"
+                        : prompt.query}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Recent Chats ──────────────────────────────────────────────────── */}
       <div className="pd-section">
         <div className="pd-domains-header-row">
           <div>
             <h2 className="pd-section-title">Recent Chats</h2>
-            <p className="pd-section-subtitle">Where AI gets its information about this brand</p>
+            <p className="pd-section-subtitle">Individual AI responses for this prompt</p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-slate-400 font-medium">{prompt.projectName} mentioned</span>
-            <div className="w-8 h-4 bg-slate-800 rounded-full relative p-0.5 cursor-pointer">
-              <div className="w-3 h-3 bg-slate-500 rounded-full"></div>
-            </div>
+            <span className="text-[11px] text-slate-400 font-medium">
+              {ownBrand ?? prompt.projectName} mentioned
+            </span>
+            <button
+              className={`pd-recent-toggle ${mentionedOnly ? "pd-recent-toggle-on" : ""}`}
+              onClick={() => setMentionedOnly((v) => !v)}
+              aria-pressed={mentionedOnly}
+            >
+              <span className="pd-recent-toggle-track">
+                <span className="pd-recent-toggle-thumb" />
+              </span>
+            </button>
           </div>
         </div>
 
-        {recentChats.length === 0 ? (
+        {displayedChats.length === 0 ? (
           <div className="pd-empty-chats">
-            🔍 No recent chats recorded yet.
+            {mentionedOnly
+              ? `No chats where ${ownBrand ?? prompt.projectName} was mentioned.`
+              : "🔍 No recent chats recorded yet."}
           </div>
         ) : (
-          <div className="pd-recent-chats-scroll custom-scrollbar">
-            {recentChats.map((chat) => {
-              const runDate = new Date(chat.runDate);
-              const diffMs = Date.now() - runDate.getTime();
-              const diffHr = Math.floor(diffMs / 3600000);
-              const timeAgo = diffHr > 24 ? `${Math.floor(diffHr / 24)} d ago` : `${diffHr} hr ago`;
-              const snippet = chat.rawResponse ? chat.rawResponse.slice(0, 150) + "..." : "No response content...";
-
-              return (
-                <div
-                  key={chat.id}
-                  className="pd-chat-card"
-                  onClick={() => setSelectedChat(chat)}
-                >
-                  <div className="pd-chat-card-header">
-                    <EngineIcon engine={chat.engine} />
-                    <span className="pd-chat-engine-name">{chat.engine}</span>
-                  </div>
-                  <div className="pd-chat-query">{prompt.query}</div>
-                  <div className="pd-chat-snippet">{snippet}</div>
-                  <div className="pd-chat-footer">
-                    <div className="pd-chat-mentions">
-                      {chat.brandsFound.slice(0, 3).map((b, i) => (
-                        <div key={i} className="pd-mention-dot" title={b} style={{ background: "#cbd5e1" }}>
-                          {b.charAt(0)}
+          <div className="pd-chats-table-wrap">
+            <table className="pd-chats-table">
+              <thead>
+                <tr>
+                  <th>Chat</th>
+                  <th>{ownBrand ?? prompt.projectName} mentioned</th>
+                  <th>Position</th>
+                  <th>Mentions</th>
+                  <th>Sources</th>
+                  <th>Location</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedChats.map((chat) => {
+                  const snippet = chat.rawResponse
+                    ? chat.rawResponse.replace(/#+\s/g, "").slice(0, 100) + "…"
+                    : prompt.query ?? "—";
+                  return (
+                    <tr key={chat.id} className="pd-chat-row" onClick={() => setSelectedChat(chat)}>
+                      <td className="pd-chat-text-cell">
+                        <EngineIcon engine={chat.engine} />
+                        <span className="pd-chat-snippet-text">{snippet}</span>
+                      </td>
+                      <td>
+                        <span className={`pd-chat-yesno ${chat.isMentioned ? "pd-chat-yesno-yes" : "pd-chat-yesno-no"}`}>
+                          {chat.isMentioned ? "Yes" : "No"}
+                        </span>
+                      </td>
+                      <td className="pd-chat-pos-cell">
+                        {chat.ownPosition !== null ? (
+                          <span className="pd-chat-position">#{chat.ownPosition}</span>
+                        ) : (
+                          <span className="pd-chat-position-none">—</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="pd-chat-mentions-row">
+                          {chat.brandsFound.slice(0, 3).map((name, idx) => (
+                            <DomainFavicon
+                              key={idx}
+                              domain={brandDomainByName.get(name) ?? guessBrandDomain(name)}
+                              size={16}
+                            />
+                          ))}
+                          {chat.brandsFound.length > 3 && (
+                            <span className="pd-mention-more">+{chat.brandsFound.length - 3}</span>
+                          )}
                         </div>
-                      ))}
-                      {chat.brandsFound.length > 3 && (
-                        <span className="pd-mention-more">+{chat.brandsFound.length - 3}</span>
-                      )}
-                    </div>
-                    <span className="pd-chat-time">{timeAgo}</span>
-                  </div>
-                </div>
-              );
-            })}
+                      </td>
+                      <td>
+                        <div className="pd-chat-mentions-row">
+                          {chat.sourcesFound.slice(0, 3).map((s, idx) => (
+                            <DomainFavicon key={idx} domain={s.domain} size={16} />
+                          ))}
+                          {chat.sourcesFound.length > 3 && (
+                            <span className="pd-mention-more">+{chat.sourcesFound.length - 3}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="pd-chat-location">
+                        <img
+                          src={`https://flagcdn.com/w40/${(prompt.location || "us").toLowerCase()}.png`}
+                          alt={prompt.location || "us"}
+                          width={16}
+                          height={12}
+                        />
+                      </td>
+                      <td className="pd-chat-created">{formatTimeAgo(chat.runDate)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

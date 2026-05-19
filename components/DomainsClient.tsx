@@ -92,6 +92,8 @@ export default function DomainsClient({
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("retrieved");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [moverTab, setMoverTab] = useState<"top" | "trending" | "losing" | "new">("top");
+  const [gapAnalysis, setGapAnalysis] = useState(false);
 
   const allEngines = useMemo(() => {
     const set = new Set<string>();
@@ -173,6 +175,33 @@ export default function DomainsClient({
 
   // ── Top 5 fuel the chart
   const topDomains = useMemo(() => brandScopedDomains.slice(0, 5), [brandScopedDomains]);
+
+  // ── Domain Movers
+  const moversData = useMemo(() => {
+    switch (moverTab) {
+      case "top":
+        return brandScopedDomains.slice(0, 5);
+      case "trending":
+        return brandScopedDomains
+          .filter((d) => d.citations > d.citationsPrev)
+          .sort((a, b) => (b.citations - b.citationsPrev) - (a.citations - a.citationsPrev))
+          .slice(0, 5);
+      case "losing":
+        return brandScopedDomains
+          .filter((d) => d.citations < d.citationsPrev)
+          .sort((a, b) => (a.citations - a.citationsPrev) - (b.citations - b.citationsPrev))
+          .slice(0, 5);
+      case "new":
+        return brandScopedDomains
+          .filter((d) => d.citationsPrev === 0 && d.citations > 0)
+          .slice(0, 5);
+    }
+  }, [brandScopedDomains, moverTab]);
+
+  const moversMax = useMemo(
+    () => Math.max(1, ...moversData.map((d) => d.citations)),
+    [moversData],
+  );
   const chartData = useMemo(
     () =>
       buildDomainShareSeries(
@@ -188,8 +217,9 @@ export default function DomainsClient({
   const tableRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     let rows = brandScopedDomains;
-    if (domainTypeFilter) {
-      rows = rows.filter((d) => domainTypeFor.get(d.domain) === domainTypeFilter);
+    const effectiveDomainTypeFilter = gapAnalysis ? "Competitor" : domainTypeFilter;
+    if (effectiveDomainTypeFilter) {
+      rows = rows.filter((d) => domainTypeFor.get(d.domain) === effectiveDomainTypeFilter);
     }
     if (q) {
       rows = rows.filter((d) => d.domain.toLowerCase().includes(q));
@@ -230,7 +260,7 @@ export default function DomainsClient({
         : (bv as number) - (av as number);
     });
     return sorted;
-  }, [brandScopedDomains, search, domainTypeFilter, domainTypeFor, sortKey, sortDir]);
+  }, [brandScopedDomains, search, domainTypeFilter, gapAnalysis, domainTypeFor, sortKey, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -395,6 +425,50 @@ export default function DomainsClient({
         </div>
       </div>
 
+      {/* Domain Movers */}
+      <h2 className="urls-section-title">Domain Movers</h2>
+      <p className="urls-section-subtitle">
+        Domains with the most significant changes in AI citations
+      </p>
+      <div className="movers-card">
+        <div className="movers-tabs">
+          {(["top", "trending", "losing", "new"] as const).map((tab) => (
+            <button
+              key={tab}
+              className={`movers-tab ${moverTab === tab ? "movers-tab--active" : ""}`}
+              onClick={() => setMoverTab(tab)}
+            >
+              {tab === "top" ? "Top" : tab === "trending" ? "Trending" : tab === "losing" ? "Losing" : "New"}
+            </button>
+          ))}
+        </div>
+        <div className="movers-list">
+          {moversData.length === 0 && (
+            <div className="movers-empty">No domains in this category for the selected period.</div>
+          )}
+          {moversData.map((d, i) => {
+            const delta = d.citations - d.citationsPrev;
+            const barWidth = (d.citations / moversMax) * 100;
+            return (
+              <div key={d.domain} className="movers-row">
+                <span className="movers-rank">{i + 1}</span>
+                <img src={faviconUrl(d.domain)} alt="" width={14} height={14} className="urls-favicon" />
+                <span className="movers-domain">{d.domain}</span>
+                <div className="movers-bar-wrap">
+                  <div className="movers-bar-fill" style={{ width: `${barWidth}%` }} />
+                </div>
+                <span className="movers-count">{d.citations}</span>
+                {(moverTab === "trending" || moverTab === "losing") && delta !== 0 && (
+                  <span className={`movers-delta urls-num-delta tone-${delta > 0 ? "up" : "down"}`}>
+                    {delta > 0 ? "+" : ""}{delta}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <h2 className="urls-section-title">Domains</h2>
       <p className="urls-section-subtitle">
         Detailed breakdown of domain visibility across AI responses
@@ -414,6 +488,16 @@ export default function DomainsClient({
           />
         </div>
         <div className="urls-controls-right">
+          <button
+            className={`gap-analysis-toggle ${gapAnalysis ? "gap-analysis-toggle--active" : ""}`}
+            onClick={() => {
+              setGapAnalysis((g) => !g);
+              setPage(1);
+            }}
+          >
+            <span className="gap-analysis-dot" />
+            Gap Analysis
+          </button>
           <div className="ins-filter-wrapper">
             <button
               className="pd-filter-chip"
