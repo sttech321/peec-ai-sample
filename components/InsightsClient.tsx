@@ -44,7 +44,7 @@ function formatDelta(diff: number, suffix = "%"): { text: string; tone: "up" | "
   };
 }
 
-// Map a 0-100 visibility to a heatmap class (matches the 11-color legend).
+// Map a 0-100 value to a heatmap class (matches the 11-color legend).
 function heatBucket(v: number): string {
   if (v < 0.5) return "h0";
   if (v < 10) return "h1";
@@ -59,6 +59,17 @@ function heatBucket(v: number): string {
   return "h10";
 }
 
+// Position is inverted: rank 1 is best (darkest), higher rank is lighter.
+function positionHeatBucket(pos: number): string {
+  if (pos <= 0) return "h0";
+  if (pos <= 1) return "h10";
+  if (pos <= 2) return "h8";
+  if (pos <= 3) return "h6";
+  if (pos <= 5) return "h4";
+  if (pos <= 7) return "h2";
+  return "h1";
+}
+
 function normalizeDomain(d: string | null | undefined): string | null {
   if (!d) return null;
   const cleaned = d.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
@@ -71,6 +82,7 @@ export default function InsightsClient({ chatFacts, projectName, projectBrands, 
   const [selectedBrands, setSelectedBrands] = useState<string[] | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [tagsDropdownOpen, setTagsDropdownOpen] = useState(false);
+  const [matrixTab, setMatrixTab] = useState<"visibility" | "sentiment" | "position" | "sov">("visibility");
 
   const allEngines = useMemo(() => {
     const set = new Set<string>();
@@ -356,12 +368,30 @@ export default function InsightsClient({ chatFacts, projectName, projectBrands, 
         <div className="ins-chart-card">
           <div className="ins-chart-header">
             <div className="ins-chart-tabs">
-              <button className="ins-chart-tab ins-chart-tab--active">
+              <button
+                className={`ins-chart-tab ${matrixTab === "visibility" ? "ins-chart-tab--active" : ""}`}
+                onClick={() => setMatrixTab("visibility")}
+              >
                 <span className="ins-eye">👁</span> Visibility
               </button>
-              <button className="ins-chart-tab" disabled>😊</button>
-              <button className="ins-chart-tab" disabled>📏</button>
-              <button className="ins-chart-tab" disabled>🥧</button>
+              <button
+                className={`ins-chart-tab ${matrixTab === "sentiment" ? "ins-chart-tab--active" : ""}`}
+                onClick={() => setMatrixTab("sentiment")}
+              >
+                😊 Sentiment
+              </button>
+              <button
+                className={`ins-chart-tab ${matrixTab === "position" ? "ins-chart-tab--active" : ""}`}
+                onClick={() => setMatrixTab("position")}
+              >
+                📏 Position
+              </button>
+              <button
+                className={`ins-chart-tab ${matrixTab === "sov" ? "ins-chart-tab--active" : ""}`}
+                onClick={() => setMatrixTab("sov")}
+              >
+                🥧 SoV
+              </button>
             </div>
           </div>
 
@@ -389,11 +419,27 @@ export default function InsightsClient({ chatFacts, projectName, projectBrands, 
                       </td>
                       {selectedModels.map((engine) => {
                         const cell = cellFor(brand, engine);
-                        const v = cell?.visibility ?? 0;
+                        let displayVal = "—";
+                        let heatClass = "h0";
+                        if (cell) {
+                          if (matrixTab === "visibility" && cell.visibility >= 0.5) {
+                            displayVal = `${cell.visibility.toFixed(1)}%`;
+                            heatClass = heatBucket(cell.visibility);
+                          } else if (matrixTab === "sentiment" && cell.sentiment > 0) {
+                            displayVal = Math.round(cell.sentiment).toString();
+                            heatClass = heatBucket(cell.sentiment);
+                          } else if (matrixTab === "position" && cell.position > 0) {
+                            displayVal = `#${cell.position.toFixed(1)}`;
+                            heatClass = positionHeatBucket(cell.position);
+                          } else if (matrixTab === "sov" && cell.sov >= 0.5) {
+                            displayVal = `${cell.sov.toFixed(1)}%`;
+                            heatClass = heatBucket(cell.sov);
+                          }
+                        }
                         return (
                           <td key={engine}>
-                            <div className={`ins-heat ins-heat-${heatBucket(v)}`}>
-                              {v >= 0.5 ? `${v.toFixed(1)}%` : "—"}
+                            <div className={`ins-heat ins-heat-${heatClass}`}>
+                              {displayVal}
                             </div>
                           </td>
                         );

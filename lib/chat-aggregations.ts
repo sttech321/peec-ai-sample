@@ -307,12 +307,21 @@ export interface BrandEngineCell {
   brand: string;
   engine: string;
   visibility: number; // 0-100
+  sentiment: number;  // 0-100 avg
+  position: number;   // avg rank (lower is better)
+  sov: number;        // 0-100 share of voice
   hits: number;
   total: number;
 }
 
-// Build a brand × engine performance matrix. Returns visibility (0-100) for
-// every (brand, engine) pair present in `chats`.
+type BrandStats = {
+  hits: number;
+  sentSum: number; sentN: number;
+  posSum: number; posN: number;
+};
+
+// Build a brand × engine performance matrix returning visibility, sentiment,
+// position, and SoV for every (brand, engine) pair present in `chats`.
 export function buildPerformanceMatrix(
   chats: ChatFact[],
   brandNames: string[],
@@ -320,19 +329,32 @@ export function buildPerformanceMatrix(
 ): BrandEngineCell[] {
   const totals = new Map<string, number>(); // engine -> chat count
   for (const eng of engines) totals.set(eng, 0);
-  const hits = new Map<string, Map<string, number>>(); // engine -> (brand -> hits)
-  for (const eng of engines) hits.set(eng, new Map());
+
+  const byEngine = new Map<string, Map<string, BrandStats>>();
+  const totalMentions = new Map<string, number>(); // all-brand mention count per engine (for SoV denominator)
+  for (const eng of engines) {
+    byEngine.set(eng, new Map());
+    totalMentions.set(eng, 0);
+  }
 
   for (const c of chats) {
     if (!totals.has(c.engine)) continue;
     totals.set(c.engine, (totals.get(c.engine) || 0) + 1);
     const seen = new Set<string>();
-    const inner = hits.get(c.engine)!;
+    const engineMap = byEngine.get(c.engine)!;
     for (const b of c.brands) {
       if (seen.has(b.name)) continue;
       seen.add(b.name);
+      totalMentions.set(c.engine, (totalMentions.get(c.engine) || 0) + 1);
       if (!brandNames.includes(b.name)) continue;
-      inner.set(b.name, (inner.get(b.name) || 0) + 1);
+      let stats = engineMap.get(b.name);
+      if (!stats) {
+        stats = { hits: 0, sentSum: 0, sentN: 0, posSum: 0, posN: 0 };
+        engineMap.set(b.name, stats);
+      }
+      stats.hits += 1;
+      if (b.sentiment != null) { stats.sentSum += b.sentiment; stats.sentN += 1; }
+      if (b.position != null) { stats.posSum += b.position; stats.posN += 1; }
     }
   }
 
@@ -340,13 +362,18 @@ export function buildPerformanceMatrix(
   for (const brand of brandNames) {
     for (const engine of engines) {
       const total = totals.get(engine) || 0;
-      const h = hits.get(engine)?.get(brand) || 0;
+      const stats = byEngine.get(engine)?.get(brand);
+      const h = stats?.hits || 0;
+      const tbo = totalMentions.get(engine) || 0;
       out.push({
         brand,
         engine,
         hits: h,
         total,
         visibility: total > 0 ? (h / total) * 100 : 0,
+        sentiment: stats && stats.sentN > 0 ? stats.sentSum / stats.sentN : 0,
+        position: stats && stats.posN > 0 ? stats.posSum / stats.posN : 0,
+        sov: tbo > 0 ? (h / tbo) * 100 : 0,
       });
     }
   }
