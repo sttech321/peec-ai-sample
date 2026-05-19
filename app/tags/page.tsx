@@ -18,7 +18,7 @@ export default async function TagsPage() {
 
   const workspaceId = project?.workspaceId ?? "00000000-0000-0000-0000-000000000000";
 
-  // Fetch tags with real usage counts from promptTags JOIN
+  // Fetch tags with real usage counts from promptTags JOIN   
   const projectTags = await getTags(activeProjectId);
 
   const rows: TagRow[] = projectTags.map((t) => ({
