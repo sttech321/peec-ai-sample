@@ -169,6 +169,7 @@ function DescriptionCell({ row }: { row: ImpactRow }) {
 export default function ImpactClient({
   initialRows,
   updateStatusAction,
+  lastScanDate = null,
 }: {
   initialRows: ImpactRow[];
   updateStatusAction: (args: {
@@ -176,6 +177,7 @@ export default function ImpactClient({
     kind: "earned" | "owned";
     status: "done" | "declined" | "todo";
   }) => Promise<void>;
+  lastScanDate?: string | null;
 }) {
   const seed = useMemo(
     () => initialRows,
@@ -262,6 +264,15 @@ export default function ImpactClient({
         </span>
         <span className="ac-breadcrumb-sep">/</span>
         <span className="ac-breadcrumb-current">Impact</span>
+        {lastScanDate && (
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "#a1a1aa" }}>
+            Data from:{" "}
+            {new Date(lastScanDate).toLocaleDateString("en-US", {
+              month: "short", day: "numeric", year: "numeric",
+            })}{" "}
+            scan
+          </span>
+        )}
       </div>
 
       {/* Tabs */}

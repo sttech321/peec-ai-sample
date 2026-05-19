@@ -2,8 +2,8 @@
 
 import { db } from "../../db";
 import { projects, topics, prompts, brands, brandProfiles } from "../../db/schema";
-import { WORKSPACE } from "../../lib/project-context";
-import { verifySession, SESSION_COOKIE, SETUP_DONE_COOKIE } from "../../lib/session";
+import { getWorkspaceId } from "../../lib/project-context";
+import { SETUP_DONE_COOKIE } from "../../lib/session";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { BrandProfile, COUNTRY_OPTIONS, EMPTY_BRAND_PROFILE } from "../../lib/brand-profile-types";
@@ -157,11 +157,9 @@ export async function finalizeSetup(args: {
     return { ok: false, error: "Select at least one prompt" };
   }
 
-  // Resolve workspace ID from session cookie, fall back to hardcoded constant
+  // Resolve workspace ID the same way getAllProjects() does (Clerk → session → fallback)
+  const workspaceId = await getWorkspaceId();
   const cookieStore = await cookies();
-  const rawSession = cookieStore.get(SESSION_COOKIE)?.value;
-  const sessionData = rawSession ? verifySession(rawSession) : null;
-  const workspaceId = sessionData?.email ?? WORKSPACE;
 
   // 1. Create project
   const [project] = await db

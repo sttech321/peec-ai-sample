@@ -24,10 +24,17 @@ interface ProjectBrand {
   isOwn: boolean;
 }
 
+export interface OverviewExternalFilters {
+  dateRange?: { start: Date; end: Date; preset: string; label: string } | null;
+  models?: string[] | null;
+  brandIds?: string[] | null;
+}
+
 interface Props {
   chatFacts: ChatFact[];
   projectName: string;
   projectBrands: ProjectBrand[];
+  externalFilters?: OverviewExternalFilters;
 }
 
 const DOMAIN_TYPE_COLORS: Record<string, string> = {
@@ -58,7 +65,7 @@ function getCategoryLabel(cat: string | null, domain: string, projectName: strin
   return map[cat.toLowerCase()] || "Other";
 }
 
-export default function OverviewClient({ chatFacts, projectName, projectBrands }: Props) {
+export default function OverviewClient({ chatFacts, projectName, projectBrands, externalFilters }: Props) {
   const [resolution, setResolution] = useState<Resolution>("W");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<ChatRecordView | null>(null);
@@ -108,6 +115,15 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands }
     );
   };
 
+  // When external filters are provided, prefer them over internal state
+  const effectiveModels = externalFilters?.models ?? selectedModels;
+  const effectiveDateRange: DateRangeValue = externalFilters?.dateRange
+    ? { ...externalFilters.dateRange, preset: externalFilters.dateRange.preset as DateRangeValue["preset"] }
+    : dateRange;
+  const effectiveBrandIds = externalFilters !== undefined
+    ? (externalFilters.brandIds ?? null)
+    : selectedBrands;
+
   // Stable color map: assign once based on full unfiltered top brands so colors
   // don't reshuffle when the user toggles engines.
   const stableBrandColors = useMemo(() => {
@@ -119,24 +135,26 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands }
 
   // ── Filtered derivations ──────────────────────────────────────────────
   const filteredChats = useMemo(
-    () => filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange),
-    [chatFacts, selectedModels, dateRange],
+    () => filterByDateRange(filterByEngines(chatFacts, effectiveModels), effectiveDateRange),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatFacts, effectiveModels, effectiveDateRange],
   );
 
   const brands = useMemo(() => {
     const all = aggregateBrands(filteredChats, 50, undefined, stableBrandColors);
-    const filtered = selectedBrands === null
+    const filtered = effectiveBrandIds === null
       ? all
-      : all.filter((b) => selectedBrands.includes(b.name));
+      : all.filter((b) => effectiveBrandIds.includes(b.name));
     return filtered.slice(0, 7);
-  }, [filteredChats, stableBrandColors, selectedBrands]);
+  }, [filteredChats, stableBrandColors, effectiveBrandIds]);
 
   const domains = useMemo(() => aggregateDomains(filteredChats, 10), [filteredChats]);
   const totalDomainCitations = useMemo(() => totalCitations(filteredChats), [filteredChats]);
 
   const chartData = useMemo(
-    () => buildVisibilitySeries(filteredChats, brands.map((b) => b.name), resolution, dateRange),
-    [filteredChats, brands, resolution, dateRange],
+    () => buildVisibilitySeries(filteredChats, brands.map((b) => b.name), resolution, effectiveDateRange),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filteredChats, brands, resolution, effectiveDateRange],
   );
 
   const recentChats = useMemo(() => {

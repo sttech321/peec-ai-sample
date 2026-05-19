@@ -4,8 +4,7 @@ import { projects } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { getActiveProjectId } from "../lib/project-context";
 import { fetchChatFacts, fetchProjectBrands } from "../lib/chat-facts-server";
-import OverviewClient from "../components/OverviewClient";
-import PageFilterBar from "../components/PageFilterBar";
+import OverviewWrapper from "../components/OverviewWrapper";
 import { getPageFilterData } from "../lib/page-filter-data";
 import { addBrand } from "./actions/brands";
 import "./prompts/[id]/prompt-detail.css";
@@ -28,16 +27,13 @@ export default async function Home() {
 
   return (
     <DashboardLayout currentPath="/">
-      <PageFilterBar
+      <OverviewWrapper
         projectName={projectName}
-        projectBrands={filterData.projectBrands}
+        chatFacts={chatFacts}
+        projectBrands={projectBrands}
+        filterBrands={filterData.projectBrands}
         availableTags={filterData.availableTags}
         addBrandAction={addBrand}
-      />
-      <OverviewClient
-        chatFacts={chatFacts}
-        projectName={projectName}
-        projectBrands={projectBrands}
       />
     </DashboardLayout>
   );

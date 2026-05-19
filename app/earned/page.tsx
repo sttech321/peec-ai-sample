@@ -2,9 +2,10 @@ import DashboardLayout from "../../components/DashboardLayout";
 import EarnedClient from "../../components/EarnedClient";
 import { db } from "../../db";
 import { projects, earnedActions, sources, chats, prompts, citations, brandMentions, brands } from "../../db/schema";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, desc } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import { classifyDomain, inferContentType } from "../../lib/actions-generator";
+import { generateActionsForProject } from "../../lib/generate-actions";
 import "./earned.css";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +19,18 @@ export default async function EarnedPage() {
     .where(eq(projects.id, activeProjectId))
     .limit(1);
   const projectName = projectRecord?.name || "General";
+  const workspaceId = projectRecord?.workspaceId ?? "unknown";
 
-  const actions = await db
-    .select()
-    .from(earnedActions)
-    .where(eq(earnedActions.projectId, activeProjectId));
+  // Fetch last scan date from chats table
+  const [latestChat] = await db
+    .select({ createdAt: chats.createdAt })
+    .from(chats)
+    .innerJoin(prompts, eq(prompts.id, chats.promptId))
+    .where(eq(prompts.projectId, activeProjectId))
+    .orderBy(desc(chats.createdAt))
+    .limit(1);
+
+  const lastScanDate: Date | null = latestChat?.createdAt ?? null;
 
   // Count how many prompts exist (to know if user has set up any)
   const [{ promptCount }] = await db
@@ -57,6 +65,24 @@ export default async function EarnedPage() {
     .orderBy(sql`count(distinct ${sources.id}) desc`)
     .limit(300) as any[];
 
+  // Auto-generate actions if today's scan data exists but no actions yet
+  if (rawSources.length > 0 && lastScanDate) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const scanIsRecent = lastScanDate >= todayStart;
+
+    if (scanIsRecent) {
+      // Only auto-generate; the guard inside prevents duplicate generation
+      await generateActionsForProject(activeProjectId, workspaceId);
+    }
+  }
+
+  // Fetch actions (after potential auto-generation above)
+  const actions = await db
+    .select()
+    .from(earnedActions)
+    .where(eq(earnedActions.projectId, activeProjectId));
+
   // Query prompt queries — used as "phrases" in editorial detail panels
   const promptRows = await db
     .select({ query: prompts.query })
@@ -72,7 +98,6 @@ export default async function EarnedPage() {
   const editorialDomainCounts: Record<string, Map<string, number>> = {};
 
   for (const row of rawSources) {
-    // Skip own-brand domains
     if (ownDomains.has(row.domain as string)) continue;
 
     const s: SourceRow = {
@@ -86,7 +111,6 @@ export default async function EarnedPage() {
         : 0,
     };
 
-    // Classify by domain — category column is never populated by the pipeline
     const cat = classifyDomain(row.domain as string);
     const key =
       cat === "reference" ? "Reference"
@@ -97,18 +121,15 @@ export default async function EarnedPage() {
     sourcesMap[key].push(s);
 
     if (cat === "editorial") {
-      // Also index by inferred content type so the type detail view shows relevant sources
       const contentType = inferContentType((row.title as string | null) ?? (row.url as string));
       if (!sourcesMap[contentType]) sourcesMap[contentType] = [];
       sourcesMap[contentType].push(s);
 
-      // Track domain retrieval counts per editorial content type
       if (!editorialDomainCounts[contentType]) editorialDomainCounts[contentType] = new Map();
       const dm = editorialDomainCounts[contentType];
       dm.set(row.domain as string, (dm.get(row.domain as string) ?? 0) + (row.retrievals as number));
     }
 
-    // Reddit: extract subreddits for top channels
     if (cat === "ugc" && row.domain === "reddit.com") {
       const m = (row.url as string).match(/reddit\.com\/r\/([^/?#]+)/i);
       if (m) {
@@ -118,7 +139,6 @@ export default async function EarnedPage() {
       }
     }
 
-    // LinkedIn: extract company/school/group paths for top channels
     if (cat === "ugc" && row.domain === "linkedin.com") {
       const m = (row.url as string).match(/linkedin\.com\/(company|school|groups)\/([^/?#]+)/i);
       if (m) {
@@ -137,7 +157,6 @@ export default async function EarnedPage() {
       .slice(0, 10);
   }
 
-  // Build domainsMap per editorial content type
   const domainsMap: Record<string, { name: string; count: number }[]> = {};
   for (const [type, m] of Object.entries(editorialDomainCounts)) {
     domainsMap[type] = Array.from(m.entries())
@@ -146,7 +165,6 @@ export default async function EarnedPage() {
       .map(([name, count]) => ({ name, count }));
   }
 
-  // Build phrasesMap from prompt queries (same list for all editorial content types)
   const phraseCounts = new Map<string, number>();
   for (const p of promptRows) {
     const phrase = (p.query as string).trim().slice(0, 60);
@@ -173,6 +191,7 @@ export default async function EarnedPage() {
         domainsMap={domainsMap}
         sourcesCount={rawSources.length}
         promptCount={promptCount as number}
+        lastScanDate={lastScanDate ? lastScanDate.toISOString() : null}
       />
     </DashboardLayout>
   );

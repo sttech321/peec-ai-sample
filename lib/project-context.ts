@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 const FALLBACK_WORKSPACE_ID = "00000000-0000-0000-0000-000000000000";
 const ACTIVE_PROJECT_COOKIE = "active_project_id";
 
-async function getWorkspaceId(): Promise<string> {
+export async function getWorkspaceId(): Promise<string> {
   // Try Clerk first
   try {
     const { auth } = await import("@clerk/nextjs/server");
@@ -103,6 +103,18 @@ export async function getAllProjects() {
     .select({
       id: projects.id,
       name: projects.name,
+      domain: projects.domain,
+      allocatedPrompts: projects.allocatedPrompts,
+      allocatedCredits: projects.allocatedCredits,
+      frequency: projects.frequency,
+      status: projects.status,
+      projectType: projects.projectType,
+      color: projects.color,
+      models: projects.models,
+      brandName: projects.brandName,
+      location: projects.location,
+      language: projects.language,
+      timezone: projects.timezone,
       createdAt: projects.createdAt,
     })
     .from(projects)
@@ -113,7 +125,7 @@ export async function getAllProjects() {
 
   return rows.map(p => ({
     ...p,
-    domain: domainByProject.get(p.id) ?? null,
+    domain: domainByProject.get(p.id) ?? p.domain ?? null,
   }));
 }
 

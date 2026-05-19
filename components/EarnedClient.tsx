@@ -552,6 +552,7 @@ export default function EarnedClient({
   domainsMap = {},
   sourcesCount = 0,
   promptCount = 0,
+  lastScanDate = null,
 }: {
   initialActions: any[];
   projectName: string;
@@ -561,6 +562,7 @@ export default function EarnedClient({
   domainsMap?: Record<string, Domain[]>;
   sourcesCount?: number;
   promptCount?: number;
+  lastScanDate?: string | null;
 }) {
   const seed = useMemo(
     () =>
@@ -803,6 +805,15 @@ export default function EarnedClient({
                 <h1 className="ac-content-title">
                   Address all suggestions and fill gaps in your earned content
                 </h1>
+                {lastScanDate && (
+                  <p style={{ fontSize: 12, color: "#a1a1aa", marginTop: 4 }}>
+                    Data from:{" "}
+                    {new Date(lastScanDate).toLocaleDateString("en-US", {
+                      month: "short", day: "numeric", year: "numeric",
+                    })}{" "}
+                    scan
+                  </p>
+                )}
               </>
             )}
           </div>

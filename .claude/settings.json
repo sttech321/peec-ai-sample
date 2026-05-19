@@ -40,7 +40,14 @@
       "Bash(New-Item -ItemType Directory -Force \"d:\\\\peec ai 2026\\\\peec-ai-sample\\\\app\\\\api\\\\actions\\\\generate\")",
       "Bash(Get-ChildItem -Path \"d:\\\\peec ai 2026\\\\peec-ai-sample\" -Force)",
       "Bash(Select-Object -Property Name, PSIsContainer)",
-      "Bash(Format-Table -AutoSize)"
+      "Bash(Format-Table -AutoSize)",
+      "Bash(xargs grep -l \"earned\\\\|generateRecommendations\\\\|Generate Recommendations\")",
+      "Bash(Get-ChildItem -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"d:\\\\peec ai 2026\\\\peec-ai-sample\" -Recurse -Name)",
+      "Bash(npx next *)",
+      "Bash(npx tsx --eval ' *)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\({path:'.env.local'}\\); console.log\\('URL:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring\\(0,30\\)+'...' : 'NOT FOUND'\\)\")"
     ],
     "additionalDirectories": [
       "d:\\peec ai 2026\\peec-ai-sample\\app\\api\\members"
