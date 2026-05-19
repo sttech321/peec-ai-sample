@@ -61,6 +61,7 @@ interface PromptMetric {
   totalBrandsCount: number;
   tags: PromptTag[];
   sov: number;
+  sovTrend: number;
   location: string;
 }
 
@@ -269,7 +270,8 @@ type SortField =
   | "avgPosition"
   | "volumeTier"
   | "location"
-  | "sov";
+  | "sov"
+  | "createdAt";
 type SortDir = "asc" | "desc";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -572,21 +574,42 @@ function sentimentDotColor(val: number) {
 }
 
 // ── Trend small label ───────────────────────────────────────────────────────
-function TrendLabel({ value, suffix = "" }: { value: number; suffix?: string }) {
+function TrendLabel({
+  value,
+  suffix = "",
+  invert = false,
+}: {
+  value: number;
+  suffix?: string;
+  // For metrics where a *lower* value is better (e.g. ranking position),
+  // pass invert so positive deltas render red and negative deltas render green.
+  invert?: boolean;
+}) {
   if (value === 0) return <span className="pp-trend-flat">—</span>;
-  if (value > 0)
-    return (
-      <span className="pp-trend-up">
-        +{value.toFixed(1)}
-        {suffix}
-      </span>
-    );
+  const isGood = invert ? value < 0 : value > 0;
+  const className = isGood ? "pp-trend-up" : "pp-trend-down";
+  const sign = value > 0 ? "+" : "";
   return (
-    <span className="pp-trend-down">
+    <span className={className}>
+      {sign}
       {value.toFixed(1)}
       {suffix}
     </span>
   );
+}
+
+function formatRelativeTime(iso: string): string {
+  const date = new Date(iso);
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 0) return "just now";
+  const days = Math.floor(diffMs / 86400000);
+  if (days < 1) return "today";
+  if (days < 2) return "1 day ago";
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} mo ago`;
+  const years = Math.floor(days / 365);
+  return years === 1 ? "1 yr ago" : `${years} yr ago`;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -635,7 +658,12 @@ export default function PromptsComparisonClient({
   // create 100 simultaneous engine calls (which would trip rate limits per
   // peec-clone-handoff/03-ai-engines-and-apis.md).
   const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [isRefreshPending, startTransition] = useTransition();
+  // Rows that finished their server action but are still waiting for
+  // router.refresh() to flush. We keep the spinner on until isRefreshPending
+  // flips back to false, then clear them via the effect below.
+  const awaitingRefreshRef = useRef<Set<string>>(new Set());
+  const [refreshTick, setRefreshTick] = useState(0);
   const [crawlState, setCrawlState] = useState<{
     running: boolean;
     done: number;
@@ -644,6 +672,21 @@ export default function PromptsComparisonClient({
   // Set of prompt IDs currently being crawled by the per-row button — lets us
   // show a spinner on the specific row without re-rendering the whole table.
   const [rowCrawling, setRowCrawling] = useState<Set<string>>(new Set());
+
+  // Once the refresh transition for a finished crawl completes, drop those
+  // ids from rowCrawling so the spinner turns off and the button returns
+  // to its idle state.
+  useEffect(() => {
+    if (isRefreshPending) return;
+    if (awaitingRefreshRef.current.size === 0) return;
+    const ids = awaitingRefreshRef.current;
+    awaitingRefreshRef.current = new Set();
+    setRowCrawling((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
+  }, [isRefreshPending, refreshTick]);
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -711,6 +754,9 @@ export default function PromptsComparisonClient({
             break;
           case "sov":
             cmp = a.sov - b.sov;
+            break;
+          case "createdAt":
+            cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
             break;
         }
         return sortDir === "asc" ? cmp : -cmp;
@@ -841,7 +887,9 @@ export default function PromptsComparisonClient({
   }
 
   // Crawl one prompt across the currently-selected engines. Used by the
-  // per-row Crawl button — keeps the row spinner local while the request flies.
+  // per-row Crawl button — the spinner stays on through the server action AND
+  // the router.refresh() transition, so it only stops once the table has
+  // actually re-rendered with the new data.
   async function crawlOne(promptId: string, query: string) {
     if (rowCrawling.has(promptId)) return;
     const engines = selectedModels.length > 0 ? selectedModels : [...ALL_ENGINES];
@@ -854,14 +902,15 @@ export default function PromptsComparisonClient({
       await runNowAction(promptId, query, engines);
     } catch (e) {
       console.error("[crawlOne] failed:", e);
-    } finally {
-      setRowCrawling((prev) => {
-        const next = new Set(prev);
-        next.delete(promptId);
-        return next;
-      });
-      startTransition(() => router.refresh());
     }
+    // Hand off to the refresh transition: keep the spinner on (don't remove
+    // from rowCrawling yet) and let the effect below clear it once
+    // isRefreshPending flips back to false.
+    awaitingRefreshRef.current.add(promptId);
+    startTransition(() => {
+      router.refresh();
+    });
+    setRefreshTick((t) => t + 1);
   }
 
   return (
@@ -1222,13 +1271,19 @@ export default function PromptsComparisonClient({
                   >
                     SOV {renderSortIcon("sov")}
                   </th>
+                  <th
+                    className="pp-th-sortable"
+                    onClick={() => handleSort("createdAt")}
+                  >
+                    Added {renderSortIcon("createdAt")}
+                  </th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {activeTab !== "active" || paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="pp-empty-cell">
+                    <td colSpan={12} className="pp-empty-cell">
                       <div className="pp-empty">
                         <div className="pp-empty-icon">
                           <Layers size={28} />
@@ -1295,7 +1350,7 @@ export default function PromptsComparisonClient({
                             <span className="pp-metric-val">
                               #&nbsp;{p.avgPosition.toFixed(1)}
                             </span>
-                            <TrendLabel value={p.positionTrend} />
+                            <TrendLabel value={p.positionTrend} invert />
                           </div>
                         ) : (
                           <span className="pp-empty-val">—</span>
@@ -1338,12 +1393,42 @@ export default function PromptsComparisonClient({
                       </td>
                       <td>
                         <span className="pp-location">
-                          <span className="pp-flag">🇺🇸</span>
+                          <img
+                            src={`https://flagcdn.com/w40/${p.location.toLowerCase()}.png`}
+                            alt={p.location}
+                            width={18}
+                            height={13}
+                            className="pp-flag-img"
+                          />
                           {p.location}
                         </span>
                       </td>
                       <td>
-                        <span className="pp-metric-val">{p.sov}%</span>
+                        <div className="pp-cell-stack">
+                          <span className="pp-metric-val">{p.sov}%</span>
+                          <TrendLabel value={p.sovTrend} suffix="%" />
+                        </div>
+                      </td>
+                      <td>
+                        <span className="pp-added">{formatRelativeTime(p.createdAt)}</span>
+                      </td>
+                      <td>
+                        <button
+                          className="pp-row-crawl-btn"
+                          disabled={rowCrawling.has(p.id) || crawlState.running}
+                          onClick={() => crawlOne(p.id, p.query)}
+                          title={`Run this prompt across ${(selectedModels.length || ALL_ENGINES.length)} engine(s)`}
+                        >
+                          {rowCrawling.has(p.id) ? (
+                            <Loader2
+                              size={13}
+                              style={{ animation: "spin 1s linear infinite" }}
+                            />
+                          ) : (
+                            <Play size={13} />
+                          )}
+                          <span>{rowCrawling.has(p.id) ? "Crawling…" : "Crawl"}</span>
+                        </button>
                       </td>
                       <td>
                         <button
@@ -2140,13 +2225,8 @@ function SetupHintsBanner({
     promptCount > 0 && hints.recentChatsTotal > 0 && hints.brandsTracked === 0;
   const showSuggestions =
     hints.brandsTracked === 0 && hints.pendingSuggestions > 0;
-  const errorRate =
-    hints.recentChatsTotal > 0
-      ? hints.recentChatsErrored / hints.recentChatsTotal
-      : 0;
-  const showHighErrorRate = errorRate >= 0.5 && hints.recentChatsTotal >= 2;
 
-  if (!showNoBrands && !showSuggestions && !showHighErrorRate) return null;
+  if (!showNoBrands && !showSuggestions) return null;
 
   return (
     <div className="pp-hints">
@@ -2172,15 +2252,6 @@ function SetupHintsBanner({
         <div className="pp-hint pp-hint-info">
           <strong>{hints.pendingSuggestions} pending brand suggestion{hints.pendingSuggestions === 1 ? "" : "s"}</strong>
           {" "}from recent crawls. <a href="/brands">Review them</a> to expand tracking.
-        </div>
-      )}
-
-      {showHighErrorRate && (
-        <div className="pp-hint pp-hint-error">
-          <strong>{hints.recentChatsErrored} of {hints.recentChatsTotal} recent chats failed</strong>
-          {" "}({Math.round(errorRate * 100)}%). Most common causes: missing or rate-limited API keys.
-          Open a chat with <code>[ERROR:…]</code> in the response to see the exact reason, or check
-          your <code>.env.local</code> for placeholder values like <code>...</code>.
         </div>
       )}
     </div>

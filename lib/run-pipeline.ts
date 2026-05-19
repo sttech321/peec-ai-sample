@@ -114,13 +114,16 @@ export async function runPipelineForOneEngine(job: PipelineJob): Promise<void> {
       brandId = created.id;
     }
 
+    // Store NULL when the LLM omits sentiment/position so SQL avg() ignores
+    // them instead of skewing toward fake defaults (50 / 1). Both columns are
+    // nullable in the schema.
     await db.insert(brandMentions).values({
       workspaceId,
       chatId,
       brandId,
-      position: brand.position || 1,
-      sentiment: brand.sentiment || 50,
-      confidence: brand.confidence || 0.8,
+      position: typeof brand.position === "number" ? brand.position : null,
+      sentiment: typeof brand.sentiment === "number" ? brand.sentiment : null,
+      confidence: typeof brand.confidence === "number" ? brand.confidence : null,
       mentionText: brand.mentionText || brandName,
     });
   }

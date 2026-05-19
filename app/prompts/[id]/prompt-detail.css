@@ -512,6 +512,41 @@
   color: #475569;
 }
 
+/* Pinned competitors / own brand that don't make the top 7 appear below as
+   overflow rows, with a separator label. */
+.pd-brands-overflow-sep td {
+  padding: 8px 12px 4px !important;
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.pd-brands-overflow-row {
+  background: #fafbfc;
+}
+
+.pd-brands-overflow-row .pd-rank {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.pd-brand-you-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: #eef2ff;
+  color: #4f46e5;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .pd-trend-up { color: #16a34a; font-size: 10px; font-weight: 700; }
 .pd-trend-down { color: #ef4444; font-size: 10px; font-weight: 700; }
 .pd-trend-flat { color: #94a3b8; font-size: 10px; }
@@ -1075,6 +1110,233 @@
   border-radius: 12px;
   color: #94a3b8;
   font-size: 14px;
+}
+
+/* "[Project] mentioned" toggle on the Overview Recent Chats header. */
+.pd-recent-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px 6px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.pd-recent-toggle:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+.pd-recent-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.pd-recent-toggle-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+}
+.pd-recent-toggle-track {
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  position: relative;
+  transition: background 0.18s;
+  flex-shrink: 0;
+}
+.pd-recent-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+  transition: left 0.18s;
+}
+.pd-recent-toggle-on .pd-recent-toggle-track { background: #6366f1; }
+.pd-recent-toggle-on .pd-recent-toggle-thumb { left: 14px; }
+.pd-recent-toggle-on .pd-recent-toggle-label { color: #4338ca; font-weight: 600; }
+
+/* Position chip in the chat-card header (shown only when own brand is mentioned). */
+.pd-chat-position {
+  margin-left: auto;
+  padding: 2px 8px;
+  background: #eef2ff;
+  color: #4338ca;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sentiment score chip after the brand favicons. */
+.pd-chat-sentiment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Brand vs Source visibility section ─────────────────────────────────── */
+.pd-bvs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.pd-bvs-card {
+  padding: 16px 20px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pd-bvs-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pd-bvs-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.pd-bvs-sub {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.pd-bvs-warn {
+  color: #b45309;
+}
+
+.pd-bvs-insight {
+  grid-column: 1 / -1;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  border: 1px solid transparent;
+}
+
+.pd-bvs-insight-good {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.pd-bvs-insight-info {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+
+.pd-bvs-insight-warn {
+  background: #fef3c7;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.pd-bvs-empty {
+  padding: 24px;
+  text-align: center;
+  background: #f8fafc;
+  border: 1px dashed #e2e8f0;
+  border-radius: 12px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.pd-bvs-empty a {
+  color: #6366f1;
+  text-decoration: none;
+  font-weight: 600;
+}
+.pd-bvs-empty a:hover { text-decoration: underline; }
+
+/* ── Tags chip popover (filter row on prompt detail) ────────────────────── */
+.pd-tags-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  min-width: 220px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pd-tags-panel-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pd-tags-panel-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.pd-tags-panel-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pd-tags-panel-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pd-tags-panel-edit {
+  margin-top: 2px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid #f1f5f9;
+  color: #6366f1;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.pd-tags-panel-edit:hover {
+  color: #4f46e5;
 }
 
 .custom-scrollbar::-webkit-scrollbar {

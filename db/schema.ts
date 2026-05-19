@@ -18,6 +18,18 @@ export const projects = pgTable("projects", {
   id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
+  domain: varchar("domain", { length: 255 }),
+  allocatedPrompts: integer("allocated_prompts").default(100).notNull(),
+  allocatedCredits: integer("allocated_credits").default(3000).notNull(),
+  frequency: varchar("frequency", { length: 20 }).default("Daily").notNull(),
+  status: varchar("status", { length: 20 }).default("active").notNull(),
+  projectType: varchar("project_type", { length: 20 }).default("Customer").notNull(),
+  color: varchar("color", { length: 20 }),
+  models: text("models").array(),
+  brandName: varchar("brand_name", { length: 255 }),
+  location: varchar("location", { length: 100 }).default("United States"),
+  language: varchar("language", { length: 50 }).default("English"),
+  timezone: varchar("timezone", { length: 100 }).default("America/New_York"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -237,6 +249,62 @@ export const analyticsSnapshots = pgTable("analytics_snapshots", {
   projectIdx: index("analytics_snapshots_project_idx").on(table.projectId),
   workspaceIdx: index("analytics_snapshots_workspace_idx").on(table.workspaceId),
   dateIdx: index("analytics_snapshots_date_idx").on(table.snapshotDate),
+}));
+
+// Workspace members (accepted invites)
+export const workspaceMembers = pgTable("workspace_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  role: varchar("role", { length: 50 }).notNull(),
+  invitedBy: varchar("invited_by", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  workspaceIdx: index("workspace_members_workspace_idx").on(t.workspaceId),
+  uniqueMember: uniqueIndex("workspace_members_unique").on(t.workspaceId, t.email),
+}));
+
+// Pending workspace invitations
+export const workspaceInvitations = pgTable("workspace_invitations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  role: varchar("role", { length: 50 }).notNull(),
+  token: varchar("token", { length: 128 }).notNull(),
+  invitedBy: varchar("invited_by", { length: 255 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  tokenIdx: uniqueIndex("workspace_invitations_token_idx").on(t.token),
+  workspaceIdx: index("workspace_invitations_workspace_idx").on(t.workspaceId),
+}));
+
+// Magic link tokens for custom email auth
+export const magicLinkTokens = pgTable("magic_link_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: varchar("email", { length: 255 }).notNull(),
+  token: varchar("token", { length: 128 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: uniqueIndex("magic_link_tokens_token_idx").on(table.token),
+  emailIdx: index("magic_link_tokens_email_idx").on(table.email),
+}));
+
+// Action History (audit log of every status change on earned/owned actions)
+export const actionHistory = pgTable("action_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  actionId: uuid("action_id").notNull(),
+  actionKind: varchar("action_kind", { length: 10 }).notNull(), // 'earned' | 'owned'
+  status: varchar("status", { length: 20 }).notNull(),          // 'todo' | 'done' | 'declined'
+  changedBy: varchar("changed_by", { length: 255 }),
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
+}, (t) => ({
+  actionIdx: index("action_history_action_idx").on(t.actionId),
+  workspaceIdx: index("action_history_workspace_idx").on(t.workspaceId),
 }));
 
 // Competitors (Module 6)

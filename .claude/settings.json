@@ -18,7 +18,39 @@
       "WebFetch(domain:docs.peec.ai)",
       "Bash(find \"d:\\\\peec ai 2026\\\\peec-ai-sample\\\\drizzle\\\\\" -name \"*.ts\" 2>&1 | head -20)",
       "Bash(node scripts/clear-seed.mjs)",
-      "Bash(dir /s /b \"d:\\\\peec ai 2026\\\\peec-ai-sample\")"
+      "Bash(dir /s /b \"d:\\\\peec ai 2026\\\\peec-ai-sample\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\peec ai 2026\\\\peec-ai-sample\" -Name)",
+      "Bash(find \"d:\\\\\\\\peec ai 2026\\\\\\\\peec-ai-sample/app\" -type f -name \"*.tsx\" -o -name \"*.ts\" -o -name \"*.json\")",
+      "Bash(find \"d:\\\\\\\\peec ai 2026\\\\\\\\peec-ai-sample\" -name \"tailwind.config.*\" -type f)",
+      "Bash(ls -la \"d:\\\\\\\\peec ai 2026\\\\\\\\peec-ai-sample/components\")",
+      "Bash(ls -la \"d:\\\\\\\\peec ai 2026\\\\\\\\peec-ai-sample/app/actions\")",
+      "Bash(findstr /E \"middleware|auth\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\peec ai 2026\\\\peec-ai-sample\" -File -Filter \"middleware.*\")",
+      "Bash(findstr -i \"clerk\")",
+      "Bash(npm install *)",
+      "Bash(npx drizzle-kit *)",
+      "Bash(New-Item -ItemType Directory -Force \"d:\\\\peec ai 2026\\\\peec-ai-sample\\\\app\\\\api\\\\members\\\\invite\\\\accept\")",
+      "Bash(Out-Null)",
+      "Bash(New-Item -ItemType Directory -Force \"d:\\\\peec ai 2026\\\\peec-ai-sample\\\\app\\\\api\\\\members\\\\[id]\")",
+      "Bash(Write-Host \"dirs created\")",
+      "Bash(mkdir -p \"d:/peec ai 2026/peec-ai-sample/app/api/members/invite/accept\" && mkdir -p \"d:/peec ai 2026/peec-ai-sample/app/api/members/[id]\" && echo \"done\")",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(p.dependencies.next || p.devDependencies.next\\)\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\peec ai 2026\\\\peec-ai-sample\\\\app\\\\api\" -Recurse)",
+      "Bash(ConvertTo-Json -Depth 10)",
+      "Bash(New-Item -ItemType Directory -Force \"d:\\\\peec ai 2026\\\\peec-ai-sample\\\\app\\\\api\\\\actions\\\\generate\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\peec ai 2026\\\\peec-ai-sample\" -Force)",
+      "Bash(Select-Object -Property Name, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(xargs grep -l \"earned\\\\|generateRecommendations\\\\|Generate Recommendations\")",
+      "Bash(Get-ChildItem -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"d:\\\\peec ai 2026\\\\peec-ai-sample\" -Recurse -Name)",
+      "Bash(npx next *)",
+      "Bash(npx tsx --eval ' *)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\({path:'.env.local'}\\); console.log\\('URL:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring\\(0,30\\)+'...' : 'NOT FOUND'\\)\")"
+    ],
+    "additionalDirectories": [
+      "d:\\peec ai 2026\\peec-ai-sample\\app\\api\\members"
     ]
   }
 }

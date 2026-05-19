@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import {
   Check, X, Square, ChevronDown, Tag as TagIcon,
-  Layers, Crosshair, Info, Copy, Check as CheckIcon, BarChart2,
+  Layers, Crosshair, Info, Copy, Check as CheckIcon, BarChart2, ExternalLink, Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { updateOwnedActionStatus } from "../app/owned/actions";
@@ -26,8 +26,8 @@ interface Phrase { text: string; count: number; }
 interface Domain { name: string; count: number; }
 interface Source { title: string; url: string; domain: string; mentioned: string; retrievals: number; citationRate: number; }
 
+// ── Content-type metadata ────────────────────────────────────────────────────
 
-// Content-type metadata
 const TYPE_META: Record<string, { color: string; bg: string; dot: string }> = {
   "Listicle":      { color: "#1d4ed8", bg: "#eff6ff", dot: "#3b82f6" },
   "Product Page":  { color: "#a16207", bg: "#fffbeb", dot: "#f59e0b" },
@@ -35,102 +35,10 @@ const TYPE_META: Record<string, { color: string; bg: string; dot: string }> = {
   "Article":       { color: "#52525b", bg: "#f4f4f5", dot: "#9ca3af" },
   "How-To Guide":  { color: "#52525b", bg: "#f4f4f5", dot: "#9ca3af" },
   "Category Page": { color: "#52525b", bg: "#f4f4f5", dot: "#9ca3af" },
-  "Comparison":    { color: "#52525b", bg: "#f4f4f5", dot: "#9ca3af" },
+  "Comparison":    { color: "#7c3aed", bg: "#f5f3ff", dot: "#a78bfa" },
   "Other":         { color: "#52525b", bg: "#f4f4f5", dot: "#9ca3af" },
 };
 
-// Static analytics per content type
-const PHRASES_DATA: Record<string, Phrase[]> = {
-  "Listicle": [
-    { text: "Digital marketing agencies", count: 14 },
-    { text: "Social media marketing", count: 8 },
-    { text: "Agencies us 2026", count: 6 },
-    { text: "B2b marketing agencies", count: 4 },
-    { text: "Best seo agencies", count: 4 },
-    { text: "Generative engine optimization", count: 4 },
-    { text: "Marketing agencies driving", count: 4 },
-  ],
-  "Product Page": [
-    { text: "Social media management company", count: 4 },
-    { text: "Conversion rate optimization", count: 2 },
-    { text: "Shopify seo services", count: 2 },
-    { text: "Target plus management services", count: 2 },
-    { text: "Walmart marketplace advertising", count: 2 },
-    { text: "Studies happy clients", count: 1 },
-    { text: "Top email marketing agency", count: 1 },
-  ],
-  "Homepage": [
-    { text: "Digital marketing agency", count: 8 },
-    { text: "Full service agency", count: 5 },
-    { text: "Digital marketing services", count: 4 },
-    { text: "Marketing solutions", count: 3 },
-  ],
-  "Article": [
-    { text: "Digital marketing agency need one", count: 6 },
-    { text: "SaaS SEO pipeline growth", count: 4 },
-    { text: "Content marketing strategy", count: 3 },
-    { text: "Link building agencies", count: 2 },
-  ],
-};
-
-const DOMAINS_DATA: Record<string, Domain[]> = {
-  "Listicle": [
-    { name: "seo.com", count: 60 },
-    { name: "searchbloom.com", count: 59 },
-    { name: "directiveconsulting.com", count: 42 },
-    { name: "singlegrain.com", count: 36 },
-    { name: "disruptiveadvertising.com", count: 34 },
-    { name: "siegemedia.com", count: 31 },
-    { name: "highervisibility.com", count: 23 },
-  ],
-  "Product Page": [
-    { name: "coalitiontechnologies.com", count: 26 },
-    { name: "webfx.com", count: 26 },
-    { name: "lyfemarketing.com", count: 10 },
-    { name: "klientboost.com", count: 8 },
-    { name: "powerdigitalmarketing.com", count: 6 },
-    { name: "seo.com", count: 3 },
-    { name: "singlegrain.com", count: 3 },
-  ],
-  "Homepage": [
-    { name: "webfx.com", count: 18 },
-    { name: "singlegrain.com", count: 14 },
-    { name: "lyfemarketing.com", count: 11 },
-    { name: "seo.com", count: 9 },
-  ],
-  "Article": [
-    { name: "siegemedia.com", count: 15 },
-    { name: "moz.com", count: 12 },
-    { name: "ahrefs.com", count: 10 },
-    { name: "searchengineland.com", count: 8 },
-  ],
-};
-
-const SOURCES_DATA: Record<string, Source[]> = {
-  "Listicle": [
-    { title: "Top U.S. Digital Marketing Agencies In 2026", url: "disruptiveadvertising.com/marketing/top-us-digital-marketing-age...", domain: "disruptiveadvertising.com", mentioned: "Unknown", retrievals: 27, citationRate: 0.6 },
-    { title: "The 18 Best SEO Companies + Services of 2025", url: "searchbloom.com/blog/best-seo-companies-services", domain: "searchbloom.com", mentioned: "Unknown", retrievals: 17, citationRate: 0.5 },
-    { title: "10 Leading AI SEO Agencies Helping Brands Rank in AI Search and ...", url: "searchbloom.com/strategy/best-ai-seo-agency-companies-usa", domain: "searchbloom.com", mentioned: "Unknown", retrievals: 15, citationRate: 1.1 },
-    { title: "Best Enterprise SEO Agencies 2026 - Searchbloom®", url: "searchbloom.com/blog/best-enterprise-seo-agencies", domain: "searchbloom.com", mentioned: "Unknown", retrievals: 12, citationRate: 1.6 },
-    { title: "The 19 Best Local SEO Companies of 2026 - Reviewed", url: "highervisibility.com/seo/team/best-local-seo-companies", domain: "highervisibility.com", mentioned: "Unknown", retrievals: 9, citationRate: 0.3 },
-  ],
-  "Product Page": [
-    { title: "Web Design Company – 2026's Top Web Design and Development A...", url: "coalitiontechnologies.com/web-design", domain: "coalitiontechnologies.com", mentioned: "Unknown", retrievals: 8, citationRate: 0.6 },
-    { title: "The Only PPC Agency with 200+ Case Studies From Happy Clients", url: "klientboost.com/services/bbb-agency", domain: "klientboost.com", mentioned: "Unknown", retrievals: 6, citationRate: 0.7 },
-    { title: "YouTube Ads Agency", url: "lyfemarketing.com/services/youtube-ads-agency", domain: "lyfemarketing.com", mentioned: "Unknown", retrievals: 3, citationRate: 1.3 },
-    { title: "Target Plus™ Management Services - WebFX", url: "webfx.com/martech/target-plus/", domain: "webfx.com", mentioned: "Unknown", retrievals: 3, citationRate: 0.7 },
-    { title: "Top-Ranked, Global SEO Company | Coalition Technologies", url: "coalitiontechnologies.com/seo", domain: "coalitiontechnologies.com", mentioned: "Unknown", retrievals: 3, citationRate: 0.7 },
-    { title: "Top San Francisco SEO Company: ROI-Focused Results | Victorious", url: "victorious.com/seo-agency/san-francisco/", domain: "victorious.com", mentioned: "Unknown", retrievals: 3, citationRate: 0.7 },
-  ],
-  "Homepage": [
-    { title: "Digital Marketing Agency – Full-Service Online Marketing", url: "webfx.com", domain: "webfx.com", mentioned: "Unknown", retrievals: 10, citationRate: 0.8 },
-    { title: "Single Grain | Digital Marketing Agency", url: "singlegrain.com", domain: "singlegrain.com", mentioned: "Unknown", retrievals: 7, citationRate: 0.6 },
-  ],
-  "Article": [
-    { title: "SaaS SEO: How To Drive Pipeline Growth", url: "siegemedia.com/strategy/saas-seo/", domain: "siegemedia.com", mentioned: "Unknown", retrievals: 12, citationRate: 0.9 },
-    { title: "Digital Marketing Agency: Do You Need One?", url: "searchengineland.com/", domain: "searchengineland.com", mentioned: "Unknown", retrievals: 6, citationRate: 0.5 },
-  ],
-};
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
@@ -158,28 +66,40 @@ function scoreFromPriority(priority: string): number {
   return 1;
 }
 
-function ScoreBadge({ score }: { score: number }) {
-  const s =
-    score === 3 ? { bg: "#f0fdf4", color: "#16a34a", borderColor: "#bbf7d0" }
-    : score === 2 ? { bg: "#fefce8", color: "#ca8a04", borderColor: "#fef08a" }
-    : { bg: "#f4f4f5", color: "#71717a", borderColor: "#e4e4e7" };
-  return (
-    <span className="ac-score-badge" style={s} title={`Opportunity score: ${score}`}>
-      {score}
-    </span>
-  );
+// Infer content type from action text
+function inferContentType(action: { title?: string; description?: string }): string {
+  const text = `${action.title ?? ""} ${action.description ?? ""}`.toLowerCase();
+  if (/listicle|top\s+\d+|best\s+\w+\s+(agencies|companies|tools)/i.test(text)) return "Listicle";
+  if (/homepage|home page|landing page/i.test(text)) return "Homepage";
+  if (/product page|product/i.test(text)) return "Product Page";
+  if (/how[\s-]to|guide|tutorial/i.test(text)) return "How-To Guide";
+  if (/category page|category/i.test(text)) return "Category Page";
+  if (/comparison|vs\.|versus/i.test(text)) return "Comparison";
+  if (/article|blog/i.test(text)) return "Article";
+  return "Article";
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function PriorityDot({ priority }: { priority: string }) {
-  const color =
-    priority === "High" ? "#22c55e"
-    : priority === "Medium" ? "#f59e0b"
-    : "#9ca3af";
+function SignalBars({ score, color }: { score: number; color: string }) {
   return (
-    <span className="ac-priority-dot-wrap">
-      <span className="ac-priority-dot" style={{ background: color }} />
+    <span className="ac-signal-bars" style={{ "--bar-color": color } as React.CSSProperties}>
+      <span style={{ height: 4 }} />
+      <span style={{ height: 7, opacity: score >= 2 ? 1 : 0.25 }} />
+      <span style={{ height: 10, opacity: score >= 3 ? 1 : 0.25 }} />
+    </span>
+  );
+}
+
+function ScorePill({ priority }: { priority: string }) {
+  const score = scoreFromPriority(priority);
+  const s =
+    priority === "High"   ? { bg: "#f0fdf4", color: "#16a34a" }
+    : priority === "Medium" ? { bg: "#fefce8", color: "#ca8a04" }
+    : { bg: "#f4f4f5", color: "#71717a" };
+  return (
+    <span className="ac-score-pill" style={{ background: s.bg, color: s.color }}>
+      <SignalBars score={score} color={s.color} />
       {priority}
     </span>
   );
@@ -188,23 +108,14 @@ function PriorityDot({ priority }: { priority: string }) {
 function TypeBadge({ type }: { type: string }) {
   const meta = TYPE_META[type] ?? TYPE_META["Other"];
   return (
-    <span
-      className="ac-platform-badge"
-      style={{ background: meta.bg, color: meta.color }}
-    >
+    <span className="ac-platform-badge" style={{ background: meta.bg, color: meta.color }}>
       <span className="ac-priority-dot" style={{ background: meta.dot }} />
       {type}
     </span>
   );
 }
 
-function ActionCard({
-  action,
-  onUpdate,
-}: {
-  action: OwnedAction;
-  onUpdate: (id: string, status: string) => void;
-}) {
+function ActionCard({ action, onUpdate }: { action: OwnedAction; onUpdate: (id: string, status: string) => void }) {
   const linkMatch = action.description.match(/\[([^\]]+)\]/);
   const linkText = linkMatch ? linkMatch[1] : null;
   const beforeLink = linkText ? action.description.split(`[${linkText}]`)[0] : action.description;
@@ -214,42 +125,26 @@ function ActionCard({
   return (
     <div className={`ac-card ${action.status === "done" ? "ac-card-done" : action.status === "declined" ? "ac-card-declined" : ""}`}>
       <div className="ac-card-meta">
-        <ScoreBadge score={scoreFromPriority(action.priority)} />
-        <PriorityDot priority={action.priority} />
+        <ScorePill priority={action.priority} />
         <TypeBadge type={action.contentType ?? "Other"} />
       </div>
       <div className="ac-card-body">
         {linkText && action.pageUrl ? (
-          <>
-            {beforeLink}
-            <a href={action.pageUrl} target="_blank" rel="noopener noreferrer">{linkText}</a>
-            {afterLink}
-          </>
-        ) : (
-          action.description
-        )}
+          <>{beforeLink}<a href={action.pageUrl} target="_blank" rel="noopener noreferrer">{linkText}</a>{afterLink}</>
+        ) : (action.description)}
       </div>
       <div className="ac-card-actions">
         <div className="ac-card-actions-left">
-          <button
-            className={`ac-action-btn ac-action-btn-done ${action.status === "done" ? "ac-action-btn-active" : ""}`}
-            onClick={() => toggle("done")}
-          >
+          <button className={`ac-action-btn ac-action-btn-done ${action.status === "done" ? "ac-action-btn-active" : ""}`} onClick={() => toggle("done")}>
             <Check size={12} /> Done
           </button>
-          <button
-            className={`ac-action-btn ac-action-btn-decline ${action.status === "declined" ? "ac-action-btn-active" : ""}`}
-            onClick={() => toggle("declined")}
-          >
+          <button className={`ac-action-btn ac-action-btn-decline ${action.status === "declined" ? "ac-action-btn-active" : ""}`} onClick={() => toggle("declined")}>
             <X size={12} /> Decline
           </button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className="ac-card-date">{timeAgo(action.updatedAt)}</span>
-          <button
-            className={`ac-action-btn ac-action-btn-todo ${action.status === "todo" ? "ac-action-btn-active" : ""}`}
-            onClick={() => onUpdate(action.id, "todo")}
-          >
+          <button className={`ac-action-btn ac-action-btn-todo ${action.status === "todo" ? "ac-action-btn-active" : ""}`} onClick={() => onUpdate(action.id, "todo")}>
             <Square size={12} /> Todo
           </button>
         </div>
@@ -258,10 +153,10 @@ function ActionCard({
   );
 }
 
-function PhrasesPanel({ contentType }: { contentType: string }) {
+function PhrasesPanel({ contentType, phrasesMap }: { contentType: string; phrasesMap: Record<string, Phrase[]> }) {
   const [tab, setTab] = useState<"phrases" | "themes">("phrases");
   const [copied, setCopied] = useState(false);
-  const phrases = PHRASES_DATA[contentType] ?? [];
+  const phrases = phrasesMap[contentType] ?? [];
   const max = phrases.length > 0 ? Math.max(...phrases.map((p) => p.count)) : 1;
 
   const handleCopy = () => {
@@ -276,53 +171,38 @@ function PhrasesPanel({ contentType }: { contentType: string }) {
     <div className="ow-panel">
       <div className="ow-panel-head">
         <div className="ac-tabs" style={{ borderBottom: "none" }}>
-          <button
-            className={`ac-tab ${tab === "phrases" ? "ac-tab-active" : ""}`}
-            onClick={() => setTab("phrases")}
-          >
-            Phrases
-          </button>
-          <button
-            className={`ac-tab ${tab === "themes" ? "ac-tab-active" : ""}`}
-            onClick={() => setTab("themes")}
-          >
-            Themes
-          </button>
+          <button className={`ac-tab ${tab === "phrases" ? "ac-tab-active" : ""}`} onClick={() => setTab("phrases")}>Phrases</button>
+          <button className={`ac-tab ${tab === "themes" ? "ac-tab-active" : ""}`} onClick={() => setTab("themes")}>Themes</button>
         </div>
         <button className="ow-copy-btn" onClick={handleCopy} title="Copy phrases">
           {copied ? <CheckIcon size={13} style={{ color: "#22c55e" }} /> : <Copy size={13} />}
         </button>
       </div>
-
       {tab === "phrases" ? (
         <div className="ac-bar-list" style={{ marginTop: 8 }}>
           {phrases.map((p) => (
             <div key={p.text} className="ac-bar-row">
               <span className="ac-bar-label">{p.text}</span>
-              <div className="ac-bar-track">
-                <div className="ac-bar-fill" style={{ width: `${(p.count / max) * 100}%` }} />
-              </div>
+              <div className="ac-bar-track"><div className="ac-bar-fill" style={{ width: `${(p.count / max) * 100}%` }} /></div>
               <span className="ac-bar-count">{p.count}</span>
             </div>
           ))}
-          {phrases.length === 0 && (
-            <p style={{ fontSize: 12, color: "#71717a" }}>No phrase data available.</p>
-          )}
+          {phrases.length === 0 && <p style={{ fontSize: 12, color: "#71717a" }}>No phrase data yet. Run your first AI scan to populate this.</p>}
         </div>
       ) : (
         <div style={{ padding: "16px 0", fontSize: 13, color: "#71717a", textAlign: "center" }}>
-          Theme groupings will appear once enough data is collected.
+          Theme groupings will appear once enough scan data is collected.
         </div>
       )}
     </div>
   );
 }
 
-function TopDomainsPanel({ contentType }: { contentType: string }) {
+function TopDomainsPanel({ contentType, domainsMap }: { contentType: string; domainsMap: Record<string, Domain[]> }) {
   const [showAll, setShowAll] = useState(false);
-  const domains = DOMAINS_DATA[contentType] ?? [];
+  const domains = domainsMap[contentType] ?? [];
   const max = domains.length > 0 ? Math.max(...domains.map((d) => d.count)) : 1;
-  const visible = showAll ? domains : domains.slice(0, 6);
+  const visible = showAll ? domains : domains.slice(0, 7);
 
   return (
     <div className="ow-panel">
@@ -335,29 +215,29 @@ function TopDomainsPanel({ contentType }: { contentType: string }) {
       <div className="ac-bar-list">
         {visible.map((d) => (
           <div key={d.name} className="ac-bar-row">
-            <span className="ac-bar-label">{d.name}</span>
-            <div className="ac-bar-track">
-              <div className="ac-bar-fill" style={{ width: `${(d.count / max) * 100}%`, background: "#6366f1" }} />
-            </div>
+            <span className="ac-bar-label" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={faviconUrl(d.name)} alt="" style={{ width: 11, height: 11, borderRadius: 2 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+              {d.name}
+            </span>
+            <div className="ac-bar-track"><div className="ac-bar-fill" style={{ width: `${(d.count / max) * 100}%`, background: "#6366f1" }} /></div>
             <span className="ac-bar-count">{d.count}</span>
           </div>
         ))}
-        {domains.length > 6 && (
+        {domains.length > 7 && (
           <button className="ac-show-all-btn" onClick={() => setShowAll((v) => !v)}>
             {showAll ? "Show less" : `Show all (${domains.length})`}
           </button>
         )}
-        {domains.length === 0 && (
-          <p style={{ fontSize: 12, color: "#71717a" }}>No domain data available.</p>
-        )}
+        {domains.length === 0 && <p style={{ fontSize: 12, color: "#71717a" }}>No domain data yet.</p>}
       </div>
     </div>
   );
 }
 
-function SourcesTable({ contentType }: { contentType: string }) {
-  const sources = SOURCES_DATA[contentType] ?? [];
-  if (sources.length === 0) return null;
+function SourcesTable({ contentType, sourcesMap }: { contentType: string; sourcesMap: Record<string, Source[]> }) {
+  const sourcesList = sourcesMap[contentType] ?? [];
+  if (sourcesList.length === 0) return null;
 
   return (
     <div className="ac-section">
@@ -366,23 +246,15 @@ function SourcesTable({ contentType }: { contentType: string }) {
       </div>
       <div className="ac-list">
         <div className="ow-sources-head">
-          <span>URL</span>
-          <span>Mentioned</span>
-          <span>Mentions</span>
-          <span>Retrievals ↓</span>
-          <span>Citation rate</span>
+          <span>URL</span><span>Mentioned</span><span>Mentions</span><span>Retrievals ↓</span><span>Citation rate</span>
         </div>
-        {sources.map((s, i) => (
+        {sourcesList.map((s, i) => (
           <div key={i} className="ow-sources-row">
             <div className="ac-list-text">
               <div style={{ fontWeight: 500, marginBottom: 2, color: "#18181b" }}>{s.title}</div>
               <div className="ac-list-url">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={faviconUrl(s.domain)} alt=""
-                  style={{ width: 11, height: 11, borderRadius: 2, flexShrink: 0 }}
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                />
+                <img src={faviconUrl(s.domain)} alt="" style={{ width: 11, height: 11, borderRadius: 2, flexShrink: 0 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
                 {s.url}
               </div>
             </div>
@@ -402,9 +274,15 @@ function SourcesTable({ contentType }: { contentType: string }) {
 export default function OwnedClient({
   initialActions,
   projectName: _projectName,
+  phrasesMap = {},
+  domainsMap = {},
+  sourcesMap = {},
 }: {
   initialActions: any[];
   projectName: string;
+  phrasesMap?: Record<string, Phrase[]>;
+  domainsMap?: Record<string, Domain[]>;
+  sourcesMap?: Record<string, Source[]>;
 }) {
   const seed = useMemo(
     () =>
@@ -423,9 +301,7 @@ export default function OwnedClient({
   const [statusFilter, setStatusFilter] = useState<"all" | "todo" | "done" | "declined">("all");
 
   const handleStatusUpdate = async (id: string, newStatus: string) => {
-    setActions((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a)),
-    );
+    setActions((prev) => prev.map((a) => (a.id === id ? { ...a, status: newStatus, updatedAt: new Date() } : a)));
     if (!id.startsWith("ow")) {
       await updateOwnedActionStatus(id, newStatus);
     }
@@ -469,12 +345,8 @@ export default function OwnedClient({
 
       {/* Filter chips */}
       <div className="ac-filter-bar">
-        <button className="ac-chip">
-          <TagIcon size={13} /> All Tags <ChevronDown size={12} />
-        </button>
-        <button className="ac-chip">
-          <Layers size={13} /> All Models <ChevronDown size={12} />
-        </button>
+        <button className="ac-chip"><TagIcon size={13} /> All Tags <ChevronDown size={12} /></button>
+        <button className="ac-chip"><Layers size={13} /> All Models <ChevronDown size={12} /></button>
       </div>
 
       <div className="ac-main">
@@ -485,18 +357,14 @@ export default function OwnedClient({
             <Crosshair size={14} /> Owned
           </div>
 
-          <button
-            className={`ac-subnav-item ${isOverview ? "ac-subnav-item-active" : ""}`}
-            onClick={goOverview}
-          >
+          <button className={`ac-subnav-item ${isOverview ? "ac-subnav-item-active" : ""}`} onClick={goOverview}>
             <span>Overview</span>
           </button>
 
           {typeCounts.length > 0 && (
             <>
               <div className="ac-subnav-section-label">
-                Owned
-                <Info size={11} style={{ marginLeft: 3, color: "#c4c4cc" }} />
+                Owned <Info size={11} style={{ marginLeft: 3, color: "#c4c4cc" }} />
               </div>
               {typeCounts.map(([type, count]) => {
                 const meta = TYPE_META[type] ?? TYPE_META["Other"];
@@ -507,7 +375,11 @@ export default function OwnedClient({
                     onClick={() => selectType(type)}
                   >
                     <span className="ac-subnav-item-content">
-                      <span className="ac-subnav-dot" style={{ background: meta.dot }} />
+                      <span className="ac-signal-bars ac-signal-bars--sm">
+                        <span style={{ height: 3 }} />
+                        <span style={{ height: 6 }} />
+                        <span style={{ height: 9 }} />
+                      </span>
                       <span className="ac-subnav-label">{type}</span>
                     </span>
                     <span className="ac-subnav-count">{count}</span>
@@ -541,13 +413,21 @@ export default function OwnedClient({
                 <span className="ac-breadcrumb-current">Overview</span>
               </>
             )}
+
+            {/* About link in detail view */}
+            {selectedType && (
+              <span style={{ marginLeft: "auto", display: "flex", alignItems: "center" }}>
+                <button className="ac-about-link">
+                  <ExternalLink size={12} style={{ marginRight: 4 }} />
+                  About {selectedType}s
+                </button>
+              </span>
+            )}
           </div>
 
           {/* Heading */}
           <div className="ac-content-heading">
-            <p className="ac-content-eyebrow">
-              {selectedType ? "Owned" : "Overview"}
-            </p>
+            <p className="ac-content-eyebrow">{selectedType ? "Owned" : "Overview"}</p>
             <h1 className="ac-content-title">
               {selectedType
                 ? selectedType
@@ -555,8 +435,8 @@ export default function OwnedClient({
             </h1>
           </div>
 
-          {/* Stats (overview only) */}
-          {isOverview && (
+          {/* Stats (overview only, when there is data) */}
+          {isOverview && actions.length > 0 && (
             <div className="ac-metrics">
               <div className="ac-metric">
                 <span className="ac-metric-label">All owned actions</span>
@@ -578,63 +458,60 @@ export default function OwnedClient({
           )}
 
           {/* Recommendations */}
-          <div className="ac-recs">
-            <div className="ac-recs-head">
-              <div>
-                <h2 className="ac-recs-title">All recommendations</h2>
-                <p className="ac-recs-sub">
-                  Act on these suggestions to increase your AI search visibility.
-                </p>
+          {actions.length === 0 ? (
+            <div className="ac-empty">
+              <div className="ac-empty-icon"><Zap size={20} /></div>
+              <h2 className="ac-empty-title">No owned recommendations yet</h2>
+              <p className="ac-empty-sub">
+                Run AI scans on your prompts to generate on-page recommendations.
+              </p>
+              <div className="ac-empty-actions">
+                <Link href="/prompts" className="ac-empty-btn ac-empty-btn-primary">Go to Prompts</Link>
               </div>
-              <div className="ac-status-toggle">
-                {(["all", "todo", "done", "declined"] as const).map((f) => (
-                  <button
-                    key={f}
-                    className={`ac-status-btn ${statusFilter === f ? "ac-status-btn-active" : ""}`}
-                    onClick={() => setStatusFilter(f)}
-                  >
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
-                  </button>
+            </div>
+          ) : (
+            <div className="ac-recs">
+              <div className="ac-recs-head">
+                <div>
+                  <h2 className="ac-recs-title">All recommendations</h2>
+                  <p className="ac-recs-sub">Act on these suggestions to increase your AI search visibility.</p>
+                </div>
+                <div className="ac-status-toggle">
+                  {(["all", "todo", "done", "declined"] as const).map((f) => (
+                    <button
+                      key={f}
+                      className={`ac-status-btn ${statusFilter === f ? "ac-status-btn-active" : ""}`}
+                      onClick={() => setStatusFilter(f)}
+                    >
+                      {f.charAt(0).toUpperCase() + f.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className={`ac-cards ${!isOverview ? "ac-cards-detail" : ""}`}>
+                {filtered.map((action) => (
+                  <ActionCard key={action.id} action={action} onUpdate={handleStatusUpdate} />
                 ))}
+                {filtered.length === 0 && <div className="ac-empty-inline">No actions match this filter.</div>}
               </div>
             </div>
-
-            <div className={`ac-cards ${!isOverview ? "ac-cards-detail" : ""}`}>
-              {filtered.map((action) => (
-                <ActionCard key={action.id} action={action} onUpdate={handleStatusUpdate} />
-              ))}
-              {filtered.length === 0 && (
-                <div className="ac-empty-inline">No actions match this filter.</div>
-              )}
-            </div>
-          </div>
+          )}
 
           {/* Phrases + Domains two-column (type detail only) */}
           {selectedType && (
             <div className="ow-analytics-grid">
-              <PhrasesPanel contentType={selectedType} />
-              <TopDomainsPanel contentType={selectedType} />
+              <PhrasesPanel contentType={selectedType} phrasesMap={phrasesMap} />
+              <TopDomainsPanel contentType={selectedType} domainsMap={domainsMap} />
             </div>
           )}
 
           {/* Sources table (type detail only) */}
-          {selectedType && <SourcesTable contentType={selectedType} />}
+          {selectedType && (
+            <SourcesTable contentType={selectedType} sourcesMap={sourcesMap} />
+          )}
 
         </section>
       </div>
     </div>
   );
-}
-
-// Infer content type from DB action (no contentType field in DB)
-function inferContentType(action: { title?: string; description?: string }): string {
-  const text = `${action.title ?? ""} ${action.description ?? ""}`.toLowerCase();
-  if (/listicle|top\s+\d+|best\s+\w+\s+(agencies|companies|tools)/i.test(text)) return "Listicle";
-  if (/homepage|home page|landing page/i.test(text)) return "Homepage";
-  if (/product page|product/i.test(text)) return "Product Page";
-  if (/how[\s-]to|guide|tutorial/i.test(text)) return "How-To Guide";
-  if (/category page|category/i.test(text)) return "Category Page";
-  if (/comparison|vs\.|versus/i.test(text)) return "Comparison";
-  if (/article|blog/i.test(text)) return "Article";
-  return "Article";
 }

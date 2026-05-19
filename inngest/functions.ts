@@ -1,7 +1,7 @@
 import { inngest } from "./client";
 import { db } from "../db";
 import { chats, sources, citations, brandMentions, prompts } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { eq, gte, sql } from "drizzle-orm";
 import { DEFAULT_ENGINES } from "../lib/ai-clients";
 
 export const scheduleDailyScans = inngest.createFunction(
@@ -153,9 +153,9 @@ export const runPromptPipeline = inngest.createFunction(
              workspaceId,
              chatId,
              brandId,
-             position: brand.position || 1,
-             sentiment: brand.sentiment || 50,
-             confidence: brand.confidence || 0.8,
+             position: typeof brand.position === "number" ? brand.position : null,
+             sentiment: typeof brand.sentiment === "number" ? brand.sentiment : null,
+             confidence: typeof brand.confidence === "number" ? brand.confidence : null,
              mentionText: brand.mentionText || brandName
            });
         }
@@ -164,4 +164,45 @@ export const runPromptPipeline = inngest.createFunction(
 
     return { success: true, chatId };
   }
+);
+
+// Runs 2 hours after the daily scan cron (6 AM UTC) to auto-generate
+// earned + owned actions from the freshly stored scan data.
+export const generateDailyActions = inngest.createFunction(
+  {
+    id: "generate-daily-actions",
+    triggers: [{ cron: "TZ=UTC 0 8 * * *" }],
+  },
+  async ({ step }) => {
+    // Find all distinct projects that have scan data from today
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const projectsWithScans = await step.run("fetch-projects-with-today-scans", async () => {
+      const result = await db
+        .selectDistinct({
+          projectId: prompts.projectId,
+          workspaceId: prompts.workspaceId,
+        })
+        .from(chats)
+        .innerJoin(prompts, eq(prompts.id, chats.promptId))
+        .where(gte(chats.createdAt, todayStart));
+      return result;
+    });
+
+    let generated = 0;
+    let skipped = 0;
+
+    for (const { projectId, workspaceId } of projectsWithScans) {
+      const result = await step.run(`generate-actions-${projectId}`, async () => {
+        const { generateActionsForProject } = await import("../lib/generate-actions");
+        return generateActionsForProject(projectId, workspaceId);
+      });
+
+      if (result.skipped) skipped++;
+      else generated++;
+    }
+
+    return { projects: projectsWithScans.length, generated, skipped };
+  },
 );

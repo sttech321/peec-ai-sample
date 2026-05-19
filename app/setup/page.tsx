@@ -118,8 +118,7 @@ export default function SetupPage() {
         return;
       }
       sessionStorage.removeItem(STORAGE_KEY);
-      router.push("/");
-      router.refresh();
+      window.location.replace("/");
     });
   };
 

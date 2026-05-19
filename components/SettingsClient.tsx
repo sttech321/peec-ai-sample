@@ -192,7 +192,7 @@ export default function SettingsClient({ projects }: { projects: ProjectProp[] }
   }
 
   return (
-    <div className="st-page">
+    <div className="w-full">
       {/* Page header */}
       <div className="st-page-header">
         <span className="st-page-header-icon">

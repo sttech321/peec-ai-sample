@@ -3,19 +3,47 @@ import { db } from "../db";
 import { projects, brands } from "../db/schema";
 import { and, eq } from "drizzle-orm";
 
-const WORKSPACE_ID = "00000000-0000-0000-0000-000000000000";
+const FALLBACK_WORKSPACE_ID = "00000000-0000-0000-0000-000000000000";
 const ACTIVE_PROJECT_COOKIE = "active_project_id";
+
+export async function getWorkspaceId(): Promise<string> {
+  // Try Clerk first
+  try {
+    const { auth } = await import("@clerk/nextjs/server");
+    const { userId } = await auth();
+    if (userId) return userId;
+  } catch {
+    // Clerk not configured
+  }
+
+  // Fall back to custom session cookie
+  try {
+    const { cookies } = await import("next/headers");
+    const { verifySession, SESSION_COOKIE } = await import("./session");
+    const cookieStore = await cookies();
+    const raw = cookieStore.get(SESSION_COOKIE)?.value;
+    if (raw) {
+      const session = verifySession(raw);
+      if (session?.workspaceId) return session.workspaceId;
+      if (session?.email) return session.email;
+    }
+  } catch {
+    // cookies not available in this context
+  }
+
+  return FALLBACK_WORKSPACE_ID;
+}
 
 /**
  * Get the active project ID from cookie, or return the first project's ID.
  * If no projects exist, creates a "Default Project" automatically.
  */
 export async function getActiveProjectId(): Promise<string> {
+  const workspaceId = await getWorkspaceId();
   const cookieStore = await cookies();
   const stored = cookieStore.get(ACTIVE_PROJECT_COOKIE)?.value;
 
   if (stored) {
-    // Verify it still exists
     const [exists] = await db
       .select({ id: projects.id })
       .from(projects)
@@ -24,30 +52,27 @@ export async function getActiveProjectId(): Promise<string> {
     if (exists) return stored;
   }
 
-  // Fallback: get first project or create default
   const [firstProject] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(eq(projects.workspaceId, WORKSPACE_ID))
+    .where(eq(projects.workspaceId, workspaceId))
     .limit(1);
 
   if (firstProject) return firstProject.id;
 
-  // No projects exist — create default
   const inserted = await db.insert(projects).values({
-    workspaceId: WORKSPACE_ID,
+    workspaceId,
     name: "Default Project",
   }).returning();
 
   return inserted[0].id;
 }
 
-/**
- * Look up the "own" brand domain for each project ID.
- */
 async function fetchProjectDomains(projectIds: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (projectIds.length === 0) return map;
+
+  const workspaceId = await getWorkspaceId();
 
   const ownBrands = await db
     .select({
@@ -56,7 +81,7 @@ async function fetchProjectDomains(projectIds: string[]): Promise<Map<string, st
     })
     .from(brands)
     .where(and(
-      eq(brands.workspaceId, WORKSPACE_ID),
+      eq(brands.workspaceId, workspaceId),
       eq(brands.isOwn, true),
     ));
 
@@ -69,25 +94,38 @@ async function fetchProjectDomains(projectIds: string[]): Promise<Map<string, st
 }
 
 /**
- * Get all projects for the workspace, including each project's own-brand domain
- * (used to render a favicon in the project switcher).
+ * Get all projects for the workspace, including each project's own-brand domain.
  */
 export async function getAllProjects() {
+  const workspaceId = await getWorkspaceId();
+
   const rows = await db
     .select({
       id: projects.id,
       name: projects.name,
+      domain: projects.domain,
+      allocatedPrompts: projects.allocatedPrompts,
+      allocatedCredits: projects.allocatedCredits,
+      frequency: projects.frequency,
+      status: projects.status,
+      projectType: projects.projectType,
+      color: projects.color,
+      models: projects.models,
+      brandName: projects.brandName,
+      location: projects.location,
+      language: projects.language,
+      timezone: projects.timezone,
       createdAt: projects.createdAt,
     })
     .from(projects)
-    .where(eq(projects.workspaceId, WORKSPACE_ID))
+    .where(eq(projects.workspaceId, workspaceId))
     .orderBy(projects.name);
 
   const domainByProject = await fetchProjectDomains(rows.map(r => r.id));
 
   return rows.map(p => ({
     ...p,
-    domain: domainByProject.get(p.id) ?? null,
+    domain: domainByProject.get(p.id) ?? p.domain ?? null,
   }));
 }
 
@@ -110,4 +148,4 @@ export async function getActiveProject() {
   };
 }
 
-export const WORKSPACE = WORKSPACE_ID;
+export const WORKSPACE = FALLBACK_WORKSPACE_ID;

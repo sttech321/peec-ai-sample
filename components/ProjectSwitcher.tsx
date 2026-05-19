@@ -2,9 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ChevronDown, Search, Plus, LogOut,
-} from "lucide-react";
+import { ChevronDown, Search, Plus, LogOut } from "lucide-react";
 
 interface Project {
   id: string;
@@ -71,20 +69,16 @@ export default function ProjectSwitcher({
   activeProjectDomain,
   userEmail = "admin@workspace.com",
   switchProjectAction,
-  createProjectAction,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [showAddForm, setShowAddForm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setOpen(false);
-        setShowAddForm(false);
         setSearch("");
       }
     }
@@ -101,7 +95,7 @@ export default function ProjectSwitcher({
       {/* Trigger Button */}
       <button
         className="ps-trigger"
-        onClick={() => { setOpen(!open); setShowAddForm(false); setSearch(""); }}
+        onClick={() => { setOpen(!open); setSearch(""); }}
       >
         <ProjectIcon name={activeProjectName} domain={activeProjectDomain} size={28} />
         <span className="ps-trigger-name">{activeProjectName}</span>
@@ -111,10 +105,8 @@ export default function ProjectSwitcher({
       {/* Dropdown */}
       {open && (
         <div className="ps-dropdown">
-          {/* User email */}
           <div className="ps-dropdown-email">{userEmail}</div>
 
-          {/* Search */}
           <div className="ps-search-wrapper">
             <Search size={12} className="ps-search-icon" />
             <input
@@ -126,7 +118,6 @@ export default function ProjectSwitcher({
             />
           </div>
 
-          {/* Project list */}
           <div className="ps-project-list">
             {filtered.map((p) => (
               <button
@@ -151,50 +142,18 @@ export default function ProjectSwitcher({
             )}
           </div>
 
-          {/* Add new project — opens the setup wizard */}
-          {!showAddForm ? (
-            <button
-              className="ps-add-btn"
-              onClick={() => {
-                setOpen(false);
-                router.push("/setup");
-              }}
-            >
-              <Plus size={14} />
-              Add new project
-            </button>
-          ) : (
-            <form
-              className="ps-add-form"
-              action={async (formData) => {
-                await createProjectAction(formData);
-                setShowAddForm(false);
-                setOpen(false);
-              }}
-            >
-              <input
-                className="ps-add-input"
-                name="name"
-                placeholder="Project name..."
-                required
-                autoFocus
-              />
-              <div className="ps-add-actions">
-                <button
-                  type="button"
-                  className="ps-add-cancel"
-                  onClick={() => setShowAddForm(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="ps-add-submit">
-                  Create
-                </button>
-              </div>
-            </form>
-          )}
+          {/* Add new project → setup wizard */}
+          <button
+            className="ps-add-btn"
+            onClick={() => {
+              setOpen(false);
+              router.push("/setup");
+            }}
+          >
+            <Plus size={14} />
+            Add new project
+          </button>
 
-          {/* Logout */}
           <button className="ps-logout-btn">
             <LogOut size={13} />
             Logout

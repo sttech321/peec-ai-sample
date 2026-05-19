@@ -11,22 +11,32 @@ interface Scope {
 export interface ProjectBrand {
   name: string;
   isOwn: boolean;
+  domains: string[];
 }
 
 export async function fetchProjectBrands(projectId: string): Promise<ProjectBrand[]> {
   const rows = await db
-    .select({ name: brands.name, isOwn: brands.isOwn })
+    .select({ name: brands.name, isOwn: brands.isOwn, domains: brands.domains })
     .from(brands)
     .where(eq(brands.projectId, projectId))
     .orderBy(brands.name);
 
   // Dedupe by name (DB may have duplicate brand rows from seed/import).
-  // If any duplicate has isOwn=true, treat the brand as own.
+  // If any duplicate has isOwn=true, treat the brand as own. Merge domain
+  // lists across duplicates and dedupe within them.
   const dedup = new Map<string, ProjectBrand>();
   for (const r of rows) {
     const existing = dedup.get(r.name);
     const isOwn = !!r.isOwn || !!existing?.isOwn;
-    dedup.set(r.name, { name: r.name, isOwn });
+    const merged = new Set([
+      ...(existing?.domains ?? []),
+      ...((r.domains ?? []) as string[]),
+    ]);
+    dedup.set(r.name, {
+      name: r.name,
+      isOwn,
+      domains: Array.from(merged).filter((d) => d.length > 0),
+    });
   }
   return Array.from(dedup.values());
 }

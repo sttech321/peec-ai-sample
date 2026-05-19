@@ -1,0 +1,355 @@
+/* Members page */
+.members-page {
+  padding: 32px;
+  max-width: 900px;
+}
+
+.members-header {
+  margin-bottom: 32px;
+}
+
+.members-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111;
+  margin: 0 0 4px;
+}
+
+.members-subtitle {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+/* Invite section */
+.invite-section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 28px;
+}
+
+.invite-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111;
+  margin: 0 0 16px;
+}
+
+.invite-form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.invite-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.invite-field-email {
+  flex: 1;
+}
+
+.invite-field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #555;
+}
+
+.invite-input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #111;
+  background: #fff;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.invite-input:focus {
+  border-color: #111;
+}
+
+.invite-select {
+  height: 38px;
+  padding: 0 32px 0 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #111;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 10px center;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  cursor: pointer;
+  min-width: 170px;
+  transition: border-color 0.15s;
+}
+
+.invite-select:focus {
+  border-color: #111;
+}
+
+.invite-btn {
+  height: 38px;
+  padding: 0 20px;
+  background: #111;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+}
+
+.invite-btn:hover {
+  background: #333;
+}
+
+.invite-btn:disabled {
+  background: #999;
+  cursor: not-allowed;
+}
+
+.invite-dev-link {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #166534;
+}
+
+.invite-dev-link a {
+  color: #166534;
+  font-weight: 600;
+}
+
+.invite-error {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #dc2626;
+}
+
+.invite-success {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #16a34a;
+}
+
+/* Members table */
+.members-table-section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.members-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.members-table-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111;
+}
+
+.members-count-badge {
+  font-size: 12px;
+  background: #f3f4f6;
+  color: #555;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.members-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.members-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 20px;
+  text-align: left;
+  background: #fafafa;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.members-table td {
+  padding: 14px 20px;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 14px;
+  color: #333;
+}
+
+.members-table tr:last-child td {
+  border-bottom: none;
+}
+
+.member-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  flex-shrink: 0;
+}
+
+.member-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.member-email {
+  font-size: 14px;
+  color: #111;
+  font-weight: 500;
+}
+
+.member-you-tag {
+  font-size: 11px;
+  background: #f3f4f6;
+  color: #666;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* Role badges */
+.member-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.member-badge--blue {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.member-badge--green {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.member-badge--gray {
+  background: #f3f4f6;
+  color: #555;
+}
+
+.member-badge--amber {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+/* Role select inline */
+.role-select-inline {
+  height: 30px;
+  padding: 0 28px 0 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #111;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 8px center;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  cursor: pointer;
+}
+
+.role-select-inline:focus {
+  border-color: #111;
+}
+
+/* Action buttons */
+.member-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.member-remove-btn {
+  height: 30px;
+  padding: 0 12px;
+  background: transparent;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.member-remove-btn:hover {
+  background: #fef2f2;
+}
+
+/* Pending invites section */
+.pending-section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 20px;
+}
+
+.pending-table td,
+.pending-table th {
+  padding: 12px 20px;
+}
+
+.pending-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  background: #fffbeb;
+  color: #92400e;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+/* Read-only state (non-admin) */
+.members-readonly-notice {
+  font-size: 13px;
+  color: #666;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 20px;
+}
