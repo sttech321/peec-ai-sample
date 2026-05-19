@@ -49,7 +49,8 @@
       "Bash(npx tsx --eval ' *)",
       "Bash(node -e \"require\\('dotenv'\\).config\\({path:'.env.local'}\\); console.log\\('URL:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring\\(0,30\\)+'...' : 'NOT FOUND'\\)\")",
       "Bash(xargs grep -l \"Performance.*matrix\\\\|performance.*matrix\")",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(git push *)"
     ],
     "additionalDirectories": [
       "d:\\peec ai 2026\\peec-ai-sample\\app\\api\\members"
