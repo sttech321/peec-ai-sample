@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { X, ExternalLink, Globe } from "lucide-react";
-import EngineIcon from "./EngineIcon";
+import React from "react";
+import { X, ExternalLink, Globe, MessageSquare, Flag } from "lucide-react";
 
 interface Source {
   domain: string;
@@ -25,500 +24,227 @@ interface ChatRecord {
 interface Props {
   chat: ChatRecord;
   ownBrand?: string;
-  brandDomains?: Map<string, string>;
   onClose: () => void;
 }
 
-function guessDomain(brand: string): string {
-  return brand.toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9.-]/g, "") + ".com";
-}
+const ENGINE_COLORS: Record<string, string> = {
+  ChatGPT: "#10a37f", Claude: "#d97706", Perplexity: "#3b82f6",
+  Gemini: "#8b5cf6", "AI Overviews": "#ef4444", Groq: "#f97316",
+};
 
-function favUrl(domain: string): string {
-  return `https://www.google.com/s2/favicons?sz=32&domain=${domain}`;
-}
-
-function FaviconImg({ domain, size = 14 }: { domain: string; size?: number }) {
-  const [failed, setFailed] = useState(false);
-  if (failed || !domain) return null;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={favUrl(domain)}
-      alt=""
-      width={size}
-      height={size}
-      style={{
-        display: "inline-block",
-        verticalAlign: "middle",
-        borderRadius: 3,
-        marginRight: 3,
-        flexShrink: 0,
-      }}
-      onError={() => setFailed(true)}
-    />
-  );
-}
-
-export default function ChatModal({ chat, ownBrand, brandDomains, onClose }: Props) {
+export default function ChatModal({ chat, ownBrand, onClose }: Props) {
   const handleContentClick = (e: React.MouseEvent) => e.stopPropagation();
-  const ownLower = ownBrand?.toLowerCase();
 
-  function getBrandDomain(name: string): string {
-    return brandDomains?.get(name) ?? guessDomain(name);
-  }
-
-  function countInText(brand: string): number {
-    if (!chat.rawResponse) return 0;
-    try {
-      const re = new RegExp(`\\b${brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
-      return (chat.rawResponse.match(re) ?? []).length;
-    } catch {
-      return 0;
-    }
-  }
-
-  // Render inline segments: markdown links → **bold** → brand highlights (word-boundary)
-  function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
+  // Build a combined regex for **bold** and brand names, then render inline nodes
+  function renderInline(text: string): React.ReactNode[] {
     const brands = chat.brandsFound;
+    const ownLower = ownBrand?.toLowerCase();
 
-    const escapedBrands = brands
+    const escaped = brands
       .slice()
       .sort((a, b) => b.length - a.length)
       .map((b) => b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 
-    const patterns = [
-      `\\[([^\\]]+)\\]\\(([^)\\s]+)\\)`,
-      `\\*\\*([^*]{1,120})\\*\\*`,
-      ...(escapedBrands.length ? [`\\b(?:${escapedBrands.join("|")})\\b`] : []),
-    ];
+    const brandPart = escaped.length > 0 ? "|" + escaped.join("|") : "";
+    const regex = new RegExp(`(\\*\\*.*?\\*\\*${brandPart})`, "gi");
 
-    let regex: RegExp;
-    try {
-      regex = new RegExp(patterns.join("|"), "gi");
-    } catch {
-      return [text];
-    }
-
-    const result: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let key = 0;
-
-    for (const match of text.matchAll(regex)) {
-      const idx = match.index!;
-      if (idx > lastIndex) result.push(text.slice(lastIndex, idx));
-
-      const full = match[0];
-
-      // Markdown link [text](url)
-      const mdLink = full.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
-      if (mdLink) {
-        let domain = "";
-        try { domain = new URL(mdLink[2]).hostname.replace(/^www\./, ""); } catch {}
-        result.push(
-          <a key={`${keyPrefix}-${key++}`} href={mdLink[2]} target="_blank"
-             rel="noopener noreferrer" className="cm-md-link">
-            {domain && <FaviconImg domain={domain} size={12} />}
-            {mdLink[1]}
-          </a>
-        );
-        lastIndex = idx + full.length;
-        continue;
+    return text.split(regex).filter(Boolean).map((part, j) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={j} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>;
       }
-
-      // **Bold**
-      const bold = full.match(/^\*\*([^*]+)\*\*$/);
-      if (bold) {
-        result.push(
-          <strong key={`${keyPrefix}-${key++}`} className="cm-bold">{bold[1]}</strong>
-        );
-        lastIndex = idx + full.length;
-        continue;
-      }
-
-      // Brand name
-      const matchedBrand = brands.find((b) => b.toLowerCase() === full.toLowerCase());
+      const matchedBrand = brands.find((b) => b.toLowerCase() === part.toLowerCase());
       if (matchedBrand) {
-        const isOwn = !!(ownLower && full.toLowerCase() === ownLower);
-        const domain = getBrandDomain(matchedBrand);
-        result.push(
-          <mark key={`${keyPrefix}-${key++}`}
-                className={isOwn ? "cm-brand-own" : "cm-brand-other"}>
-            <FaviconImg domain={domain} size={12} />
-            {full}
+        const isOwn = ownLower && matchedBrand.toLowerCase() === ownLower;
+        return (
+          <mark key={j} className={isOwn ? "cm-brand-own" : "cm-brand-other"}>
+            {part}
           </mark>
         );
-        lastIndex = idx + full.length;
-        continue;
       }
-
-      result.push(full);
-      lastIndex = idx + full.length;
-    }
-
-    if (lastIndex < text.length) result.push(text.slice(lastIndex));
-    return result.length ? result : [text];
+      return part;
+    });
   }
 
   const renderResponse = (text: string | null | undefined) => {
-    if (!text) return <p className="cm-empty">No response content available.</p>;
+    if (!text) return <p className="text-slate-400 italic">No response content available.</p>;
+
     return text.split("\n").map((line, i) => {
-      const kp = `ln${i}`;
-      if (line.startsWith("# "))   return <h2 key={kp} className="cm-h1">{renderInline(line.slice(2), kp)}</h2>;
-      if (line.startsWith("## "))  return <h3 key={kp} className="cm-h2">{renderInline(line.slice(3), kp)}</h3>;
-      if (line.startsWith("### ")) return <h4 key={kp} className="cm-h3">{renderInline(line.slice(4), kp)}</h4>;
-      if (line.startsWith("- ") || line.startsWith("* ") || line.startsWith("• ")) {
-        return <li key={kp} className="cm-li">{renderInline(line.slice(2), kp)}</li>;
+      if (line.startsWith("# "))  return <h1  key={i} className="text-2xl font-bold mt-6 mb-4">{renderInline(line.slice(2))}</h1>;
+      if (line.startsWith("## ")) return <h2  key={i} className="text-xl font-bold mt-5 mb-3">{renderInline(line.slice(3))}</h2>;
+      if (line.startsWith("### "))return <h3  key={i} className="text-lg font-bold mt-4 mb-2">{renderInline(line.slice(4))}</h3>;
+      if (line.startsWith("- ") || line.startsWith("* ")) {
+        return <li key={i} className="ml-4 mb-1 list-disc pl-2">{renderInline(line.substring(2))}</li>;
       }
-      if (line.trim() === "") return <div key={kp} className="cm-spacer" />;
-      return <p key={kp} className="cm-p">{renderInline(line, kp)}</p>;
+      if (line.trim() === "") return <div key={i} className="h-4" />;
+      return <p key={i} className="mb-3 leading-relaxed text-slate-700">{renderInline(line)}</p>;
     });
   };
 
   return (
-    <div className="cm-overlay" onClick={onClose}>
-      <div className="cm-modal" onClick={handleContentClick}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div 
+        className="bg-white w-full max-w-5xl h-[85vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row relative"
+        onClick={handleContentClick}
+      >
+        {/* Close Button */}
+        <button 
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600 z-10"
+        >
+          <X size={20} />
+        </button>
 
-        {/* ── Main panel ─────────────────────────────────────── */}
-        <div className="cm-main">
-
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden border-r border-slate-100">
           {/* Header */}
-          <div className="cm-header">
-            <div className="cm-header-left">
-              <EngineIcon engine={chat.engine} size={22} />
-              <span className="cm-engine-name">{chat.engine}</span>
-              <div className="cm-sep" />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="https://flagcdn.com/w40/us.png" alt="US" className="cm-flag" />
-              <span className="cm-location">US</span>
+          <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div 
+                  className="w-6 h-6 rounded flex items-center justify-center text-white text-[10px] font-bold"
+                  style={{ backgroundColor: ENGINE_COLORS[chat.engine] || "#6366f1" }}
+                >
+                  {chat.engine.charAt(0)}
+                </div>
+                <span className="text-sm font-bold text-slate-700">{chat.engine}</span>
+              </div>
+              <div className="h-4 w-px bg-slate-200" />
+              <div className="flex items-center gap-2">
+                <Flag size={14} className="text-slate-400" />
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">US</span>
+              </div>
             </div>
-            <span className="cm-view-prompt">
-              View prompt <ExternalLink size={10} style={{ display: "inline", verticalAlign: "middle" }} />
-            </span>
+            <div className="mr-8">
+              <button className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors uppercase tracking-wider">
+                View prompt <ExternalLink size={10} />
+              </button>
+            </div>
           </div>
 
-          {/* Scrollable response */}
-          <div className="cm-scroll custom-scrollbar">
-            <div className="cm-content">
-
-              {/* Question bubble */}
-              {chat.query && (
-                <div className="cm-question">
-                  <span className="cm-question-text">{`"${chat.query}"`}</span>
-                </div>
-              )}
-
-              {/* Response body */}
-              <div className="cm-response">
-                {renderResponse(chat.rawResponse)}
+          {/* Response Scroll Area */}
+          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            <div className="max-w-3xl mx-auto">
+              {/* Question */}
+              <div className="bg-slate-100/50 border border-slate-200/50 rounded-xl p-4 mb-8 flex items-start gap-3">
+                <MessageSquare size={16} className="text-indigo-500 mt-1 shrink-0" />
+                <p className="text-sm font-semibold text-slate-800 italic">"{chat.query}"</p>
               </div>
 
+              {/* Response Body */}
+              <div className="prose prose-slate max-w-none">
+                {renderResponse(chat.rawResponse)}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ── Sidebar ────────────────────────────────────────── */}
-        <div className="cm-sidebar">
-          <div className="cm-sidebar-header">
-            <span className="cm-sidebar-title">Details</span>
-            <button className="cm-close" onClick={onClose}><X size={16} /></button>
+        {/* Sidebar / Details */}
+        <div className="w-full md:w-72 bg-slate-50/30 flex flex-col h-full overflow-hidden">
+          <div className="p-5 border-b border-slate-100">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Details</h3>
           </div>
 
-          <div className="cm-sidebar-scroll custom-scrollbar">
-
-            {/* Brands */}
-            <div className="cm-sidebar-section">
-              <div className="cm-sidebar-label">
-                <span className="cm-sidebar-dot cm-sidebar-dot-brand" />
-                Brands
+          <div className="flex-1 overflow-y-auto p-5 space-y-8 custom-scrollbar">
+            {/* Brands Section */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                  Brands
+                </h4>
               </div>
-              <div className="cm-brands-list">
-                {chat.brandsFound.length === 0 && (
-                  <p className="cm-empty-text">No brands identified.</p>
-                )}
-                {chat.brandsFound.map((brand, i) => {
-                  const isOwn = !!(ownLower && brand.toLowerCase() === ownLower);
-                  const count = countInText(brand);
-                  return (
-                    <div key={i} className="cm-brand-row">
-                      <span className={`cm-brand-indicator ${isOwn ? "cm-brand-indicator-own" : "cm-brand-indicator-other"}`} />
-                      <span className="cm-brand-name">{brand}</span>
-                      {count > 0 && <span className="cm-brand-count">{count}</span>}
+              <div className="space-y-3">
+                {chat.brandsFound.map((brand, i) => (
+                  <div key={i} className="flex items-center justify-between group">
+                    <span className="text-sm font-medium text-slate-700 group-hover:text-indigo-600 transition-colors truncate pr-2">
+                      {brand}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-400" style={{ width: '70%' }} />
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400">7.1</span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Fanout queries */}
-            <div className="cm-sidebar-section">
-              <div className="cm-sidebar-label">
-                <Globe size={10} />
-                Fanout queries
-              </div>
-              <p className="cm-empty-text">No Fanout queries</p>
-            </div>
-
-            {/* Sources */}
-            <div className="cm-sidebar-section">
-              <div className="cm-sidebar-label">
-                <Globe size={10} />
-                Sources
-              </div>
-              <div className="cm-sources-list">
-                {chat.sourcesFound.length === 0 && (
-                  <p className="cm-empty-text">No sources cited.</p>
+                  </div>
+                ))}
+                {chat.brandsFound.length === 0 && (
+                  <p className="text-xs text-slate-400 italic">No brands identified.</p>
                 )}
-                {chat.sourcesFound.slice(0, 6).map((source, i) => (
-                  <a key={i} href={source.url || "#"} target="_blank"
-                     rel="noopener noreferrer" className="cm-source-row">
-                    <FaviconImg domain={source.domain} size={18} />
-                    <div className="cm-source-meta">
-                      <span className="cm-source-title">{source.title || source.domain}</span>
-                      <span className="cm-source-domain">{source.domain}</span>
+              </div>
+            </div>
+
+            {/* Sources Section */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <Globe size={10} />
+                  Sources
+                </h4>
+              </div>
+              <div className="space-y-4">
+                {chat.sourcesFound.map((source, i) => (
+                  <a 
+                    key={i} 
+                    href={source.url || "#"} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="block group"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-5 h-5 rounded bg-white shadow-sm border border-slate-200 flex items-center justify-center shrink-0 mt-0.5 group-hover:border-indigo-200 transition-colors">
+                        <img 
+                          src={`https://www.google.com/s2/favicons?domain=${source.domain}&sz=32`} 
+                          alt="" 
+                          className="w-3 h-3"
+                          onError={(e) => (e.currentTarget.style.display = "none")}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-semibold text-slate-700 group-hover:text-indigo-600 transition-colors line-clamp-2 leading-snug">
+                          {source.title || source.domain}
+                        </p>
+                        <p className="text-[9px] text-slate-400 truncate mt-1">{source.domain}</p>
+                      </div>
                     </div>
                   </a>
                 ))}
-                {chat.sourcesFound.length > 6 && (
-                  <button className="cm-view-all">View all...</button>
+                {chat.sourcesFound.length === 0 && (
+                  <p className="text-xs text-slate-400 italic">No sources cited.</p>
                 )}
               </div>
             </div>
-
           </div>
 
-          <div className="cm-sidebar-footer">
-            <button className="cm-insights-btn">View all insights</button>
+          <div className="p-5 border-t border-slate-100 bg-slate-50/50">
+            <button className="w-full py-2 text-[10px] font-bold text-slate-500 hover:text-slate-700 uppercase tracking-widest border border-slate-200 rounded-lg hover:bg-white transition-all">
+              View all insights
+            </button>
           </div>
         </div>
-
       </div>
 
       <style jsx>{`
-        .cm-overlay {
-          position: fixed; inset: 0; z-index: 100;
-          display: flex; align-items: center; justify-content: center;
-          padding: 16px;
-          background: rgba(0,0,0,0.55);
-          backdrop-filter: blur(4px);
-        }
-        .cm-modal {
-          background: #fff;
-          width: 100%; max-width: 960px;
-          height: 88vh;
-          border-radius: 16px;
-          box-shadow: 0 24px 64px rgba(0,0,0,0.18);
-          overflow: hidden;
-          display: flex;
-          position: relative;
-        }
-
-        /* ── Main panel ── */
-        .cm-main {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          border-right: 1px solid #f1f5f9;
-        }
-        .cm-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px 20px;
-          border-bottom: 1px solid #f1f5f9;
-          background: #fafafa;
-          flex-shrink: 0;
-        }
-        .cm-header-left {
-          display: flex; align-items: center; gap: 8px;
-        }
-        .cm-engine-name {
-          font-size: 13px; font-weight: 700; color: #1e293b;
-        }
-        .cm-sep {
-          width: 1px; height: 16px; background: #e2e8f0; margin: 0 4px;
-        }
-        .cm-flag {
-          width: 18px; height: 13px;
-          border-radius: 2px;
-          object-fit: cover;
-          box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
-        }
-        .cm-location {
-          font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;
-        }
-        .cm-view-prompt {
-          font-size: 11px; font-weight: 700; color: #6366f1;
-          text-transform: uppercase; letter-spacing: 0.04em;
-          display: flex; align-items: center; gap: 4px;
-          cursor: pointer;
-        }
-        .cm-close {
-          position: absolute; top: 12px; right: 12px;
-          width: 28px; height: 28px;
-          display: flex; align-items: center; justify-content: center;
-          border-radius: 50%; border: none; background: transparent;
-          color: #94a3b8; cursor: pointer;
-          transition: background 0.12s, color 0.12s;
-        }
-        .cm-close:hover { background: #f1f5f9; color: #334155; }
-
-        .cm-scroll {
-          flex: 1; overflow-y: auto; padding: 32px;
-        }
-        .cm-content { max-width: 640px; margin: 0 auto; }
-
-        /* Question bubble */
-        .cm-question {
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          padding: 14px 18px;
-          margin-bottom: 28px;
-        }
-        .cm-question-text {
-          font-size: 13px; font-weight: 600; color: #1e293b;
-          font-style: italic; line-height: 1.5;
-        }
-
-        /* Response typography */
-        .cm-response { font-size: 14px; line-height: 1.7; color: #334155; }
-        :global(.cm-h1) { font-size: 17px; font-weight: 700; color: #0f172a; margin: 20px 0 8px; }
-        :global(.cm-h2) { font-size: 15px; font-weight: 700; color: #0f172a; margin: 18px 0 6px; }
-        :global(.cm-h3) { font-size: 14px; font-weight: 700; color: #0f172a; margin: 14px 0 4px; }
-        :global(.cm-p)  { margin-bottom: 10px; }
-        :global(.cm-li) { margin-left: 18px; margin-bottom: 6px; list-style-type: disc; padding-left: 4px; }
-        :global(.cm-bold) { font-weight: 700; color: #0f172a; }
-        :global(.cm-spacer) { height: 12px; }
-        :global(.cm-empty) { color: #94a3b8; font-style: italic; }
-
-        /* Brand highlights */
-        :global(.cm-brand-own) {
-          background: #fef08a; color: #713f12;
-          border-radius: 4px; padding: 1px 4px;
-          font-weight: 600;
-          display: inline-flex; align-items: center; gap: 2px;
-          vertical-align: baseline;
-        }
-        :global(.cm-brand-other) {
-          background: #e0e7ff; color: #3730a3;
-          border-radius: 4px; padding: 1px 4px;
-          font-weight: 500;
-          display: inline-flex; align-items: center; gap: 2px;
-          vertical-align: baseline;
-        }
-
-        /* Markdown links */
-        :global(.cm-md-link) {
-          color: #6366f1; text-decoration: none; font-weight: 500;
-          display: inline-flex; align-items: center; gap: 2px;
-          vertical-align: baseline;
-        }
-        :global(.cm-md-link:hover) { text-decoration: underline; }
-
-        /* ── Sidebar ── */
-        .cm-sidebar {
-          width: 280px; flex-shrink: 0;
-          display: flex; flex-direction: column;
-          background: #fafafa;
-          border-left: 1px solid #f1f5f9;
-        }
-        .cm-sidebar-header {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 16px 18px;
-          border-bottom: 1px solid #f1f5f9;
-          flex-shrink: 0;
-        }
-        .cm-sidebar-title {
-          font-size: 11px; font-weight: 700;
-          color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em;
-        }
-        .cm-sidebar-scroll {
-          flex: 1; overflow-y: auto; padding: 0;
-        }
-        .cm-sidebar-section {
-          padding: 16px 18px;
-          border-bottom: 1px solid #f1f5f9;
-        }
-        .cm-sidebar-label {
-          display: flex; align-items: center; gap: 6px;
-          font-size: 10.5px; font-weight: 700;
-          color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em;
-          margin-bottom: 12px;
-        }
-        .cm-sidebar-dot {
-          width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-        }
-        .cm-sidebar-dot-brand { background: #6366f1; }
-
-        /* Brands list */
-        .cm-brands-list { display: flex; flex-direction: column; gap: 8px; }
-        .cm-brand-row {
-          display: flex; align-items: center; gap: 8px;
-        }
-        .cm-brand-indicator {
-          width: 10px; height: 3px; border-radius: 2px; flex-shrink: 0;
-        }
-        .cm-brand-indicator-own   { background: #f59e0b; }
-        .cm-brand-indicator-other { background: #10b981; }
-        .cm-brand-name {
-          font-size: 12.5px; font-weight: 500; color: #1e293b;
-          flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        }
-        .cm-brand-count {
-          font-size: 11px; font-weight: 600; color: #64748b;
-        }
-
-        /* Fanout / empty text */
-        .cm-empty-text { font-size: 12px; color: #94a3b8; font-style: italic; }
-
-        /* Sources */
-        .cm-sources-list { display: flex; flex-direction: column; gap: 12px; }
-        .cm-source-row {
-          display: flex; align-items: flex-start; gap: 10px;
-          text-decoration: none;
-        }
-        .cm-source-meta {
-          display: flex; flex-direction: column; min-width: 0; flex: 1;
-        }
-        .cm-source-title {
-          font-size: 11px; font-weight: 600; color: #334155;
-          line-height: 1.3;
-          overflow: hidden; text-overflow: ellipsis;
-          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-        }
-        .cm-source-row:hover .cm-source-title { color: #6366f1; }
-        .cm-source-domain {
-          font-size: 9.5px; color: #94a3b8; margin-top: 2px;
-          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        }
-        .cm-view-all {
-          font-size: 11px; color: #6366f1; font-weight: 500;
-          background: none; border: none; cursor: pointer; padding: 0;
-          text-align: left;
-        }
-
-        /* Footer */
-        .cm-sidebar-footer {
-          padding: 14px 18px;
-          border-top: 1px solid #f1f5f9;
-          flex-shrink: 0;
-        }
-        .cm-insights-btn {
-          width: 100%; padding: 8px;
-          border: 1px solid #e2e8f0; border-radius: 8px;
-          background: #fff; font-size: 10.5px; font-weight: 700;
-          color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
-          cursor: pointer; font-family: inherit;
-          transition: background 0.12s, color 0.12s;
-        }
-        .cm-insights-btn:hover { background: #f8fafc; color: #334155; }
-
-        /* Scrollbar */
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+
+        :global(.cm-brand-own) {
+          background: #fef08a;
+          color: #713f12;
+          border-radius: 3px;
+          padding: 0 2px;
+          font-weight: 600;
+          text-decoration: none;
+        }
+        :global(.cm-brand-other) {
+          background: #e0e7ff;
+          color: #3730a3;
+          border-radius: 3px;
+          padding: 0 2px;
+          font-weight: 500;
+          text-decoration: none;
+        }
       `}</style>
     </div>
   );

@@ -9,6 +9,7 @@ import { getPageFilterData } from "../lib/page-filter-data";
 import { addBrand } from "./actions/brands";
 import "./prompts/[id]/prompt-detail.css";
 import "./prompts/prompts-comparison.css";
+import "./urls/urls.css";
 
 export default async function Home() {
   const activeProjectId = await getActiveProjectId();

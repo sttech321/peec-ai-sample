@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { fetchChatFacts, fetchProjectBrands } from "../../../lib/chat-facts-server";
 import "./prompt-detail.css";
 import "../prompts-comparison.css";
+import "../../urls/urls.css";
 
 export default async function PromptDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id: promptId } = await params;
