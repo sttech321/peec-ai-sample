@@ -25,7 +25,6 @@ yarn-error.log*
 
 # local env files
 .env*.local
-.env
 
 # vercel
 .vercel
@@ -45,3 +44,4 @@ scratch_*.ts
 test-db.js
 setup-db.js
 image.png
+config.bat

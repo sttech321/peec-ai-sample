@@ -127,7 +127,7 @@ export default async function DashboardLayout({
             {headerAction && (
               <div className="pl-2 border-l border-zinc-200">
                 {headerAction}
-              </div>
+              </div> 
             )}
           </div>
         </header>
