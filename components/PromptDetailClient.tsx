@@ -25,6 +25,8 @@ import {
   buildVisibilitySeries, filterByEngines, filterByDateRange, aggregateByCategory,
   previousPeriod,
 } from "../lib/chat-aggregations";
+import { classifyDomain, DOMAIN_TYPE_COLORS } from "../lib/url-aggregations";
+import TypeDropdown from "./TypeDropdown";
 
 interface ProjectBrand {
   name: string;
@@ -57,11 +59,6 @@ interface Props {
   selectedTagIds: string[];
 }
 
-const DOMAIN_TYPE_COLORS: Record<string, string> = {
-  Corporate: "#f97316", UGC: "#3b82f6", Other: "#22c55e",
-  Reference: "#a855f7", You: "#ef4444", Competitor: "#14b8a6",
-  Editorial: "#eab308", Institutional: "#ec4899",
-};
 
 function formatCitationCount(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -94,22 +91,6 @@ function formatTimeAgo(dateStr: string): string {
   return `${Math.floor(diffHr / 24)} day ago`;
 }
 
-function getCategoryLabel(cat: string | null, domain: string, projectName: string): string {
-  if (projectName && projectName !== "General") {
-    const projectBase = projectName.toLowerCase().split('.')[0].replace(/[^a-z0-9]/g, '');
-    const domainBase = domain.toLowerCase().split('.')[0].replace(/[^a-z0-9]/g, '');
-    if (projectBase.length >= 2 && (domainBase.includes(projectBase) || projectBase.includes(domainBase))) {
-      return "You";
-    }
-  }
-  if (!cat) return "Other";
-  const map: Record<string, string> = {
-    owned: "Corporate", editorial: "Editorial", reference: "Reference",
-    ugc: "UGC", competitor: "Competitor", institutional: "Institutional",
-  };
-  return map[cat.toLowerCase()] || "Other";
-}
-
 export default function PromptDetailClient({ prompt, chatFacts, projectBrands, availableTags, selectedTagIds }: Props) {
   const router = useRouter();
   const [resolution, setResolution] = useState<Resolution>("W");
@@ -117,6 +98,8 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<string | null>(null);
+  const [typeOverrides, setTypeOverrides] = useState<Map<string, string>>(new Map());
+  const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
 
   const allAvailableModels = useMemo(() => {
     const set = new Set<string>();
@@ -370,6 +353,15 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
     return s;
   }, [projectBrands]);
 
+  const competitorDomainSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const b of projectBrands) {
+      if (b.isOwn) continue;
+      for (const d of b.domains ?? []) if (d) s.add(d.toLowerCase());
+    }
+    return s;
+  }, [projectBrands]);
+
   function domainMatchesOwn(domain: string, ownDomains: Set<string>): boolean {
     if (ownDomains.size === 0 || !domain) return false;
     const d = domain.toLowerCase().replace(/^www\./, "");
@@ -434,8 +426,8 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
   const maxDomainCount = domains.length > 0 ? domains[0].count : 1;
 
   const categoryStats = useMemo(
-    () => aggregateByCategory(filteredChats, (cat, dom) => getCategoryLabel(cat, dom, prompt.projectName)),
-    [filteredChats, prompt.projectName],
+    () => aggregateByCategory(filteredChats, (cat, dom) => classifyDomain(cat, dom, ownDomainSet, competitorDomainSet)),
+    [filteredChats, ownDomainSet, competitorDomainSet],
   );
   const totalTypeCounts = Object.values(categoryStats).reduce((s, v) => s + v.count, 0);
 
@@ -722,7 +714,8 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
                 {domains.slice(0, 8).map((d, i) => {
                   const pct = ((d.count / maxDomainCount) * 100).toFixed(1);
                   const rate = (d.count / Math.max(totalDomainCitations, 1)).toFixed(1);
-                  const typeLabel = getCategoryLabel(d.category, d.domain, prompt.projectName);
+                  const defaultType = classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet);
+                  const typeLabel = typeOverrides.get(d.domain) ?? defaultType;
                   return (
                     <tr key={i}>
                       <td className="pd-domain-cell">
@@ -731,7 +724,27 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
                       </td>
                       <td>{pct}%</td>
                       <td>{rate}</td>
-                      <td><span className={`pd-type-badge pd-type-${typeLabel.toLowerCase()}`}>{typeLabel}</span></td>
+                      <td>
+                        <div style={{ position: "relative", display: "inline-block" }}>
+                          <span
+                            className={`pd-type-badge pd-type-${typeLabel.toLowerCase()}`}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => setOpenTypeDropdown(openTypeDropdown === d.domain ? null : d.domain)}
+                          >
+                            {typeLabel}
+                          </span>
+                          {openTypeDropdown === d.domain && (
+                            <TypeDropdown
+                              domain={d.domain}
+                              currentType={typeLabel}
+                              defaultType={defaultType}
+                              onSelect={(t) => setTypeOverrides((prev) => new Map(prev).set(d.domain, t))}
+                              onReset={() => setTypeOverrides((prev) => { const m = new Map(prev); m.delete(d.domain); return m; })}
+                              onClose={() => setOpenTypeDropdown(null)}
+                            />
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -743,20 +756,20 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
           <div className="pd-domain-types-card">
             <div className="pd-domain-types-header">
               <span className="pd-domain-types-title">Domain types</span>
-              <span className="pd-domain-types-total">Total citations: {totalDomainCitations}</span>
+              <span className="pd-domain-types-total">Total retrievals: {totalDomainCitations}</span>
             </div>
             <div className="pd-domain-types-list">
-              {["Corporate", "UGC", "Other", "Reference", "You", "Competitor", "Editorial", "Institutional"].map((type) => {
+              {["Corporate", "UGC", "Other", "Reference", "You", "Competitor", "Editorial", "Institutional", "Related"].map((type) => {
                 const stats = categoryStats[type] || { count: 0, topSources: [] };
                 const pct = totalTypeCounts > 0 ? Math.round((stats.count / totalTypeCounts) * 100) : 0;
                 return (
                   <div key={type} className="pd-dtype-row">
                     <div className="pd-dtype-label">
-                      <span className="pd-dtype-dot" style={{ background: DOMAIN_TYPE_COLORS[type] || "#64748b" }}></span>
+                      <span className="pd-dtype-dot" style={{ background: (DOMAIN_TYPE_COLORS as Record<string, string>)[type] || "#64748b" }}></span>
                       {type}
                     </div>
                     <div className="pd-dtype-bar-wrapper">
-                      <div className="pd-dtype-bar" style={{ width: `${Math.max(pct, 1)}%`, background: DOMAIN_TYPE_COLORS[type] || "#64748b" }}></div>
+                      <div className="pd-dtype-bar" style={{ width: `${Math.max(pct, 1)}%`, background: (DOMAIN_TYPE_COLORS as Record<string, string>)[type] || "#64748b" }}></div>
                     </div>
                     <span className="pd-dtype-pct">{pct}%</span>
                     {stats.count > 0 && (

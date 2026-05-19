@@ -16,6 +16,7 @@ export const DOMAIN_TYPES: DomainType[] = [
   "Reference",
   "Editorial",
   "Institutional",
+  "Related",
 ];
 
 export interface DomainAggFull {
@@ -120,6 +121,7 @@ export function countByDomainType(
     Reference: 0,
     UGC: 0,
     Institutional: 0,
+    Related: 0,
     Other: 0,
   };
   let grand = 0;

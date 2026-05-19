@@ -21,6 +21,7 @@ export type DomainType =
   | "Reference"
   | "UGC"
   | "Institutional"
+  | "Related"
   | "Other";
 
 export const URL_TYPES: UrlType[] = [
@@ -124,6 +125,7 @@ export const DOMAIN_TYPE_COLORS: Record<DomainType, string> = {
   Reference: "#a855f7",
   UGC: "#3b82f6",
   Institutional: "#ec4899",
+  Related: "#06b6d4",
   Other: "#94a3b8",
 };
 

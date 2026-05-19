@@ -24,3 +24,109 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ─── TypeDropdown ───────────────────────────────────────────────────── */
+.tdrop-wrap {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 200;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  width: 220px;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.tdrop-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.tdrop-search-icon { color: #94a3b8; flex-shrink: 0; }
+
+.tdrop-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 12px;
+  color: #1e293b;
+  background: transparent;
+}
+
+.tdrop-input::placeholder { color: #94a3b8; }
+
+.tdrop-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.tdrop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.tdrop-row:hover { background: #f8fafc; }
+.tdrop-row--active { background: #f0f9ff; }
+
+.tdrop-item { display: flex; align-items: center; gap: 8px; }
+
+.tdrop-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tdrop-label { color: #1e293b; font-size: 13px; }
+
+.tdrop-check { color: #3b82f6; font-size: 12px; font-weight: 600; }
+
+.tdrop-empty { padding: 8px 12px; color: #94a3b8; font-size: 12px; }
+
+.tdrop-custom-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-top: 1px solid #f1f5f9;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tdrop-custom-section:hover { background: #f8fafc; }
+
+.tdrop-footer { padding: 6px 10px; border-top: 1px solid #f1f5f9; }
+
+.tdrop-reset {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #64748b;
+  font-size: 11px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 4px;
+  transition: color 0.1s, background 0.1s;
+}
+
+.tdrop-reset:hover { color: #ef4444; background: #fef2f2; }
