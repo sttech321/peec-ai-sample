@@ -25,7 +25,6 @@ yarn-error.log*
 
 # local env files
 .env*.local
-.env
 
 # vercel
 .vercel
@@ -47,3 +46,4 @@ setup-db.js
 image.png
 temp_auto_push.bat
 temp_interactive_push.bat
+config.bat
