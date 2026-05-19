@@ -445,7 +445,14 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
 
   return (
     <div className="prompt-detail-page">
-      {selectedChat && <ChatModal chat={selectedChat} ownBrand={ownBrand ?? undefined} onClose={() => setSelectedChat(null)} />}
+      {selectedChat && (
+        <ChatModal
+          chat={selectedChat}
+          ownBrand={ownBrand ?? undefined}
+          brandDomains={brandDomainByName}
+          onClose={() => setSelectedChat(null)}
+        />
+      )}
       {isSettingsOpen && (
         <PromptSettingsModal
           promptId={prompt.id}
