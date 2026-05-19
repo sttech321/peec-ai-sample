@@ -18,13 +18,13 @@ import {
   aggregateBrands, aggregateDomains, totalCitations, toChatRecords,
   buildVisibilitySeries, filterByEngines, filterByDateRange, aggregateByCategory,
 } from "../lib/chat-aggregations";
-import { classifyDomain, DOMAIN_TYPE_COLORS } from "../lib/url-aggregations";
+import { classifyDomain, DOMAIN_TYPE_COLORS } from "../lib/domain-aggregations";
 import TypeDropdown from "./TypeDropdown";
 
 interface ProjectBrand {
   name: string;
   isOwn: boolean;
-  domains?: string[];
+  domains?: string[] | null;
 }
 
 export interface OverviewExternalFilters {
@@ -40,17 +40,13 @@ interface Props {
   externalFilters?: OverviewExternalFilters;
 }
 
-function formatCitationCount(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "k";
-  return String(n);
-}
 
 export default function OverviewClient({ chatFacts, projectName, projectBrands, externalFilters }: Props) {
   const [resolution, setResolution] = useState<Resolution>("W");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<ChatRecordView | null>(null);
   const [onlyOwnMentions, setOnlyOwnMentions] = useState(false);
+  const [selectedDomainType, setSelectedDomainType] = useState<string | null>(null);
   const [typeOverrides, setTypeOverrides] = useState<Map<string, string>>(new Map());
   const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
 
@@ -58,24 +54,6 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
     () => new Set(projectBrands.filter((b) => b.isOwn).map((b) => b.name)),
     [projectBrands],
   );
-
-  const ownDomainSet = useMemo(() => {
-    const s = new Set<string>();
-    for (const b of projectBrands) {
-      if (!b.isOwn) continue;
-      for (const d of b.domains ?? []) if (d) s.add(d.toLowerCase());
-    }
-    return s;
-  }, [projectBrands]);
-
-  const competitorDomainSet = useMemo(() => {
-    const s = new Set<string>();
-    for (const b of projectBrands) {
-      if (b.isOwn) continue;
-      for (const d of b.domains ?? []) if (d) s.add(d.toLowerCase());
-    }
-    return s;
-  }, [projectBrands]);
 
   function sentimentDotColor(score: number): string {
     if (score >= 65) return "#10b981";
@@ -175,9 +153,29 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
   const totalMentions = brands.reduce((s, b) => s + b.count, 0);
   const maxDomainCount = domains.length > 0 ? domains[0].count : 1;
 
+  const ownDomainSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const b of projectBrands) {
+      if (!b.isOwn) continue;
+      for (const d of b.domains ?? []) if (d) set.add(d.toLowerCase());
+    }
+    return set;
+  }, [projectBrands]);
+
+  const competitorDomainSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const b of projectBrands) {
+      if (b.isOwn) continue;
+      for (const d of b.domains ?? []) if (d) set.add(d.toLowerCase());
+    }
+    return set;
+  }, [projectBrands]);
+
   const categoryStats = useMemo(
-    () => aggregateByCategory(filteredChats, (cat, dom) => classifyDomain(cat, dom, ownDomainSet, competitorDomainSet)),
-    [filteredChats, ownDomainSet, competitorDomainSet],
+    () => aggregateByCategory(filteredChats, (cat, dom) =>
+      typeOverrides.get(dom) ?? classifyDomain(cat, dom, ownDomainSet, competitorDomainSet)
+    ),
+    [filteredChats, ownDomainSet, competitorDomainSet, typeOverrides],
   );
   const totalTypeCounts = Object.values(categoryStats).reduce((s, v) => s + v.count, 0);
 
@@ -282,7 +280,10 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
             <table className="pd-domains-table">
               <thead><tr><th>Domain</th><th>Retrieved</th><th>Citation rate</th><th>Type</th></tr></thead>
               <tbody>
-                {domains.slice(0, 8).map((d, i) => {
+                {(selectedDomainType
+                  ? domains.filter(d => (typeOverrides.get(d.domain) ?? classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet)) === selectedDomainType)
+                  : domains
+                ).slice(0, 8).map((d, i) => {
                   const pct = ((d.count / maxDomainCount) * 100).toFixed(1);
                   const rate = (d.count / Math.max(totalDomainCitations, 1)).toFixed(1);
                   const defaultType = classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet);
@@ -295,26 +296,27 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                       </td>
                       <td>{pct}%</td>
                       <td>{rate}</td>
-                      <td>
-                        <div style={{ position: "relative", display: "inline-block" }}>
-                          <span
-                            className={`pd-type-badge pd-type-${typeLabel.toLowerCase()}`}
-                            style={{ cursor: "pointer" }}
-                            onClick={() => setOpenTypeDropdown(openTypeDropdown === d.domain ? null : d.domain)}
-                          >
-                            {typeLabel}
-                          </span>
-                          {openTypeDropdown === d.domain && (
-                            <TypeDropdown
-                              domain={d.domain}
-                              currentType={typeLabel}
-                              defaultType={defaultType}
-                              onSelect={(t) => setTypeOverrides((prev) => new Map(prev).set(d.domain, t))}
-                              onReset={() => setTypeOverrides((prev) => { const m = new Map(prev); m.delete(d.domain); return m; })}
-                              onClose={() => setOpenTypeDropdown(null)}
-                            />
-                          )}
-                        </div>
+                      <td style={{ position: "relative" }}>
+                        <span
+                          className={`pd-type-badge pd-type-${typeLabel.toLowerCase()}`}
+                          style={{ cursor: "pointer", userSelect: "none" }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenTypeDropdown(openTypeDropdown === d.domain ? null : d.domain);
+                          }}
+                        >
+                          {typeLabel}
+                        </span>
+                        {openTypeDropdown === d.domain && (
+                          <TypeDropdown
+                            domain={d.domain}
+                            currentType={typeLabel}
+                            defaultType={defaultType}
+                            onSelect={(type) => setTypeOverrides((prev) => new Map(prev).set(d.domain, type))}
+                            onReset={() => setTypeOverrides((prev) => { const m = new Map(prev); m.delete(d.domain); return m; })}
+                            onClose={() => setOpenTypeDropdown(null)}
+                          />
+                        )}
                       </td>
                     </tr>
                   );
@@ -324,43 +326,30 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
             </table>
           </div>
 
-          <div className="pd-domain-types-card">
-            <div className="pd-domain-types-header">
-              <span className="pd-domain-types-title">Domain types</span>
-              <span className="pd-domain-types-total">Total retrievals: {totalDomainCitations}</span>
+          <div className="pd-domain-types-card urls-types-card">
+            <div className="urls-types-header">
+              <div className="urls-chart-title">Domain types</div>
+              <div className="urls-types-total">Total retrievals: {totalDomainCitations.toLocaleString()}</div>
             </div>
-            <div className="pd-domain-types-list">
-              {["Corporate", "UGC", "Other", "Reference", "You", "Competitor", "Editorial", "Institutional", "Related"].map((type) => {
+            <div className="urls-types-list">
+              {(["Corporate", "UGC", "Other", "Reference", "You", "Competitor", "Editorial", "Institutional", "Related"] as const).map((type) => {
+                const color = (DOMAIN_TYPE_COLORS as Record<string, string>)[type] || "#64748b";
                 const stats = categoryStats[type] || { count: 0, topSources: [] };
                 const pct = totalTypeCounts > 0 ? Math.round((stats.count / totalTypeCounts) * 100) : 0;
                 return (
-                  <div key={type} className="pd-dtype-row">
-                    <div className="pd-dtype-label">
-                      <span className="pd-dtype-dot" style={{ background: (DOMAIN_TYPE_COLORS as Record<string, string>)[type] || "#64748b" }}></span>
-                      {type}
-                    </div>
-                    <div className="pd-dtype-bar-wrapper">
-                      <div className="pd-dtype-bar" style={{ width: `${Math.max(pct, 1)}%`, background: (DOMAIN_TYPE_COLORS as Record<string, string>)[type] || "#64748b" }}></div>
-                    </div>
-                    <span className="pd-dtype-pct">{pct}%</span>
-                    {stats.count > 0 && (
-                      <div className="pd-dtype-tooltip">
-                        <div className="pd-dtype-tooltip-header">
-                          <span className="pd-dtype-tooltip-type">{type}</span>
-                          <span className="pd-dtype-tooltip-count">{formatCitationCount(stats.count)} citations</span>
-                        </div>
-                        {stats.topSources.length > 0 && (
-                          <>
-                            <div className="pd-dtype-tooltip-label">Top sources</div>
-                            <div className="pd-dtype-tooltip-sources">
-                              {stats.topSources.map((s) => (
-                                <DomainFavicon key={s.domain} domain={s.domain} size={18} />
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
+                  <div
+                    key={type}
+                    className={`urls-type-row ${selectedDomainType === type ? "active" : ""}`}
+                    onClick={() => setSelectedDomainType(selectedDomainType === type ? null : type)}
+                  >
+                    <span className="urls-type-bar">
+                      <span className="urls-type-bar-fill" style={{ width: `${Math.max(2, pct)}%`, background: color }} />
+                      <span className="urls-type-bar-label">
+                        <span className="urls-type-dot" style={{ background: color }} />
+                        {type}
+                      </span>
+                    </span>
+                    <span className="urls-type-pct">{pct}%</span>
                   </div>
                 );
               })}

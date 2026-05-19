@@ -13,12 +13,12 @@ import {
   aggregateDomainsFull,
   buildDomainShareSeries,
   classifyDomain,
-  countByDomainType,
   DOMAIN_TYPES,
   DOMAIN_TYPE_COLORS,
   DomainType,
   totalCitations,
 } from "../lib/domain-aggregations";
+import TypeDropdown from "./TypeDropdown";
 
 interface ProjectBrand {
   name: string;
@@ -94,6 +94,8 @@ export default function DomainsClient({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [moverTab, setMoverTab] = useState<"top" | "trending" | "losing" | "new">("top");
   const [gapAnalysis, setGapAnalysis] = useState(false);
+  const [typeOverrides, setTypeOverrides] = useState<Map<string, string>>(new Map());
+  const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
 
   const allEngines = useMemo(() => {
     const set = new Set<string>();
@@ -132,23 +134,29 @@ export default function DomainsClient({
   const domainTypeFor = useMemo(() => {
     const map = new Map<string, DomainType>();
     for (const d of allDomains) {
-      map.set(
-        d.domain,
-        classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet),
-      );
+      const override = typeOverrides.get(d.domain) as DomainType | undefined;
+      map.set(d.domain, override ?? classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet));
     }
     return map;
-  }, [allDomains, ownDomainSet, competitorDomainSet]);
+  }, [allDomains, ownDomainSet, competitorDomainSet, typeOverrides]);
 
   const totalCit = totalCitations(allDomains);
-  const typeBreakdown = useMemo(
-    () =>
-      countByDomainType(allDomains, {
-        ownDomains: ownDomainSet,
-        competitorDomains: competitorDomainSet,
-      }),
-    [allDomains, ownDomainSet, competitorDomainSet],
-  );
+  const typeBreakdown = useMemo(() => {
+    const totals: Partial<Record<string, number>> = {};
+    let grand = 0;
+    for (const d of allDomains) {
+      const t = domainTypeFor.get(d.domain) ?? "Other";
+      totals[t] = (totals[t] ?? 0) + d.citations;
+      grand += d.citations;
+    }
+    return DOMAIN_TYPES
+      .map((type) => ({
+        type,
+        citations: totals[type] ?? 0,
+        share: grand > 0 ? ((totals[type] ?? 0) / grand) * 100 : 0,
+      }))
+      .filter((r) => r.citations > 0);
+  }, [allDomains, domainTypeFor]);
 
   // ── Brand-selection narrows table (filter to chats that contain selected brands)
   // We can't easily re-filter aggregateDomainsFull post-hoc by brand without recomputing,
@@ -383,7 +391,7 @@ export default function DomainsClient({
           <div className="urls-types-header">
             <div className="urls-chart-title">Domain types</div>
             <div className="urls-types-total">
-              Total citations: {totalCit.toLocaleString()}
+              Total retrievals: {totalCit.toLocaleString()}
             </div>
           </div>
           <div className="urls-types-list">
@@ -600,16 +608,32 @@ export default function DomainsClient({
                     />
                     <span className="domains-source-name">{d.domain}</span>
                   </td>
-                  <td>
+                  <td style={{ position: "relative" }}>
                     <span
                       className="urls-pill"
                       style={{
-                        color: DOMAIN_TYPE_COLORS[dt],
-                        background: `${DOMAIN_TYPE_COLORS[dt]}1A`,
+                        color: (DOMAIN_TYPE_COLORS as Record<string, string>)[dt] ?? "#64748b",
+                        background: `${(DOMAIN_TYPE_COLORS as Record<string, string>)[dt] ?? "#64748b"}1A`,
+                        cursor: "pointer",
+                        userSelect: "none",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenTypeDropdown(openTypeDropdown === d.domain ? null : d.domain);
                       }}
                     >
                       {dt}
                     </span>
+                    {openTypeDropdown === d.domain && (
+                      <TypeDropdown
+                        domain={d.domain}
+                        currentType={dt}
+                        defaultType={classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet)}
+                        onSelect={(type) => setTypeOverrides((prev) => new Map(prev).set(d.domain, type))}
+                        onReset={() => setTypeOverrides((prev) => { const m = new Map(prev); m.delete(d.domain); return m; })}
+                        onClose={() => setOpenTypeDropdown(null)}
+                      />
+                    )}
                   </td>
                   <td className="urls-td-num">
                     <span className="urls-num-primary">{d.retrievedShare.toFixed(1)}%</span>
