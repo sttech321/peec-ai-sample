@@ -123,7 +123,6 @@ export function countByDomainType(
     Institutional: 0,
     Related: 0,
     Other: 0,
-    Related: 0,
   };
   let grand = 0;
   for (const d of domains) {

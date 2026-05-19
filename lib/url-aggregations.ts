@@ -349,7 +349,7 @@ export function totalRetrievals(urls: UrlAgg[]): number {
   return n;
 }
 
-// Shorten URL for table display: domain + path with mid-truncation
+// Shorten URL for table display: domain + path with mid-truncation 
 export function displayUrl(url: string, domain: string): string {
   if (!url) return domain;
   try {
