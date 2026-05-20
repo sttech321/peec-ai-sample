@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Plus, Check } from "lucide-react";
 import { MAX_TOPICS, SetupTopic } from "../../lib/setup-types";
 
@@ -19,31 +19,39 @@ function uid(): string {
 export default function TopicsStep({ topics, onChange, onBack, onNext }: Props) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
+  const [addError, setAddError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const toggle = (id: string) => {
     onChange(topics.map((t) => (t.id === id ? { ...t, selected: !t.selected } : t)));
   };
 
+  const openAdd = () => {
+    setAddError("");
+    setAdding(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   const addCustom = () => {
     const name = draft.trim();
-    if (!name) return;
+    if (!name) { setAdding(false); setDraft(""); return; }
     if (topics.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
-      setDraft("");
+      setAddError("Topic already exists");
       return;
     }
-    if (topics.length >= MAX_TOPICS) return;
     onChange([
       ...topics,
-      {
-        id: uid(),
-        name,
-        custom: true,
-        selected: true,
-        prompts: [],
-      },
+      { id: uid(), name, custom: true, selected: true, prompts: [] },
     ]);
     setDraft("");
     setAdding(false);
+    setAddError("");
+  };
+
+  const cancelAdd = () => {
+    setAdding(false);
+    setDraft("");
+    setAddError("");
   };
 
   const selectedCount = topics.filter((t) => t.selected).length;
@@ -52,7 +60,7 @@ export default function TopicsStep({ topics, onChange, onBack, onNext }: Props) 
     <div className="step3">
       <div className="step3-counter-row">
         <span className="step3-counter-label">Select topics</span>
-        <span className="step3-counter">{selectedCount}/{MAX_TOPICS}</span>
+        <span className="step3-counter">{selectedCount}/{Math.max(MAX_TOPICS, topics.length)}</span>
       </div>
 
       <div className="step3-list">
@@ -71,29 +79,44 @@ export default function TopicsStep({ topics, onChange, onBack, onNext }: Props) 
           </button>
         ))}
 
-        {adding ? (
+        {/* Add custom input row */}
+        {adding && (
           <div className="step3-add-row">
             <input
+              ref={inputRef}
               className="step3-add-input"
               autoFocus
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => { setDraft(e.target.value); setAddError(""); }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") addCustom();
-                if (e.key === "Escape") { setAdding(false); setDraft(""); }
+                if (e.key === "Escape") cancelAdd();
               }}
-              placeholder="Topic name..."
+              placeholder="Enter topic name..."
             />
-            <button type="button" className="step3-add-confirm" onClick={addCustom}>Add</button>
-            <button type="button" className="step3-add-cancel" onClick={() => { setAdding(false); setDraft(""); }}>×</button>
-          </div>
-        ) : (
-          topics.length < MAX_TOPICS && (
-            <button type="button" className="step3-add-btn" onClick={() => setAdding(true)}>
-              <Plus size={13} /> Add custom
+            <button type="button" className="step3-add-confirm" onClick={addCustom}>
+              Add
             </button>
-          )
+            <button type="button" className="step3-add-cancel" onClick={cancelAdd}>
+              ×
+            </button>
+          </div>
         )}
+
+        {/* + Add custom link — always visible and always clickable */}
+        {!adding && (
+          <button
+            type="button"
+            className="step3-add-link"
+            onClick={openAdd}
+          >
+            <Plus size={12} />
+            Add custom
+          </button>
+        )}
+
+        {/* Error message */}
+        {addError && <p className="step3-add-error">{addError}</p>}
       </div>
 
       <div className="setup-nav setup-nav--row">

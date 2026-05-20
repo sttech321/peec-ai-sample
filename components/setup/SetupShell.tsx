@@ -13,8 +13,9 @@ export default function SetupShell({ left, right, onLogout }: Props) {
   return (
     <div className="setup-shell">
       <header className="setup-shell-header">
-        <div className="setup-shell-logo">
+        <div className="setup-shell-brand">
           <div className="setup-shell-logo-box" />
+          <span className="setup-shell-brand-name">Peec AI</span>
         </div>
         <button
           type="button"

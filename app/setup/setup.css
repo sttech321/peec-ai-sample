@@ -19,6 +19,19 @@
   border-bottom: 1px solid #f1f5f9;
 }
 
+.setup-shell-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setup-shell-brand-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.2px;
+}
+
 .setup-shell-logo-box {
   width: 22px;
   height: 22px;
@@ -87,7 +100,10 @@
 .setup-shell-right {
   background: #f8fafc;
   overflow-y: auto;
-  padding: 32px 24px;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .setup-shell-footer {
@@ -144,6 +160,19 @@
   color: #64748b;
   margin: 0;
   line-height: 1.5;
+}
+.wz-stepper-bar {
+  height: 3px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  margin: 8px 0 16px;
+  overflow: hidden;
+}
+.wz-stepper-bar-fill {
+  height: 100%;
+  background: #6366f1;
+  border-radius: 999px;
+  transition: width 0.4s ease;
 }
 
 /* ── Step 1 ──────────────────────────────────────────────────────── */
@@ -501,6 +530,35 @@
   color: #6366f1;
   border-style: solid;
 }
+
+/* PEEC AI-style "+ Add custom" inline link */
+.step3-add-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 4px;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.step3-add-link:hover:not(:disabled) {
+  color: #6366f1;
+}
+.step3-add-link--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.step3-add-error {
+  font-size: 11.5px;
+  color: #dc2626;
+  margin: 0;
+  padding: 0 4px;
+}
 .step3-add-row {
   display: flex;
   align-items: center;
@@ -615,8 +673,8 @@
   flex: 1;
 }
 .step4-add-prompt {
-  margin-top: 8px;
-  padding: 8px;
+  margin-top: 6px;
+  padding: 6px 4px;
   font-size: 12px;
 }
 
@@ -992,4 +1050,94 @@
   color: #475569;
   padding: 6px 4px;
   line-height: 1.5;
+}
+
+/* Step 3 topics preview */
+.pv-step3-preview {
+  border: 1.5px solid #6366f1;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 16px;
+  background: #fafbff;
+}
+.pv-step3-topic-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  font-size: 12px;
+  color: #334155;
+}
+.pv-step3-check {
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #6366f1;
+}
+.pv-step3-check--on {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+}
+.pv-step3-topic-name {
+  flex: 1;
+  font-weight: 500;
+  color: #0f172a;
+}
+.pv-step3-custom {
+  font-size: 9px;
+  font-weight: 700;
+  color: #6366f1;
+  background: #eef2ff;
+  padding: 2px 5px;
+  border-radius: 999px;
+}
+.pv-step3-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 11.5px;
+  color: #166534;
+}
+
+/* Active topic highlight in prompts preview */
+.pv-mock-twocol-row--active {
+  background: #eef2ff;
+  color: #4338ca;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+/* Blue-bordered topics box inside step 3 preview (matches PEEC AI) */
+.pv-step3-topics-box {
+  border: 1.5px solid #6366f1;
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #fafbff;
+}
+.pv-step3-box-row {
+  font-size: 11px;
+  color: #334155;
+  padding: 4px 2px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
