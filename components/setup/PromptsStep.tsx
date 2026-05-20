@@ -113,7 +113,7 @@ export default function PromptsStep({ topics, onChange, onBack, onFinish, loadin
                           if (e.key === "Enter") addCustomPrompt(topic.id);
                           if (e.key === "Escape") { setAddingFor(null); setDraft(""); }
                         }}
-                        placeholder="Prompt text..."
+                        placeholder="Enter your prompt..."
                       />
                       <button type="button" className="step3-add-confirm" onClick={() => addCustomPrompt(topic.id)}>
                         Add
@@ -125,15 +125,13 @@ export default function PromptsStep({ topics, onChange, onBack, onFinish, loadin
                       >×</button>
                     </div>
                   ) : (
-                    topic.prompts.length < MAX_PROMPTS_PER_TOPIC + 10 && (
-                      <button
-                        type="button"
-                        className="step3-add-btn step4-add-prompt"
-                        onClick={() => setAddingFor(topic.id)}
-                      >
-                        <Plus size={12} /> Add custom
-                      </button>
-                    )
+                    <button
+                      type="button"
+                      className="step3-add-link step4-add-prompt"
+                      onClick={() => setAddingFor(topic.id)}
+                    >
+                      <Plus size={12} /> Add custom
+                    </button>
                   )}
                 </div>
               )}

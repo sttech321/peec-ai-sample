@@ -114,50 +114,70 @@ export const runPromptPipeline = inngest.createFunction(
       return await extractBrandsWithLLM(aiResponse.text);
     });
 
-    // 5. Persist Brand Mentions — auto-create the brand row on first sight so
-    //    the prompt dashboard (which reads brand_mentions JOIN brands) is
-    //    populated immediately, without a manual promotion step.
+    // 5. Persist Brand Mentions.
+    //    - Known brands (already in `brands` table) → create a brandMention record.
+    //    - Unknown brands → upsert into `brandSuggestions` so users can review
+    //      and accept/reject them. Never auto-create brands; that bypasses the
+    //      review workflow.
     if (extractedBrands.length > 0) {
       await step.run("persist-brand-mentions", async () => {
-        const { brands, brandMentions, prompts } = await import("../db/schema");
+        const { brands, brandMentions, brandSuggestions, prompts } = await import("../db/schema");
         const { eq, and } = await import("drizzle-orm");
 
         const promptRecord = await db.select().from(prompts).where(eq(prompts.id, promptId));
         const projectId = promptRecord[0].projectId;
 
         for (const brand of extractedBrands) {
-           const rawName = brand.brandId || brand.name || brand.mentionText;
-           const brandName = typeof rawName === "string" ? rawName.trim() : "";
-           if (!brandName) continue;
+          const rawName = brand.brandId || brand.name || brand.mentionText;
+          const brandName = typeof rawName === "string" ? rawName.trim() : "";
+          if (!brandName) continue;
 
-           let brandId: string;
-           const existingBrand = await db.select({ id: brands.id }).from(brands).where(
-              and(eq(brands.projectId, projectId), eq(brands.name, brandName))
-           );
+          // Check if this brand is already tracked
+          const existingBrand = await db
+            .select({ id: brands.id })
+            .from(brands)
+            .where(and(eq(brands.projectId, projectId), eq(brands.name, brandName)));
 
-           if (existingBrand.length > 0) {
-             brandId = existingBrand[0].id;
-           } else {
-             const [created] = await db.insert(brands).values({
-               workspaceId,
-               projectId,
-               name: brandName,
-               isOwn: false,
-               aliases: [],
-               domains: [],
-             }).returning({ id: brands.id });
-             brandId = created.id;
-           }
+          if (existingBrand.length > 0) {
+            // Tracked brand → record the mention
+            await db.insert(brandMentions).values({
+              workspaceId,
+              chatId,
+              brandId: existingBrand[0].id,
+              position:    typeof brand.position  === "number" ? brand.position  : null,
+              sentiment:   typeof brand.sentiment === "number" ? brand.sentiment : null,
+              confidence:  typeof brand.confidence === "number" ? brand.confidence : null,
+              mentionText: brand.mentionText || brandName,
+            });
+          } else {
+            // Untracked brand → upsert into suggestions so the user can review
+            const existingSug = await db
+              .select({ id: brandSuggestions.id, mentions: brandSuggestions.mentions })
+              .from(brandSuggestions)
+              .where(and(
+                eq(brandSuggestions.projectId, projectId),
+                eq(brandSuggestions.name, brandName),
+              ));
 
-           await db.insert(brandMentions).values({
-             workspaceId,
-             chatId,
-             brandId,
-             position: typeof brand.position === "number" ? brand.position : null,
-             sentiment: typeof brand.sentiment === "number" ? brand.sentiment : null,
-             confidence: typeof brand.confidence === "number" ? brand.confidence : null,
-             mentionText: brand.mentionText || brandName
-           });
+            if (existingSug.length > 0) {
+              await db
+                .update(brandSuggestions)
+                .set({
+                  mentions: (existingSug[0].mentions ?? 0) + 1,
+                  updatedAt: new Date(),
+                })
+                .where(eq(brandSuggestions.id, existingSug[0].id));
+            } else {
+              await db.insert(brandSuggestions).values({
+                workspaceId,
+                projectId,
+                name: brandName,
+                domain: null,
+                mentions: 1,
+                status: "pending",
+              });
+            }
+          }
         }
       });
     }

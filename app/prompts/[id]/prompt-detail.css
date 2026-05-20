@@ -1157,9 +1157,9 @@
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
   transition: left 0.18s;
 }
-.pd-recent-toggle-on .pd-recent-toggle-track { background: #6366f1; }
+.pd-recent-toggle-on .pd-recent-toggle-track { background: #16a34a; }
 .pd-recent-toggle-on .pd-recent-toggle-thumb { left: 14px; }
-.pd-recent-toggle-on .pd-recent-toggle-label { color: #4338ca; font-weight: 600; }
+.pd-recent-toggle-on .pd-recent-toggle-label { color: #15803d; font-weight: 600; }
 
 /* Position chip in the chat-card header (shown only when own brand is mentioned). */
 .pd-chat-position {
@@ -2187,7 +2187,7 @@
   font-weight: 600;
   white-space: nowrap;
 }
-.pd-chat-yesno-yes { color: #16a34a; background: #f0fdf4; }
+.pd-chat-yesno-yes { color: #15803d; background: #dcfce7; font-weight: 700; }
 .pd-chat-yesno-no  { color: #64748b; background: #f1f5f9; }
 
 .pd-chat-pos-cell { white-space: nowrap; }

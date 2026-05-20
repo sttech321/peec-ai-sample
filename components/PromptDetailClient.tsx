@@ -868,8 +868,16 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
       <div className="pd-section">
         <div className="pd-domains-header-row">
           <div>
-            <h2 className="pd-section-title">Recent Chats</h2>
-            <p className="pd-section-subtitle">Individual AI responses for this prompt</p>
+            <h2 className="pd-section-title">
+              {mentionedOnly
+                ? `Recent ${ownBrand ?? prompt.projectName} Mentions`
+                : "Recent Chats"}
+            </h2>
+            <p className="pd-section-subtitle">
+              {mentionedOnly
+                ? `Filtered to chats where ${ownBrand ?? prompt.projectName} was mentioned`
+                : "Individual AI responses for this prompt"}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-slate-400 font-medium">

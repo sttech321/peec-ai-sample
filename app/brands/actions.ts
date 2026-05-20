@@ -45,12 +45,17 @@ export async function createBrand(data: {
   projectId: string;
   workspaceId: string;
   name: string;
+  isOwn?: boolean;
   aliases: string[];
   domains: string[];
 }) {
   await db.insert(brands).values({
-    ...data,
-    isOwn: false,
+    projectId: data.projectId,
+    workspaceId: data.workspaceId,
+    name: data.name,
+    isOwn: data.isOwn ?? false,
+    aliases: data.aliases,
+    domains: data.domains,
   });
   revalidatePath("/brands");
 }

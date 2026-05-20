@@ -179,15 +179,88 @@ export default function PreviewPane({ state }: Props) {
     );
   }
 
-  if (step === 3 || step === 4) {
+  if (step === 3) {
+    const selectedTopics = topics.filter((t) => t.selected);
     return (
       <div className="pv-mock">
         <h3 className="pv-mock-title">Prompts</h3>
-        <div className="pv-mock-chips" style={{ marginBottom: 16 }}>
+
+        {/* skeleton engine chips */}
+        <div className="pv-mock-chips" style={{ marginBottom: 14 }}>
           {[...Array(6)].map((_, i) => (
             <span key={i} className="pv-skel pv-skel-chip" />
           ))}
         </div>
+
+        {/* Two-column panel matching PEEC AI preview */}
+        <div className="pv-mock-twocol">
+          <div className="pv-mock-twocol-left">
+            <div className="pv-mock-twocol-header">
+              <span>📁</span>
+              <span>Topics</span>
+            </div>
+            <div className="pv-mock-twocol-row pv-mock-twocol-row--muted" style={{ fontSize: 11 }}>
+              All topics
+            </div>
+            <div className="pv-mock-twocol-row pv-mock-twocol-row--muted" style={{ fontSize: 11 }}>
+              + Add topic
+            </div>
+            <div className="pv-mock-twocol-divider" />
+            {/* Selected topics in blue-bordered box */}
+            <div className="pv-step3-topics-box">
+              {selectedTopics.length === 0
+                ? [...Array(4)].map((_, i) => (
+                    <div key={i} className="pv-step3-box-row">
+                      <span className="pv-skel pv-skel-line" style={{ width: `${55 + (i % 3) * 14}%` }} />
+                    </div>
+                  ))
+                : selectedTopics.slice(0, 8).map((t) => (
+                    <div key={t.id} className="pv-step3-box-row">
+                      {t.name.length > 24 ? t.name.slice(0, 24) + "…" : t.name}
+                    </div>
+                  ))}
+            </div>
+          </div>
+
+          <div className="pv-mock-twocol-right">
+            <div className="pv-mock-twocol-header">
+              <span>📋</span>
+              <span className="pv-skel pv-skel-line" style={{ width: 100 }} />
+            </div>
+            <div className="pv-mock-search">
+              <span>🔍</span>
+              <span>Search prompts</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 4px", fontSize: 11, color: "#94a3b8" }}>
+              <span>📋</span>
+              <span>Prompt</span>
+            </div>
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="pv-mock-prompt-row">
+                <span className="pv-skel pv-skel-line" style={{ width: `${55 + (i % 3) * 15}%` }} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {selectedTopics.length > 0 && (
+          <div className="pv-step3-note" style={{ marginTop: 12 }}>
+            <span style={{ fontSize: 13 }}>📋</span>
+            <span>{selectedTopics.length} topic{selectedTopics.length !== 1 ? "s" : ""} selected — each generates up to 8 prompts</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (step === 4) {
+    const selectedTopics = topics.filter((t) => t.selected);
+    const firstTopic = selectedTopics[0];
+    const selectedPrompts = firstTopic?.prompts.filter((p) => p.selected) ?? [];
+    return (
+      <div className="pv-mock">
+        <h3 className="pv-mock-title">Prompts preview</h3>
+        <p className="pv-mock-subtitle">These prompts will be sent to AI engines to track your brand mentions.</p>
 
         <div className="pv-mock-twocol">
           <div className="pv-mock-twocol-left">
@@ -195,21 +268,13 @@ export default function PreviewPane({ state }: Props) {
               <span>📁</span>
               <span>Topics</span>
             </div>
-            <div className="pv-mock-twocol-row pv-mock-twocol-row--muted">
-              <span>📁</span>
-              <span>All topics</span>
-            </div>
-            <div className="pv-mock-twocol-row pv-mock-twocol-row--muted">
-              <span>+</span>
-              <span>Add topic</span>
-            </div>
             <div className="pv-mock-twocol-divider" />
-            {topics.filter((t) => t.selected).slice(0, 6).map((t) => (
-              <div key={t.id} className="pv-mock-twocol-row">
+            {selectedTopics.slice(0, 7).map((t) => (
+              <div key={t.id} className={`pv-mock-twocol-row ${t.id === firstTopic?.id ? "pv-mock-twocol-row--active" : ""}`}>
                 {t.name.length > 22 ? t.name.slice(0, 22) + "…" : t.name}
               </div>
             ))}
-            {topics.filter((t) => t.selected).length === 0 &&
+            {selectedTopics.length === 0 &&
               [...Array(5)].map((_, i) => (
                 <div key={i} className="pv-mock-twocol-row">
                   <span className="pv-skel pv-skel-line" style={{ width: "80%" }} />
@@ -218,23 +283,19 @@ export default function PreviewPane({ state }: Props) {
           </div>
           <div className="pv-mock-twocol-right">
             <div className="pv-mock-twocol-header">
-              <span>📁</span>
-              {step === 4 ? (
-                <span>{topics.find((t) => t.selected)?.name || "Topic"}</span>
-              ) : (
-                <span className="pv-skel pv-skel-line" style={{ width: 120 }} />
-              )}
+              <span>📋</span>
+              <span>{firstTopic?.name || "Select a topic"}</span>
             </div>
             <div className="pv-mock-search">
               <span>🔍</span>
               <span>Search prompts</span>
             </div>
-            {step === 4 && topics.find((t) => t.selected)?.prompts.filter((p) => p.selected).slice(0, 8).map((p) => (
+            {selectedPrompts.slice(0, 6).map((p) => (
               <div key={p.id} className="pv-mock-prompt-row">
                 {p.text}
               </div>
             ))}
-            {step === 3 && [...Array(6)].map((_, i) => (
+            {selectedPrompts.length === 0 && [...Array(5)].map((_, i) => (
               <div key={i} className="pv-mock-prompt-row">
                 <span className="pv-skel pv-skel-line" style={{ width: `${60 + (i % 3) * 15}%` }} />
               </div>
