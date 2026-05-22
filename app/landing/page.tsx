@@ -27,12 +27,14 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             <Link
               href="/sign-in"
+              prefetch={false}
               className="px-4 py-[7px] text-sm font-medium text-[#333] border border-[#d8d8d8] rounded-md bg-white hover:bg-[#f5f5f5] transition-colors"
             >
               Log in
             </Link>
             <Link
               href="/sign-up"
+              prefetch={false}
               className="px-4 py-[7px] text-sm font-semibold text-white bg-[#1a1a1a] rounded-md hover:bg-[#333] transition-colors"
             >
               Sign up
@@ -79,6 +81,7 @@ export default function LandingPage() {
             </Link>
             <Link
               href="/sign-up"
+              prefetch={false}
               className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#1a1a1a] rounded-md hover:bg-[#333] transition-colors shadow-sm"
             >
               Start Free Trial

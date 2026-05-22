@@ -133,7 +133,7 @@ function SignUpCustom() {
           ← Use a different email
         </button>
         <p className="su-footer" style={{ marginTop: 20 }}>
-          Already have an account? <Link href="/sign-in" className="su-link">Login</Link>
+          Already have an account? <Link href="/sign-in" prefetch={false} className="su-link">Login</Link>
         </p>
       </div>
     );
@@ -197,7 +197,7 @@ function AuthForm({ mode, email, loading, error, devLink, onEmailChange, onSubmi
 
       <p className="su-footer">
         {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-        <Link href={isSignUp ? "/sign-in" : "/sign-up"} className="su-link">
+        <Link href={isSignUp ? "/sign-in" : "/sign-up"} prefetch={false} className="su-link">
           {isSignUp ? "Login" : "Sign up"}
         </Link>
       </p>
