@@ -175,7 +175,7 @@ function SignInUI({ email, loading, error, sent, devLink, onEmailChange, onSubmi
       )}
 
       <p className="su-footer">
-        Don&apos;t have an account? <Link href="/sign-up" className="su-link">Sign up</Link>
+        Don&apos;t have an account? <Link href="/sign-up" prefetch={false} className="su-link">Sign up</Link>
       </p>
     </div>
   );

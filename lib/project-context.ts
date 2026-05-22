@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { db } from "../db";
 import { projects, brands } from "../db/schema";
@@ -6,7 +7,7 @@ import { and, eq } from "drizzle-orm";
 const FALLBACK_WORKSPACE_ID = "00000000-0000-0000-0000-000000000000";
 const ACTIVE_PROJECT_COOKIE = "active_project_id";
 
-export async function getWorkspaceId(): Promise<string> {
+export const getWorkspaceId = cache(async (): Promise<string> => {
   // Try Clerk first
   try {
     const { auth } = await import("@clerk/nextjs/server");
@@ -32,13 +33,13 @@ export async function getWorkspaceId(): Promise<string> {
   }
 
   return FALLBACK_WORKSPACE_ID;
-}
+});
 
 /**
  * Get the active project ID from cookie, or return the first project's ID.
  * If no projects exist, creates a "Default Project" automatically.
  */
-export async function getActiveProjectId(): Promise<string> {
+export const getActiveProjectId = cache(async (): Promise<string> => {
   const workspaceId = await getWorkspaceId();
   const cookieStore = await cookies();
   const stored = cookieStore.get(ACTIVE_PROJECT_COOKIE)?.value;
@@ -66,7 +67,7 @@ export async function getActiveProjectId(): Promise<string> {
   }).returning();
 
   return inserted[0].id;
-}
+});
 
 async function fetchProjectDomains(projectIds: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
@@ -96,7 +97,7 @@ async function fetchProjectDomains(projectIds: string[]): Promise<Map<string, st
 /**
  * Get all projects for the workspace, including each project's own-brand domain.
  */
-export async function getAllProjects() {
+export const getAllProjects = cache(async () => {
   const workspaceId = await getWorkspaceId();
 
   const rows = await db
@@ -127,12 +128,12 @@ export async function getAllProjects() {
     ...p,
     domain: domainByProject.get(p.id) ?? p.domain ?? null,
   }));
-}
+});
 
 /**
  * Get the active project details, including its own-brand domain.
  */
-export async function getActiveProject() {
+export const getActiveProject = cache(async () => {
   const projectId = await getActiveProjectId();
   const [project] = await db
     .select({ id: projects.id, name: projects.name })
@@ -146,6 +147,6 @@ export async function getActiveProject() {
     ...project!,
     domain: domainByProject.get(projectId) ?? null,
   };
-}
+});
 
 export const WORKSPACE = FALLBACK_WORKSPACE_ID;

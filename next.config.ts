@@ -1,7 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "react-icons",
+      "recharts",
+      "d3-geo",
+      "react-simple-maps",
+    ],
+  },
 };
 
 export default nextConfig;
