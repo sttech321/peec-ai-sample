@@ -69,15 +69,26 @@ async function handler(req: Request) {
         { status: 500 },
       );
     }
-    console.warn("[run-daily-scan] Inngest unreachable — running inline.");
-    await runPipelineForAllEngines(jobs);
-    return NextResponse.json({
-      ok: true,
-      dispatched: jobs.length,
-      mode: "inline",
-      prompts: activePrompts.length,
-      engines,
+    // Inngest unreachable: kick off the pipeline in the background so the HTTP
+    // request returns immediately. Without this, a single scan that fans out
+    // to N prompts × M engines blocks the request for minutes while real AI
+    // API calls run serially — and the client UI freezes / times out.
+    console.warn(
+      "[run-daily-scan] Inngest unreachable — running inline in background.",
+    );
+    void runPipelineForAllEngines(jobs).catch((bgErr) => {
+      console.error("[run-daily-scan] inline pipeline failed:", bgErr);
     });
+    return NextResponse.json(
+      {
+        ok: true,
+        dispatched: jobs.length,
+        mode: "inline-background",
+        prompts: activePrompts.length,
+        engines,
+      },
+      { status: 202 },
+    );
   }
 }
 
