@@ -19,6 +19,14 @@ interface PendingInvite {
   expiresAt: string;
 }
 
+interface RolePermission {
+  view: boolean;
+  edit: boolean;
+  runScans: boolean;
+  manageMembers: boolean;
+  workspaceSettings: boolean;
+}
+
 interface Props {
   members: Member[];
   pendingInvites: PendingInvite[];
@@ -28,12 +36,14 @@ interface Props {
   workspaceId: string;
   roleLabels: Record<string, string>;
   roleColors: Record<string, string>;
+  roleDescriptions: Record<string, string>;
+  rolePermissions: Record<string, RolePermission>;
 }
 
 const ROLE_OPTIONS = [
-  { value: "company_member", label: "Company Member" },
-  { value: "project_member", label: "Project Member" },
-  { value: "project_viewer", label: "Project Viewer" },
+  { value: "company_member", label: "Company Member",  desc: "Manage members + edit everything" },
+  { value: "project_member", label: "Project Member",  desc: "Edit projects & brands, no member mgmt" },
+  { value: "project_viewer", label: "Project Viewer",  desc: "View-only, no editing" },
 ];
 
 function getInitial(email: string) {
@@ -46,6 +56,17 @@ function RoleBadge({ role, roleLabels, roleColors }: { role: string; roleLabels:
   return <span className={`member-badge ${colorClass}`}>{label}</span>;
 }
 
+const CHECK = "✓";
+const CROSS = "✗";
+
+function PermIcon({ ok }: { ok: boolean }) {
+  return (
+    <span style={{ color: ok ? "#16a34a" : "#dc2626", fontWeight: 700, fontSize: 13 }}>
+      {ok ? CHECK : CROSS}
+    </span>
+  );
+}
+
 export default function MembersClient({
   members: initialMembers,
   pendingInvites: initialInvites,
@@ -55,6 +76,8 @@ export default function MembersClient({
   workspaceId,
   roleLabels,
   roleColors,
+  roleDescriptions,
+  rolePermissions,
 }: Props) {
   const router = useRouter();
   const [members, setMembers] = useState(initialMembers);
@@ -160,6 +183,11 @@ export default function MembersClient({
                   <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
+              {inviteRole && (
+                <p className="invite-role-desc">
+                  {ROLE_OPTIONS.find(r => r.value === inviteRole)?.desc}
+                </p>
+              )}
             </div>
             <button className="invite-btn" type="submit" disabled={inviting}>
               {inviting ? "Sending…" : "Send invite"}
@@ -253,6 +281,43 @@ export default function MembersClient({
                     </div>
                   </td>
                 )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Role permissions summary */}
+      <div className="role-permissions-section">
+        <p className="members-table-title" style={{ marginBottom: 12 }}>Role permissions</p>
+        <table className="members-table">
+          <thead>
+            <tr>
+              <th>Permission</th>
+              <th>Company Member</th>
+              <th>Project Member</th>
+              <th>Project Viewer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              { key: "view",              label: "View dashboards & reports" },
+              { key: "edit",              label: "Edit projects, prompts & brands" },
+              { key: "runScans",          label: "Run AI scans" },
+              { key: "manageMembers",     label: "Invite / remove members" },
+              { key: "workspaceSettings", label: "Workspace settings" },
+            ].map(({ key, label }) => (
+              <tr key={key}>
+                <td style={{ fontSize: 13, color: "#374151" }}>{label}</td>
+                <td style={{ textAlign: "center" }}>
+                  <PermIcon ok={rolePermissions.company_member?.[key as keyof RolePermission] ?? false} />
+                </td>
+                <td style={{ textAlign: "center" }}>
+                  <PermIcon ok={rolePermissions.project_member?.[key as keyof RolePermission] ?? false} />
+                </td>
+                <td style={{ textAlign: "center" }}>
+                  <PermIcon ok={rolePermissions.project_viewer?.[key as keyof RolePermission] ?? false} />
+                </td>
               </tr>
             ))}
           </tbody>

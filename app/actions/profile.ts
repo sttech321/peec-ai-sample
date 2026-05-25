@@ -3,7 +3,7 @@
 import { db } from "../../db";
 import { brandProfiles, projects } from "../../db/schema";
 import { eq } from "drizzle-orm";
-import { getActiveProjectId, WORKSPACE } from "../../lib/project-context";
+import { getActiveProjectId, getWorkspaceId } from "../../lib/project-context";
 import { revalidatePath } from "next/cache";
 import {
   BrandProfile,
@@ -70,8 +70,9 @@ export async function saveBrandProfile(
       .set({ data: profile, updatedAt: new Date() })
       .where(eq(brandProfiles.id, existing.id));
   } else {
+    const workspaceId = await getWorkspaceId();
     await db.insert(brandProfiles).values({
-      workspaceId: WORKSPACE,
+      workspaceId,
       projectId,
       data: profile,
     });

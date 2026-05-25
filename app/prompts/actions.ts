@@ -3,14 +3,14 @@
 import { db } from "../../db";
 import { prompts, topics, tags, promptTags } from "../../db/schema";
 import { revalidatePath } from "next/cache";
-import { getActiveProjectId, WORKSPACE } from "../../lib/project-context";
+import { getActiveProjectId, getWorkspaceId } from "../../lib/project-context";
 import { runPipelineForAllEngines, type PipelineJob } from "../../lib/run-pipeline";
 import { DEFAULT_ENGINES } from "../../lib/ai-clients";
 import { and, eq, inArray } from "drizzle-orm";
 
 export async function addPrompt(formData: FormData) {
   const query = formData.get("query") as string;
-  const workspaceId = WORKSPACE;
+  const workspaceId = await getWorkspaceId();
 
   if (!query || query.trim() === "") return;
 
@@ -56,7 +56,7 @@ export async function createTopic(args: {
   if (name.length > 255) return { ok: false, error: "Topic name too long" };
 
   const count = Math.max(1, Math.min(50, Math.floor(Number(args.promptsPerTopic) || 10)));
-  const workspaceId = WORKSPACE;
+  const workspaceId = await getWorkspaceId();
   const projectId = await getActiveProjectId();
 
   const existing = await db
@@ -124,7 +124,7 @@ function generatePromptStems(
 }
 
 export async function runNow(promptId: string, query: string, selectedEngines?: string[]) {
-  const workspaceId = WORKSPACE;
+  const workspaceId = await getWorkspaceId();
   const engines = selectedEngines && selectedEngines.length > 0
     ? selectedEngines
     : DEFAULT_ENGINES;
@@ -165,7 +165,7 @@ export async function assignTagToPromptByName(args: {
   if (name.length > 100) return { ok: false, error: "Tag name too long" };
 
   const projectId = await getActiveProjectId();
-  const workspaceId = WORKSPACE;
+  const workspaceId = await getWorkspaceId();
 
   // 1. Find or create the tag.
   let [existing] = await db
@@ -240,7 +240,7 @@ export async function updatePromptSettings(args: {
   location: string;
   tagIds: string[];
 }): Promise<{ ok: boolean; error?: string }> {
-  const workspaceId = WORKSPACE;
+  const workspaceId = await getWorkspaceId();
   const location = (args.location || "US").toUpperCase().slice(0, 2);
 
   await db
@@ -291,7 +291,7 @@ export async function addPromptsBulk(args: {
   location: string;
   tagIds: string[];
 }): Promise<{ ok: boolean; inserted: number; error?: string }> {
-  const workspaceId = WORKSPACE;
+  const workspaceId = await getWorkspaceId();
   const projectId = await getActiveProjectId();
 
   const cleaned = args.texts
@@ -360,7 +360,7 @@ export async function addPromptsBulk(args: {
 export async function addPromptsFromCsv(args: {
   csvText: string;
 }): Promise<{ ok: boolean; inserted: number; error?: string }> {
-  const workspaceId = WORKSPACE;
+  const workspaceId = await getWorkspaceId();
   const projectId = await getActiveProjectId();
 
   const rows = parseCsv(args.csvText);
@@ -528,7 +528,7 @@ export async function batchAssignTag(args: {
   if (ids.length === 0) return { ok: false, assigned: 0, error: "No prompts" };
 
   const projectId = await getActiveProjectId();
-  const workspaceId = WORKSPACE;
+  const workspaceId = await getWorkspaceId();
 
   // Find-or-create tag in this project.
   let [tag] = await db

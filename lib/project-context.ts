@@ -1,8 +1,9 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { db } from "../db";
-import { projects, brands } from "../db/schema";
+import { projects, brands, workspaces, workspaceMembers } from "../db/schema";
 import { and, eq } from "drizzle-orm";
+import { users } from "../db/schema";
 
 const FALLBACK_WORKSPACE_ID = "00000000-0000-0000-0000-000000000000";
 const ACTIVE_PROJECT_COOKIE = "active_project_id";
@@ -53,6 +54,52 @@ export const getWorkspaceId = cache(async (): Promise<string> => {
   }
 
   return FALLBACK_WORKSPACE_ID;
+});
+
+/**
+ * Get the current user's role by reading from the DB on every request.
+ * This ensures role changes (via the Members page) take effect immediately
+ * without requiring the user to log out and back in.
+ */
+export const getCurrentRole = cache(async (): Promise<string> => {
+  try {
+    const { verifySession, SESSION_COOKIE } = await import("./session");
+    const cookieStore = await cookies();
+    const raw = cookieStore.get(SESSION_COOKIE)?.value;
+    if (!raw) return "project_viewer";
+
+    const session = verifySession(raw);
+    if (!session?.email) return "project_viewer";
+
+    const workspaceId = await getWorkspaceId();
+
+    // Check if this user owns the workspace
+    const [ownerRow] = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .innerJoin(users, eq(workspaces.ownerUserId, users.id))
+      .where(and(eq(workspaces.id, workspaceId), eq(users.email, session.email)))
+      .limit(1);
+
+    if (ownerRow) return "owner";
+
+    // Look up the member's current role from the DB
+    const [member] = await db
+      .select({ role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.email, session.email),
+      ))
+      .limit(1);
+
+    if (member) return member.role;
+
+    // Fall back to whatever is in the session cookie
+    return session.role ?? "project_viewer";
+  } catch {
+    return "project_viewer";
+  }
 });
 
 /**
@@ -169,4 +216,3 @@ export const getActiveProject = cache(async () => {
   };
 });
 
-export const WORKSPACE = FALLBACK_WORKSPACE_ID;

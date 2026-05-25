@@ -5,7 +5,8 @@ import MembersClient from "../../components/MembersClient";
 import { db } from "../../db";
 import { workspaceMembers, workspaceInvitations } from "../../db/schema";
 import { verifySession, SESSION_COOKIE } from "../../lib/session";
-import { canManageMembers, ROLE_LABELS, ROLE_COLORS } from "../../lib/permissions";
+import { canManageMembers, ROLE_LABELS, ROLE_COLORS, ROLE_DESCRIPTIONS, ROLE_PERMISSIONS } from "../../lib/permissions";
+import { getCurrentRole } from "../../lib/project-context";
 import "./members.css";
 
 export default async function MembersPage() {
@@ -14,7 +15,7 @@ export default async function MembersPage() {
   const session = raw ? verifySession(raw) : null;
   const workspaceId = session?.workspaceId ?? "";
   const currentEmail = session?.email ?? "";
-  const currentRole = session?.role ?? "project_viewer";
+  const currentRole = await getCurrentRole();
   const canManage = canManageMembers(currentRole);
 
   const members = await db
@@ -61,6 +62,8 @@ export default async function MembersPage() {
         workspaceId={workspaceId}
         roleLabels={ROLE_LABELS}
         roleColors={ROLE_COLORS}
+        roleDescriptions={ROLE_DESCRIPTIONS}
+        rolePermissions={ROLE_PERMISSIONS}
       />
     </DashboardLayout>
   );
