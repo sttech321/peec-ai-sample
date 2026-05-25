@@ -126,14 +126,7 @@ export const getActiveProjectId = cache(async (): Promise<string> => {
     .where(eq(projects.workspaceId, workspaceId))
     .limit(1);
 
-  if (firstProject) return firstProject.id;
-
-  const inserted = await db.insert(projects).values({
-    workspaceId,
-    name: "Default Project",
-  }).returning();
-
-  return inserted[0].id;
+  return firstProject?.id ?? FALLBACK_WORKSPACE_ID;
 });
 
 async function fetchProjectDomains(projectIds: string[]): Promise<Map<string, string>> {

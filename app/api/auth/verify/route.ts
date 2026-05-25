@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "../../../../db";
-import { magicLinkTokens, workspaces, workspaceMembers } from "../../../../db/schema";
+import { magicLinkTokens, projects, workspaceMembers } from "../../../../db/schema";
 import { signSession, SESSION_COOKIE, SETUP_DONE_COOKIE, SESSION_MAX_AGE } from "../../../../lib/session";
 import { upsertUser } from "../../../../lib/upsert-user";
 
@@ -43,10 +43,10 @@ export async function GET(req: NextRequest) {
       .limit(1);
 
     // Check if their own workspace already has projects (returning user)
-    const [ownWorkspace] = await db
-      .select({ id: workspaces.id })
-      .from(workspaces)
-      .where(eq(workspaces.id, workspaceId))
+    const [firstProject] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.workspaceId, workspaceId))
       .limit(1);
 
     let finalWorkspaceId = workspaceId;
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
       finalWorkspaceId = membership.workspaceId;
       finalRole = membership.role;
       destination = "/";
-    } else if (ownWorkspace) {
+    } else if (firstProject) {
       destination = "/";
     }
 

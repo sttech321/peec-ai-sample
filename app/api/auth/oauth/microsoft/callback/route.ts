@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { db } from "../../../../../../db";
+import { projects, workspaceMembers } from "../../../../../../db/schema";
 import { signSession, SESSION_COOKIE, SETUP_DONE_COOKIE, SESSION_MAX_AGE } from "../../../../../../lib/session";
 import { exchangeMicrosoftCode } from "../../../../../../lib/oauth";
 import { upsertUser } from "../../../../../../lib/upsert-user";
@@ -32,9 +35,35 @@ export async function GET(req: NextRequest) {
       email, name: name ?? undefined, provider: "microsoft", role: "owner",
     });
 
-    const response = NextResponse.redirect(new URL("/", req.url));
-    response.cookies.set(SESSION_COOKIE, signSession({ email, userId, workspaceId, role: "owner" }), COOKIE_OPTS(SESSION_MAX_AGE));
-    response.cookies.set(SETUP_DONE_COOKIE, "1", COOKIE_OPTS(SESSION_MAX_AGE));
+    const [membership] = await db
+      .select({ workspaceId: workspaceMembers.workspaceId, role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.email, email))
+      .limit(1);
+
+    const [firstProject] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.workspaceId, workspaceId))
+      .limit(1);
+
+    let finalWorkspaceId = workspaceId;
+    let finalRole = "owner";
+    let destination = "/setup";
+
+    if (membership) {
+      finalWorkspaceId = membership.workspaceId;
+      finalRole = membership.role;
+      destination = "/";
+    } else if (firstProject) {
+      destination = "/";
+    }
+
+    const response = NextResponse.redirect(new URL(destination, req.url));
+    response.cookies.set(SESSION_COOKIE, signSession({ email, userId, workspaceId: finalWorkspaceId, role: finalRole }), COOKIE_OPTS(SESSION_MAX_AGE));
+    if (destination === "/") {
+      response.cookies.set(SETUP_DONE_COOKIE, "1", COOKIE_OPTS(SESSION_MAX_AGE));
+    }
     response.cookies.delete("oauth_state");
     return response;
   } catch (err) {
