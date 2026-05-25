@@ -7,6 +7,8 @@ import { and, eq } from "drizzle-orm";
 const FALLBACK_WORKSPACE_ID = "00000000-0000-0000-0000-000000000000";
 const ACTIVE_PROJECT_COOKIE = "active_project_id";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const getWorkspaceId = cache(async (): Promise<string> => {
   // Try Clerk first
   try {
@@ -25,8 +27,26 @@ export const getWorkspaceId = cache(async (): Promise<string> => {
     const raw = cookieStore.get(SESSION_COOKIE)?.value;
     if (raw) {
       const session = verifySession(raw);
-      if (session?.workspaceId) return session.workspaceId;
-      if (session?.email) return session.email;
+      if (session?.workspaceId) {
+        const wid = session.workspaceId;
+        if (UUID_RE.test(wid)) return wid;
+
+        // Legacy: workspaceId is an email string (old format before UUID migration).
+        // Auto-create the user + workspace so queries don't crash.
+        if (wid.includes("@")) {
+          try {
+            const { upsertUser } = await import("./upsert-user");
+            const { workspaceId } = await upsertUser({
+              email: wid,
+              provider: "magic_link",
+              role: "owner",
+            });
+            return workspaceId;
+          } catch {
+            // DB not ready — fall through to fallback
+          }
+        }
+      }
     }
   } catch {
     // cookies not available in this context

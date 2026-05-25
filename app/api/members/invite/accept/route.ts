@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { db } from "../../../../../db";
 import { workspaceInvitations, workspaceMembers } from "../../../../../db/schema";
 import { signSession, SESSION_COOKIE, SETUP_DONE_COOKIE, SESSION_MAX_AGE } from "../../../../../lib/session";
+import { upsertUser } from "../../../../../lib/upsert-user";
 
 const COOKIE_OPTS = (maxAge: number) => ({
   httpOnly: true,
@@ -56,8 +57,15 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const { userId } = await upsertUser({
+      email: invite.email,
+      provider: "magic_link",
+      role: invite.role,
+    });
+
     const sessionPayload = {
       email: invite.email,
+      userId,
       workspaceId: invite.workspaceId,
       role: invite.role,
     };
