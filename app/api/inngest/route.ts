@@ -1,12 +1,12 @@
 import { serve } from "inngest/next";
 import { inngest } from "../../../inngest/client";
 
-// Lazy-load the function definitions on first request so that visiting any
-// unrelated page doesn't drag in the inngest module graph (which transitively
-// pulls db, db/schema, lib/ai-clients, lib/generate-actions). On a slow disk
-// that's 10–20s of compilation the first time it's touched.
+export const dynamic = "force-dynamic";
+
 type AppHandler = (req: Request) => Promise<Response> | Response;
 type AppHandlers = { GET: AppHandler; POST: AppHandler; PUT: AppHandler };
+
+const ok = () => new Response("ok", { status: 200 });
 
 let handlersPromise: Promise<AppHandlers> | null = null;
 
@@ -27,17 +27,20 @@ function getHandlers(): Promise<AppHandlers> {
   return handlersPromise;
 }
 
-export async function GET(req: Request) {
-  const h = await getHandlers();
-  return h.GET(req);
+async function handle(method: "GET" | "POST" | "PUT", req: Request): Promise<Response> {
+  try {
+    const h = await getHandlers();
+    return await h[method](req);
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException & { cause?: { code?: string } })?.cause?.code;
+    if (code === "ECONNREFUSED" || code === "ENOTFOUND") {
+      console.warn("[inngest] No Inngest server reachable — skipping registration.");
+      return ok();
+    }
+    throw err;
+  }
 }
 
-export async function POST(req: Request) {
-  const h = await getHandlers();
-  return h.POST(req);
-}
-
-export async function PUT(req: Request) {
-  const h = await getHandlers();
-  return h.PUT(req);
-}
+export function GET(req: Request) { return handle("GET", req); }
+export function POST(req: Request) { return handle("POST", req); }
+export function PUT(req: Request) { return handle("PUT", req); }

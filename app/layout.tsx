@@ -39,5 +39,9 @@ export default function RootLayout({
 
   if (!isClerkConfigured) return body;
 
-  return <ClerkProvider>{body}</ClerkProvider>;
+  return (
+    <ClerkProvider afterSignOutUrl="/sign-in">
+      {body}
+    </ClerkProvider>
+  );
 }
