@@ -154,7 +154,13 @@ export default function ProjectSwitcher({
             Add new project
           </button>
 
-          <button className="ps-logout-btn">
+          <button
+            className="ps-logout-btn"
+            onClick={async () => {
+              await fetch("/api/auth/logout", { method: "POST" });
+              window.location.href = "/landing";
+            }}
+          >
             <LogOut size={13} />
             Logout
           </button>

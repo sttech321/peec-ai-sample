@@ -63,11 +63,44 @@ cp .env.example .env.local
 # 4. Push the database schema
 npx drizzle-kit push
 
-# 5. Start the development server
+# 5. Start the server
+
+# For functional testing (recommended — pre-compiles every route once,
+# then every page loads instantly):
+npm run preview
+
+# OR, only if you are actively editing code:
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) — you'll land on the sign-in page.
+
+> **Low-spec machines / client UAT:** always use `npm run preview`. `npm run dev` recompiles each route the first time it's visited, which can take 5–30 s per page on slow disks. `npm run preview` pays that cost once during `next build`, then serves every page instantly. If `.next/` grows large (>1 GB), run `npm run clean` to reset it.
+
+### Which command to use
+
+| Command | When to use | Speed |
+|---|---|---|
+| `npm run preview` | **Testing functionality** (clients, QA, UAT, demos) | Slow once (~2–5 min build), then instant page loads |
+| `npm run dev` | Editing code with hot reload | Slow on every first page visit (5–30 s compile) |
+| `npm run clean` | Wipe `.next/` cache if anything feels stale | — |
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Setup wizard's "Generate Brand Profile" takes 10–20 s | The AI provider is responding — not a framework issue | Wait. One-time onboarding cost. |
+| "Run Scan" button — page seems to hang | Not stuck — scans now run in the background | Refresh the page after a minute to see new data |
+| Hydration warnings in console (`bis_skin_checked`, `bis_register`, etc.) | Bitdefender browser extension injects DOM attributes before React hydrates | Disable Bitdefender Web Protection for `localhost:3000`, or ignore (cosmetic only) |
+| First `npm run preview` build feels slow on Windows | Windows Defender scanning every file write | Add `node_modules/` and `.next/` to Defender exclusions (Settings → Virus & threat protection → Manage settings → Exclusions) |
+| Generic slowness | Stale `.next/` cache | `npm run clean && npm run preview` |
+| `npm run dev` runs out of memory | Default Node heap too small | Run with `NODE_OPTIONS=--max-old-space-size=4096 npm run dev` |
+
+### Performance notes (already wired in)
+
+- **Scans don't block the UI.** `/api/run-daily-scan` returns `202` immediately; the actual AI engine calls run in the background.
+- **`/api/inngest` lazy-loads its module graph.** Visiting unrelated pages no longer drags in the inngest function definitions or their dependencies.
+- **Turbopack is enabled by default** in Next.js 16 (no extra config needed).
 
 ---
 
