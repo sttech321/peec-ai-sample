@@ -65,15 +65,25 @@ export const runPromptPipeline = inngest.createFunction(
       const modelSnapshot = aiResponse.ok
         ? aiResponse.modelSnapshot
         : `error:${aiResponse.modelSnapshot}`;
+      const runDateObj = new Date(runDate);
       const inserted = await db.insert(chats).values({
         workspaceId,
         promptId,
         engine,
         modelSnapshot,
-        runDate: new Date(runDate),
+        runDate: runDateObj,
         rawResponse,
-      }).returning({ id: chats.id });
-      return inserted[0].id;
+      }).onConflictDoNothing().returning({ id: chats.id });
+
+      if (inserted.length > 0) return inserted[0].id;
+
+      // Already exists (duplicate run same day) — fetch existing id
+      const [existing] = await db
+        .select({ id: chats.id })
+        .from(chats)
+        .where(eq(chats.promptId, promptId))
+        .limit(1);
+      return existing.id;
     });
 
     // Bail out early if the engine call failed — no citations / brands to extract.
