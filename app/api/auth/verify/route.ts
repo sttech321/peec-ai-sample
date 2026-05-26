@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../../../../db";
 import { magicLinkTokens, projects, workspaceMembers } from "../../../../db/schema";
 import { signSession, SESSION_COOKIE, SETUP_DONE_COOKIE, SESSION_MAX_AGE } from "../../../../lib/session";
+import { upsertUser } from "../../../../lib/upsert-user";
 
 const COOKIE_OPTS = (maxAge: number) => ({
   httpOnly: true,
@@ -14,10 +15,7 @@ const COOKIE_OPTS = (maxAge: number) => ({
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
-
-  if (!token) {
-    return NextResponse.redirect(new URL("/sign-in?error=missing_token", req.url));
-  }
+  if (!token) return NextResponse.redirect(new URL("/sign-in?error=missing_token", req.url));
 
   try {
     const [row] = await db
@@ -30,47 +28,45 @@ export async function GET(req: NextRequest) {
     if (row.used) return NextResponse.redirect(new URL("/sign-in?error=token_used", req.url));
     if (new Date() > row.expiresAt) return NextResponse.redirect(new URL("/sign-in?error=token_expired", req.url));
 
-    // Mark token as used
     await db.update(magicLinkTokens).set({ used: true }).where(eq(magicLinkTokens.id, row.id));
 
     const email = row.email.toLowerCase().trim();
 
-    // Check if this user has their own projects (owner)
-    const [existingProject] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(eq(projects.workspaceId, email))
-      .limit(1);
+    // Upsert user + workspace — always resolves to UUID workspaceId
+    const { userId, workspaceId } = await upsertUser({ email, provider: "magic_link", role: "owner" });
 
-    // Check if this user is an invited workspace member
+    // Check if this is a workspace member under someone else's workspace
     const [membership] = await db
-      .select()
+      .select({ workspaceId: workspaceMembers.workspaceId, role: workspaceMembers.role })
       .from(workspaceMembers)
       .where(eq(workspaceMembers.email, email))
       .limit(1);
 
-    let sessionPayload: { email: string; workspaceId: string; role: string };
-    let destination: string;
+    // Check if their own workspace already has projects (returning user)
+    const [firstProject] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.workspaceId, workspaceId))
+      .limit(1);
 
-    if (existingProject) {
-      sessionPayload = { email, workspaceId: email, role: "owner" };
+    let finalWorkspaceId = workspaceId;
+    let finalRole = "owner";
+    let destination = "/setup";
+
+    if (membership) {
+      finalWorkspaceId = membership.workspaceId;
+      finalRole = membership.role;
       destination = "/";
-    } else if (membership) {
-      sessionPayload = { email, workspaceId: membership.workspaceId, role: membership.role };
+    } else if (firstProject) {
       destination = "/";
-    } else {
-      sessionPayload = { email, workspaceId: email, role: "owner" };
-      destination = "/setup";
     }
 
-    const sessionValue = signSession(sessionPayload);
+    const sessionValue = signSession({ email, userId, workspaceId: finalWorkspaceId, role: finalRole });
     const response = NextResponse.redirect(new URL(destination, req.url));
     response.cookies.set(SESSION_COOKIE, sessionValue, COOKIE_OPTS(SESSION_MAX_AGE));
-
     if (destination === "/") {
       response.cookies.set(SETUP_DONE_COOKIE, "1", COOKIE_OPTS(SESSION_MAX_AGE));
     }
-
     return response;
   } catch (err) {
     console.error("verify error:", err);

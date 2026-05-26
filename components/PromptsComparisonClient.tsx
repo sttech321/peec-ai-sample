@@ -155,6 +155,8 @@ interface Props {
   batchDeleteAction: (args: {
     promptIds: string[];
   }) => Promise<{ ok: boolean; deleted: number }>;
+  canEdit?: boolean;
+  canRunScans?: boolean;
 }
 
 const TOPIC_LOCATIONS: { code: string; name: string; flag: string }[] = [
@@ -634,6 +636,8 @@ export default function PromptsComparisonClient({
   batchAssignTopicAction,
   batchSetActiveAction,
   batchDeleteAction,
+  canEdit = true,
+  canRunScans = true,
 }: Props) {
   // null = all brands; otherwise filter to selected brand IDs
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
@@ -1113,37 +1117,41 @@ export default function PromptsComparisonClient({
                 <span className="pp-counter-dot" />
                 {activeCount} / {totalCount}
               </span>
-              <button
-                className="pp-add-btn"
-                onClick={runBulkCrawl}
-                disabled={crawlState.running || filtered.length === 0}
-                title={
-                  filtered.length === 0
-                    ? "No prompts match the current filter"
-                    : `Crawl ${filtered.length} prompt(s) across ${selectedModels.length || ALL_ENGINES.length} engine(s)`
-                }
-                style={{
-                  background: crawlState.running ? "#94a3b8" : "#10b981",
-                  color: "white",
-                  marginRight: 8,
-                }}
-              >
-                {crawlState.running ? (
-                  <>
-                    <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
-                    Crawling {crawlState.done}/{crawlState.total}
-                  </>
-                ) : (
-                  <>
-                    <Play size={13} />
-                    Crawl Now
-                  </>
-                )}
-              </button>
-              <button className="pp-add-btn" onClick={() => setShowAddForm(true)}>
-                <Plus size={13} />
-                Add Prompt
-              </button>
+              {canRunScans && (
+                <button
+                  className="pp-add-btn"
+                  onClick={runBulkCrawl}
+                  disabled={crawlState.running || filtered.length === 0}
+                  title={
+                    filtered.length === 0
+                      ? "No prompts match the current filter"
+                      : `Crawl ${filtered.length} prompt(s) across ${selectedModels.length || ALL_ENGINES.length} engine(s)`
+                  }
+                  style={{
+                    background: crawlState.running ? "#94a3b8" : "#10b981",
+                    color: "white",
+                    marginRight: 8,
+                  }}
+                >
+                  {crawlState.running ? (
+                    <>
+                      <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+                      Crawling {crawlState.done}/{crawlState.total}
+                    </>
+                  ) : (
+                    <>
+                      <Play size={13} />
+                      Crawl Now
+                    </>
+                  )}
+                </button>
+              )}
+              {canEdit && (
+                <button className="pp-add-btn" onClick={() => setShowAddForm(true)}>
+                  <Plus size={13} />
+                  Add Prompt
+                </button>
+              )}
             </div>
           </div>
 
@@ -1413,22 +1421,26 @@ export default function PromptsComparisonClient({
                         <span className="pp-added">{formatRelativeTime(p.createdAt)}</span>
                       </td>
                       <td>
-                        <button
-                          className="pp-row-crawl-btn"
-                          disabled={rowCrawling.has(p.id) || crawlState.running}
-                          onClick={() => crawlOne(p.id, p.query)}
-                          title={`Run this prompt across ${(selectedModels.length || ALL_ENGINES.length)} engine(s)`}
-                        >
-                          {rowCrawling.has(p.id) ? (
-                            <Loader2
-                              size={13}
-                              style={{ animation: "spin 1s linear infinite" }}
-                            />
-                          ) : (
-                            <Play size={13} />
-                          )}
-                          <span>{rowCrawling.has(p.id) ? "Crawling…" : "Crawl"}</span>
-                        </button>
+                        {canRunScans ? (
+                          <button
+                            className="pp-row-crawl-btn"
+                            disabled={rowCrawling.has(p.id) || crawlState.running}
+                            onClick={() => crawlOne(p.id, p.query)}
+                            title={`Run this prompt across ${(selectedModels.length || ALL_ENGINES.length)} engine(s)`}
+                          >
+                            {rowCrawling.has(p.id) ? (
+                              <Loader2
+                                size={13}
+                                style={{ animation: "spin 1s linear infinite" }}
+                              />
+                            ) : (
+                              <Play size={13} />
+                            )}
+                            <span>{rowCrawling.has(p.id) ? "Crawling…" : "Crawl"}</span>
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: 12, color: "#aaa" }}>View only</span>
+                        )}
                       </td>
                     </tr>
                   ))

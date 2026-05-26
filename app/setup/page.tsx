@@ -122,9 +122,10 @@ export default function SetupPage() {
     });
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     sessionStorage.removeItem(STORAGE_KEY);
-    router.push("/");
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/landing";
   };
 
   // ── Render the current step ───────────────────────────────────────

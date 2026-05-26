@@ -7,8 +7,9 @@ export const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 export interface SessionPayload {
   email: string;
-  workspaceId: string; // owner's email — may differ for invited members
-  role: string;        // 'owner' | 'company_member' | 'project_member' | 'project_viewer
+  userId: string;      // UUID from users table
+  workspaceId: string; // UUID from workspaces table
+  role: string;        // owner | admin | member | viewer
 }
 
 export function signSession(data: SessionPayload): string {
@@ -26,9 +27,10 @@ export function verifySession(cookie: string): SessionPayload | null {
     const expected = createHmac("sha256", SECRET).update(payload).digest("base64url");
     if (sig !== expected) return null;
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    // Back-compat: old sessions only had { email }
+    // Back-compat: old sessions had { email, workspaceId (email string), role }
     return {
       email: data.email,
+      userId: data.userId ?? "",
       workspaceId: data.workspaceId ?? data.email,
       role: data.role ?? "owner",
     };

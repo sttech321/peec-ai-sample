@@ -2,6 +2,8 @@ import DashboardLayout from "../../components/DashboardLayout";
 import PromptsComparisonClient from "../../components/PromptsComparisonClient";
 import { guessBrandDomain } from "../../lib/brand-domain";
 import { db } from "../../db";
+import { canEdit as canEditFn, canRunScans as canRunScansFn } from "../../lib/permissions";
+import { getCurrentRole } from "../../lib/project-context";
 import {
   prompts,
   topics,
@@ -32,6 +34,10 @@ import { getActiveProjectId } from "../../lib/project-context";
 import "./prompts-comparison.css";
 
 export default async function PromptsPage() {
+  const role = await getCurrentRole();
+  const canEdit = canEditFn(role);
+  const canRunScans = canRunScansFn(role);
+
   const activeProjectId = await getActiveProjectId();
 
   // ── 0. Project name (for brand chip) ───────────────────────────────────────
@@ -507,6 +513,8 @@ export default async function PromptsPage() {
         batchAssignTopicAction={batchAssignTopic}
         batchSetActiveAction={batchSetActive}
         batchDeleteAction={batchDeletePrompts}
+        canEdit={canEdit}
+        canRunScans={canRunScans}
       />
     </DashboardLayout>
   );

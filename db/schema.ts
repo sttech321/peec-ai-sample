@@ -11,12 +11,67 @@ import {
   real,
   jsonb,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
-// Projects
+// ─── Users ────────────────────────────────────────────────────────────────────
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: varchar("email", { length: 255 }).notNull(),
+  name: varchar("name", { length: 255 }),
+  avatarUrl: text("avatar_url"),
+  provider: varchar("provider", { length: 50 }).default("magic_link").notNull(),
+  providerId: varchar("provider_id", { length: 255 }),
+  isVerified: boolean("is_verified").default(false).notNull(),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  emailIdx: uniqueIndex("users_email_idx").on(t.email),
+}));
+
+// ─── Roles ────────────────────────────────────────────────────────────────────
+export const roles = pgTable("roles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 50 }).notNull(), // owner | admin | member | viewer
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  nameIdx: uniqueIndex("roles_name_idx").on(t.name),
+}));
+
+// ─── Workspaces ───────────────────────────────────────────────────────────────
+// One workspace per user (owner). Members join via user_roles.
+export const workspaces = pgTable("workspaces", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }),
+  planTier: varchar("plan_tier", { length: 50 }).default("free").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  ownerIdx: index("workspaces_owner_idx").on(t.ownerUserId),
+  ownerUnique: uniqueIndex("workspaces_owner_unique").on(t.ownerUserId),
+}));
+
+// ─── User Roles ───────────────────────────────────────────────────────────────
+// Defines which role a user holds inside a workspace.
+export const userRoles = pgTable("user_roles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  roleId: uuid("role_id").notNull().references(() => roles.id, { onDelete: "restrict" }),
+  assignedBy: varchar("assigned_by", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  uniqueUserWorkspace: uniqueIndex("user_roles_unique").on(t.userId, t.workspaceId),
+  userIdx: index("user_roles_user_idx").on(t.userId),
+  workspaceIdx: index("user_roles_workspace_idx").on(t.workspaceId),
+  roleIdx: index("user_roles_role_idx").on(t.roleId),
+}));
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
 export const projects = pgTable("projects", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   domain: varchar("domain", { length: 255 }),
   allocatedPrompts: integer("allocated_prompts").default(100).notNull(),
@@ -32,229 +87,227 @@ export const projects = pgTable("projects", {
   timezone: varchar("timezone", { length: 100 }).default("America/New_York"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  workspaceIdx: index("projects_workspace_idx").on(table.workspaceId),
+}, (t) => ({
+  workspaceIdx: index("projects_workspace_idx").on(t.workspaceId),
 }));
 
-// Topics
+// ─── Topics ───────────────────────────────────────────────────────────────────
 export const topics = pgTable("topics", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  workspaceIdx: index("topics_workspace_idx").on(table.workspaceId),
-  projectIdx: index("topics_project_idx").on(table.projectId),
+}, (t) => ({
+  workspaceIdx: index("topics_workspace_idx").on(t.workspaceId),
+  projectIdx: index("topics_project_idx").on(t.projectId),
 }));
 
-// Prompts
+// ─── Prompts ──────────────────────────────────────────────────────────────────
 export const prompts = pgTable("prompts", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   topicId: uuid("topic_id").notNull().references(() => topics.id, { onDelete: "cascade" }),
   query: text("query").notNull(),
-  volumeTier: varchar("volume_tier", { length: 50 }).notNull(), // Very High, High, Medium, Low
-  // When false, the daily 6:00 AM UTC cron skips this prompt.
+  volumeTier: varchar("volume_tier", { length: 50 }).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
-  // ISO 3166-1 alpha-2 country code used as the location signal for prompt runs.
   location: varchar("location", { length: 2 }).default("US").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  workspaceIdx: index("prompts_workspace_idx").on(table.workspaceId),
-  projectIdx: index("prompts_project_idx").on(table.projectId),
-  topicIdx: index("prompts_topic_idx").on(table.topicId),
+}, (t) => ({
+  workspaceIdx: index("prompts_workspace_idx").on(t.workspaceId),
+  projectIdx: index("prompts_project_idx").on(t.projectId),
+  topicIdx: index("prompts_topic_idx").on(t.topicId),
 }));
 
-// Tags
+// ─── Tags ─────────────────────────────────────────────────────────────────────
 export const tags = pgTable("tags", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 100 }).notNull(),
   slug: varchar("slug", { length: 100 }),
   color: varchar("color", { length: 50 }).default("gray").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  workspaceIdx: index("tags_workspace_idx").on(table.workspaceId),
-  projectIdx: index("tags_project_idx").on(table.projectId),
+}, (t) => ({
+  workspaceIdx: index("tags_workspace_idx").on(t.workspaceId),
+  projectIdx: index("tags_project_idx").on(t.projectId),
 }));
 
-// PromptTags (Many-to-Many)
+// ─── PromptTags ───────────────────────────────────────────────────────────────
 export const promptTags = pgTable("prompt_tags", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   promptId: uuid("prompt_id").notNull().references(() => prompts.id, { onDelete: "cascade" }),
   tagId: uuid("tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
-}, (table) => ({
-  workspaceIdx: index("prompt_tags_workspace_idx").on(table.workspaceId),
-  promptIdx: index("prompt_tags_prompt_idx").on(table.promptId),
+}, (t) => ({
+  workspaceIdx: index("prompt_tags_workspace_idx").on(t.workspaceId),
+  promptIdx: index("prompt_tags_prompt_idx").on(t.promptId),
 }));
 
-// Brands
+// ─── Brands ───────────────────────────────────────────────────────────────────
 export const brands = pgTable("brands", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   isOwn: boolean("is_own").default(false).notNull(),
   aliases: text("aliases").array().notNull(),
   domains: text("domains").array().notNull(),
-}, (table) => ({
-  workspaceIdx: index("brands_workspace_idx").on(table.workspaceId),
-  projectIdx: index("brands_project_idx").on(table.projectId),
+}, (t) => ({
+  workspaceIdx: index("brands_workspace_idx").on(t.workspaceId),
+  projectIdx: index("brands_project_idx").on(t.projectId),
 }));
 
-// Chats (The AI response)
+// ─── Chats ────────────────────────────────────────────────────────────────────
 export const chats = pgTable("chats", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   promptId: uuid("prompt_id").notNull().references(() => prompts.id, { onDelete: "cascade" }),
-  engine: varchar("engine", { length: 100 }).notNull(), // ChatGPT, Claude, Perplexity, Gemini, AI Overviews
-  modelSnapshot: varchar("model_snapshot", { length: 100 }).notNull(), // e.g. gpt-5-2026-04-15
+  engine: varchar("engine", { length: 100 }).notNull(),
+  modelSnapshot: varchar("model_snapshot", { length: 100 }).notNull(),
   runDate: timestamp("run_date").notNull(),
   rawResponse: text("raw_response"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  workspaceIdx: index("chats_workspace_idx").on(table.workspaceId),
-  promptIdx: index("chats_prompt_idx").on(table.promptId),
-  engineDateIdx: index("chats_engine_date_idx").on(table.engine, table.runDate),
-  idempotencyIdx: uniqueIndex("chats_idempotency_idx").on(table.workspaceId, table.promptId, table.engine, table.runDate),
+}, (t) => ({
+  workspaceIdx: index("chats_workspace_idx").on(t.workspaceId),
+  promptIdx: index("chats_prompt_idx").on(t.promptId),
+  engineDateIdx: index("chats_engine_date_idx").on(t.engine, t.runDate),
+  idempotencyIdx: uniqueIndex("chats_idempotency_idx").on(t.workspaceId, t.promptId, t.engine, t.runDate),
 }));
 
-// Sources
+// ─── Sources ──────────────────────────────────────────────────────────────────
 export const sources = pgTable("sources", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   chatId: uuid("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
   url: text("url").notNull(),
   domain: varchar("domain", { length: 255 }).notNull(),
   title: text("title"),
-  category: varchar("category", { length: 100 }), // owned, editorial, reference, ugc
-}, (table) => ({
-  workspaceIdx: index("sources_workspace_idx").on(table.workspaceId),
-  chatIdx: index("sources_chat_idx").on(table.chatId),
-  domainIdx: index("sources_domain_idx").on(table.domain),
+  category: varchar("category", { length: 100 }),
+}, (t) => ({
+  workspaceIdx: index("sources_workspace_idx").on(t.workspaceId),
+  chatIdx: index("sources_chat_idx").on(t.chatId),
+  domainIdx: index("sources_domain_idx").on(t.domain),
 }));
 
-// Citations (Subset of sources with inline ref)
+// ─── Citations ────────────────────────────────────────────────────────────────
 export const citations = pgTable("citations", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   chatId: uuid("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
   sourceId: uuid("source_id").notNull().references(() => sources.id, { onDelete: "cascade" }),
   inlineRefMarker: varchar("inline_ref_marker", { length: 50 }),
-}, (table) => ({
-  workspaceIdx: index("citations_workspace_idx").on(table.workspaceId),
-  chatIdx: index("citations_chat_idx").on(table.chatId),
-  sourceIdx: index("citations_source_idx").on(table.sourceId),
+}, (t) => ({
+  workspaceIdx: index("citations_workspace_idx").on(t.workspaceId),
+  chatIdx: index("citations_chat_idx").on(t.chatId),
+  sourceIdx: index("citations_source_idx").on(t.sourceId),
 }));
 
-// Brand Profile (semantic configuration layer for the project — feeds AI prompt generation,
-// visibility scoring, and competitor analysis. One row per project.)
+// ─── Brand Profiles ───────────────────────────────────────────────────────────
 export const brandProfiles = pgTable("brand_profiles", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   data: jsonb("data").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: uniqueIndex("brand_profiles_project_idx").on(table.projectId),
-  workspaceIdx: index("brand_profiles_workspace_idx").on(table.workspaceId),
+}, (t) => ({
+  projectIdx: uniqueIndex("brand_profiles_project_idx").on(t.projectId),
+  workspaceIdx: index("brand_profiles_workspace_idx").on(t.workspaceId),
 }));
 
-// Brand Mentions
+// ─── Brand Mentions ───────────────────────────────────────────────────────────
 export const brandMentions = pgTable("brand_mentions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   chatId: uuid("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
   brandId: uuid("brand_id").notNull().references(() => brands.id, { onDelete: "cascade" }),
-  position: integer("position"), // rank 1, 2, 3...
-  sentiment: real("sentiment"), // 0-100 score
-  confidence: real("confidence"), // extraction confidence
+  position: integer("position"),
+  sentiment: real("sentiment"),
+  confidence: real("confidence"),
   mentionText: text("mention_text"),
-}, (table) => ({
-  workspaceIdx: index("brand_mentions_workspace_idx").on(table.workspaceId),
-  chatIdx: index("brand_mentions_chat_idx").on(table.chatId),
-  brandIdx: index("brand_mentions_brand_idx").on(table.brandId),
+}, (t) => ({
+  workspaceIdx: index("brand_mentions_workspace_idx").on(t.workspaceId),
+  chatIdx: index("brand_mentions_chat_idx").on(t.chatId),
+  brandIdx: index("brand_mentions_brand_idx").on(t.brandId),
 }));
 
-// Earned Actions (Recommendations)
+// ─── Earned Actions ───────────────────────────────────────────────────────────
 export const earnedActions = pgTable("earned_actions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
-  type: varchar("type", { length: 50 }).notNull(), // e.g., 'Listicle', 'Article', 'Reddit', 'Forum'
+  type: varchar("type", { length: 50 }).notNull(),
   title: text("title").notNull(),
   description: text("description").notNull(),
-  priority: varchar("priority", { length: 20 }).notNull(), // High, Medium, Low
-  status: varchar("status", { length: 20 }).default("todo").notNull(), // todo, done, declined
+  priority: varchar("priority", { length: 20 }).notNull(),
+  status: varchar("status", { length: 20 }).default("todo").notNull(),
   sourceUrl: text("source_url"),
   sourceDomain: varchar("source_domain", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index("earned_actions_project_idx").on(table.projectId),
-  workspaceIdx: index("earned_actions_workspace_idx").on(table.workspaceId),
+}, (t) => ({
+  projectIdx: index("earned_actions_project_idx").on(t.projectId),
+  workspaceIdx: index("earned_actions_workspace_idx").on(t.workspaceId),
 }));
 
-// Owned Actions (On-page recommendations)
+// ─── Owned Actions ────────────────────────────────────────────────────────────
 export const ownedActions = pgTable("owned_actions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description").notNull(),
-  priority: varchar("priority", { length: 20 }).notNull(), // High, Medium, Low
-  status: varchar("status", { length: 20 }).default("todo").notNull(), // todo, done, declined
+  priority: varchar("priority", { length: 20 }).notNull(),
+  status: varchar("status", { length: 20 }).default("todo").notNull(),
   pageUrl: text("page_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index("owned_actions_project_idx").on(table.projectId),
-  workspaceIdx: index("owned_actions_workspace_idx").on(table.workspaceId),
+}, (t) => ({
+  projectIdx: index("owned_actions_project_idx").on(t.projectId),
+  workspaceIdx: index("owned_actions_workspace_idx").on(t.workspaceId),
 }));
 
-// Brand Suggestions (Right sidebar on Brands page)
+// ─── Brand Suggestions ────────────────────────────────────────────────────────
 export const brandSuggestions = pgTable("brand_suggestions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   domain: varchar("domain", { length: 255 }),
   mentions: integer("mentions").default(0).notNull(),
-  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, accepted, rejected
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index("brand_suggestions_project_idx").on(table.projectId),
-  workspaceIdx: index("brand_suggestions_workspace_idx").on(table.workspaceId),
+}, (t) => ({
+  projectIdx: index("brand_suggestions_project_idx").on(t.projectId),
+  workspaceIdx: index("brand_suggestions_workspace_idx").on(t.workspaceId),
 }));
 
-// Analytics Snapshots (Daily metrics for charts)
+// ─── Analytics Snapshots ──────────────────────────────────────────────────────
 export const analyticsSnapshots = pgTable("analytics_snapshots", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   snapshotDate: timestamp("snapshot_date").notNull(),
   visibilityScore: real("visibility_score").default(0).notNull(),
   mentionCount: integer("mention_count").default(0).notNull(),
   citationCount: integer("citation_count").default(0).notNull(),
-  shareOfVoice: jsonb("share_of_voice"), // JSON of brand -> score
+  shareOfVoice: jsonb("share_of_voice"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index("analytics_snapshots_project_idx").on(table.projectId),
-  workspaceIdx: index("analytics_snapshots_workspace_idx").on(table.workspaceId),
-  dateIdx: index("analytics_snapshots_date_idx").on(table.snapshotDate),
+}, (t) => ({
+  projectIdx: index("analytics_snapshots_project_idx").on(t.projectId),
+  workspaceIdx: index("analytics_snapshots_workspace_idx").on(t.workspaceId),
+  dateIdx: index("analytics_snapshots_date_idx").on(t.snapshotDate),
 }));
 
-// Workspace members (accepted invites)
+// ─── Workspace Members ────────────────────────────────────────────────────────
+// Accepted workspace invitations. invitedBy stays varchar (email) — audit field.
 export const workspaceMembers = pgTable("workspace_members", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   email: varchar("email", { length: 255 }).notNull(),
   role: varchar("role", { length: 50 }).notNull(),
   invitedBy: varchar("invited_by", { length: 255 }).notNull(),
@@ -264,10 +317,10 @@ export const workspaceMembers = pgTable("workspace_members", {
   uniqueMember: uniqueIndex("workspace_members_unique").on(t.workspaceId, t.email),
 }));
 
-// Pending workspace invitations
+// ─── Workspace Invitations ────────────────────────────────────────────────────
 export const workspaceInvitations = pgTable("workspace_invitations", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   email: varchar("email", { length: 255 }).notNull(),
   role: varchar("role", { length: 50 }).notNull(),
   token: varchar("token", { length: 128 }).notNull(),
@@ -280,7 +333,8 @@ export const workspaceInvitations = pgTable("workspace_invitations", {
   workspaceIdx: index("workspace_invitations_workspace_idx").on(t.workspaceId),
 }));
 
-// Magic link tokens for custom email auth
+// ─── Magic Link Tokens ────────────────────────────────────────────────────────
+// Pre-auth table — no workspaceId, just email.
 export const magicLinkTokens = pgTable("magic_link_tokens", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: varchar("email", { length: 255 }).notNull(),
@@ -288,35 +342,35 @@ export const magicLinkTokens = pgTable("magic_link_tokens", {
   expiresAt: timestamp("expires_at").notNull(),
   used: boolean("used").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  tokenIdx: uniqueIndex("magic_link_tokens_token_idx").on(table.token),
-  emailIdx: index("magic_link_tokens_email_idx").on(table.email),
+}, (t) => ({
+  tokenIdx: uniqueIndex("magic_link_tokens_token_idx").on(t.token),
+  emailIdx: index("magic_link_tokens_email_idx").on(t.email),
 }));
 
-// Action History (audit log of every status change on earned/owned actions)
+// ─── Action History ───────────────────────────────────────────────────────────
 export const actionHistory = pgTable("action_history", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   actionId: uuid("action_id").notNull(),
-  actionKind: varchar("action_kind", { length: 10 }).notNull(), // 'earned' | 'owned'
-  status: varchar("status", { length: 20 }).notNull(),          // 'todo' | 'done' | 'declined'
-  changedBy: varchar("changed_by", { length: 255 }),
+  actionKind: varchar("action_kind", { length: 10 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull(),
+  changedBy: varchar("changed_by", { length: 255 }), // email — audit field, no FK
   changedAt: timestamp("changed_at").defaultNow().notNull(),
 }, (t) => ({
   actionIdx: index("action_history_action_idx").on(t.actionId),
   workspaceIdx: index("action_history_workspace_idx").on(t.workspaceId),
 }));
 
-// Competitors (Module 6)
+// ─── Competitors ──────────────────────────────────────────────────────────────
 export const competitors = pgTable("competitors", {
   id: uuid("id").primaryKey().defaultRandom(),
-  workspaceId: varchar("workspace_id", { length: 255 }).notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   domain: varchar("domain", { length: 255 }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index("competitors_project_idx").on(table.projectId),
-  workspaceIdx: index("competitors_workspace_idx").on(table.workspaceId),
+}, (t) => ({
+  projectIdx: index("competitors_project_idx").on(t.projectId),
+  workspaceIdx: index("competitors_workspace_idx").on(t.workspaceId),
 }));

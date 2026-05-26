@@ -2,19 +2,17 @@ import { NextResponse } from "next/server";
 import { db } from "../../../db";
 import { prompts } from "../../../db/schema";
 import { eq } from "drizzle-orm";
-import { inngest } from "../../../inngest/client";
 import { DEFAULT_ENGINES } from "../../../lib/ai-clients";
 import { runPipelineForAllEngines, type PipelineJob } from "../../../lib/run-pipeline";
 
 export const runtime = "nodejs";
 
-// Manual trigger for the daily prompt-crawl. Mirrors `scheduleDailyScans` in
-// inngest/functions.ts but firable on-demand for testing — the 6 AM UTC cron
-// is still the production source of truth.
+// Daily prompt-crawl trigger.
+// Called by Render Cron at 6 AM UTC: GET /api/run-daily-scan
 //
-// GET /api/run-daily-scan            -> all active prompts × all DEFAULT_ENGINES
-// GET /api/run-daily-scan?promptId=… -> one prompt × all DEFAULT_ENGINES
-// GET /api/run-daily-scan?engines=ChatGPT,Claude -> subset of engines
+// GET /api/run-daily-scan            → all active prompts × all DEFAULT_ENGINES
+// GET /api/run-daily-scan?promptId=… → one prompt × all DEFAULT_ENGINES
+// GET /api/run-daily-scan?engines=ChatGPT,Claude → subset of engines
 async function handler(req: Request) {
   const url = new URL(req.url);
   const promptIdFilter = url.searchParams.get("promptId");
@@ -35,61 +33,24 @@ async function handler(req: Request) {
   const jobs: PipelineJob[] = [];
   for (const p of activePrompts) {
     for (const engine of engines) {
-      jobs.push({
-        workspaceId: p.workspaceId,
-        promptId: p.id,
-        engine,
-        runDate,
-        query: p.query,
-      });
+      jobs.push({ workspaceId: p.workspaceId, promptId: p.id, engine, runDate, query: p.query });
     }
   }
 
-  // Try Inngest; fall back to inline pipeline when dev server is unreachable.
-  try {
-    await inngest.send(
-      jobs.map((j) => ({ name: "prompt.run" as const, data: j })),
-    );
-    return NextResponse.json({
-      ok: true,
-      dispatched: jobs.length,
-      mode: "inngest",
-      prompts: activePrompts.length,
-      engines,
-    });
-  } catch (err: unknown) {
-    const isConnErr =
-      err instanceof Error &&
-      ((err as NodeJS.ErrnoException).code === "ECONNREFUSED" ||
-        (err as NodeJS.ErrnoException).code === "ENOTFOUND" ||
-        err.message?.includes("fetch failed"));
-    if (!isConnErr) {
-      return NextResponse.json(
-        { ok: false, error: (err as Error)?.message ?? String(err) },
-        { status: 500 },
-      );
-    }
-    // Inngest unreachable: kick off the pipeline in the background so the HTTP
-    // request returns immediately. Without this, a single scan that fans out
-    // to N prompts × M engines blocks the request for minutes while real AI
-    // API calls run serially — and the client UI freezes / times out.
-    console.warn(
-      "[run-daily-scan] Inngest unreachable — running inline in background.",
-    );
-    void runPipelineForAllEngines(jobs).catch((bgErr) => {
-      console.error("[run-daily-scan] inline pipeline failed:", bgErr);
-    });
-    return NextResponse.json(
-      {
-        ok: true,
-        dispatched: jobs.length,
-        mode: "inline-background",
-        prompts: activePrompts.length,
-        engines,
-      },
-      { status: 202 },
-    );
-  }
+  console.log(
+    `[run-daily-scan] Starting ${jobs.length} jobs — ${activePrompts.length} prompts × ${engines.length} engines`,
+  );
+
+  void runPipelineForAllEngines(jobs).catch((err) => {
+    console.error("[run-daily-scan] pipeline error:", err);
+  });
+
+  return NextResponse.json({
+    ok: true,
+    dispatched: jobs.length,
+    prompts: activePrompts.length,
+    engines,
+  });
 }
 
 export { handler as GET, handler as POST };

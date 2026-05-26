@@ -343,6 +343,34 @@
   font-weight: 500;
 }
 
+/* Role description hint under invite role select */
+.invite-role-desc {
+  font-size: 11px;
+  color: #6b7280;
+  margin: 2px 0 0;
+}
+
+/* Role permissions summary section */
+.role-permissions-section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  padding: 20px 20px 0;
+}
+
+.role-permissions-section .members-table th:first-child,
+.role-permissions-section .members-table td:first-child {
+  text-align: left;
+}
+
+.role-permissions-section .members-table th:not(:first-child),
+.role-permissions-section .members-table td:not(:first-child) {
+  text-align: center;
+  width: 120px;
+}
+
 /* Read-only state (non-admin) */
 .members-readonly-notice {
   font-size: 13px;
