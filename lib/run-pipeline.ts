@@ -7,7 +7,7 @@ import {
   brands,
   prompts,
 } from "../db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { callAIEngine, extractBrandsWithLLM } from "./ai-clients";
 
 export type PipelineJob = {
@@ -18,115 +18,157 @@ export type PipelineJob = {
   query: string;
 };
 
-/**
- * Inline pipeline used as a fallback when the Inngest dev server is unreachable.
- * Mirrors the steps in `runPromptPipeline` (inngest/functions.ts) but without
- * step-level retries / idempotency — invoke from Inngest in production.
- */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  retries = 3,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await fn();
+      if (attempt > 1) console.log(`[pipeline] ✓ ${label} succeeded on attempt ${attempt}`);
+      return result;
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[pipeline] ✗ ${label} attempt ${attempt}/${retries} failed:`, err);
+      if (attempt < retries) await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+  }
+  throw lastErr;
+}
+
 export async function runPipelineForOneEngine(job: PipelineJob): Promise<void> {
   const { workspaceId, promptId, engine, runDate, query } = job;
+  console.log(`[pipeline] START engine=${engine} prompt=${promptId}`);
 
-  // 1. Call AI engine
-  const aiResponse = await callAIEngine(engine, query);
+  // Step 1: Call AI engine
+  const aiResponse = await withRetry(
+    () => callAIEngine(engine, query),
+    `call-ai-engine [${engine}]`,
+  );
+  console.log(`[pipeline] step=call-ai-engine ok=${aiResponse.ok} engine=${engine}`);
 
-  // 2. Persist chat (record failures too)
+  // Step 2: Persist chat (record failures too)
   const rawResponse = aiResponse.ok
     ? aiResponse.text
     : `[ERROR:${aiResponse.errorCode}] ${aiResponse.error}`;
   const modelSnapshot = aiResponse.ok
     ? aiResponse.modelSnapshot
     : `error:${aiResponse.modelSnapshot}`;
-  const [insertedChat] = await db
+
+  const runDateObj = new Date(runDate);
+  const insertedChat = await db
     .insert(chats)
-    .values({
-      workspaceId,
-      promptId,
-      engine,
-      modelSnapshot,
-      runDate: new Date(runDate),
-      rawResponse,
-    })
+    .values({ workspaceId, promptId, engine, modelSnapshot, runDate: runDateObj, rawResponse })
+    .onConflictDoNothing()
     .returning({ id: chats.id });
-  const chatId = insertedChat.id;
 
-  if (!aiResponse.ok) return;
+  let chatId: string;
+  if (insertedChat.length > 0) {
+    chatId = insertedChat[0].id;
+  } else {
+    // Duplicate run same day — fetch existing record
+    const [existing] = await db
+      .select({ id: chats.id })
+      .from(chats)
+      .where(eq(chats.promptId, promptId))
+      .limit(1);
+    chatId = existing.id;
+  }
+  console.log(`[pipeline] step=persist-chat chatId=${chatId}`);
 
-  // 3. Persist sources and citations   
-  if (aiResponse.citations && aiResponse.citations.length > 0) {
-    for (const citation of aiResponse.citations) {
-      const [insertedSource] = await db
-        .insert(sources)
-        .values({
-          workspaceId,
-          chatId,
-          url: citation.url,
-          domain: citation.domain || "unknown",
-          title: citation.title || "Unknown",
-        })
-        .returning({ id: sources.id });
-
-      await db.insert(citations).values({
-        workspaceId,
-        chatId,
-        sourceId: insertedSource.id,
-      });
-    }
+  if (!aiResponse.ok) {
+    console.warn(`[pipeline] engine=${engine} error — skipping citations/brands`);
+    return;
   }
 
-  // 4. Extract brands
-  const extractedBrands = await extractBrandsWithLLM(aiResponse.text);
-  if (extractedBrands.length === 0) return;
+  // Step 3: Persist sources and citations
+  if (aiResponse.citations && aiResponse.citations.length > 0) {
+    await withRetry(async () => {
+      for (const citation of aiResponse.citations) {
+        const [insertedSource] = await db
+          .insert(sources)
+          .values({
+            workspaceId, chatId,
+            url: citation.url,
+            domain: citation.domain || "unknown",
+            title: citation.title || "Unknown",
+          })
+          .returning({ id: sources.id });
 
-  // 5. Persist brand mentions (auto-create brand rows on first sight).
-  const [promptRecord] = await db
-    .select()
-    .from(prompts)
-    .where(eq(prompts.id, promptId));
+        await db.insert(citations).values({ workspaceId, chatId, sourceId: insertedSource.id });
+      }
+    }, `persist-citations [${engine}]`);
+    console.log(`[pipeline] step=persist-citations count=${aiResponse.citations.length}`);
+  }
+
+  // Step 4: Extract brands with LLM
+  const extractedBrands = await withRetry(
+    () => extractBrandsWithLLM(aiResponse.text),
+    `extract-brands [${engine}]`,
+  );
+  console.log(`[pipeline] step=extract-brands found=${extractedBrands.length}`);
+  if (extractedBrands.length === 0) {
+    console.log(`[pipeline] DONE engine=${engine} prompt=${promptId}`);
+    return;
+  }
+
+  // Step 5: Persist brand mentions / suggestions
+  const [promptRecord] = await db.select().from(prompts).where(eq(prompts.id, promptId));
   if (!promptRecord) return;
   const projectId = promptRecord.projectId;
 
-  for (const brand of extractedBrands) {
-    const rawName = brand.brandId || brand.name || brand.mentionText;
-    const brandName = typeof rawName === "string" ? rawName.trim() : "";
-    // Skip empty / placeholder extractions so we don't pollute the brands table.
-    if (!brandName) continue;
+  await withRetry(async () => {
+    for (const brand of extractedBrands) {
+      const rawName = brand.brandId || brand.name || brand.mentionText;
+      const brandName = typeof rawName === "string" ? rawName.trim() : "";
+      if (!brandName) continue;
 
-    let brandId: string;
-    const existingBrand = await db
-      .select({ id: brands.id })
-      .from(brands)
-      .where(and(eq(brands.projectId, projectId), eq(brands.name, brandName)));
+      const existingBrand = await db
+        .select({ id: brands.id })
+        .from(brands)
+        .where(and(
+          eq(brands.projectId, projectId),
+          or(
+            sql`lower(${brands.name}) = lower(${brandName})`,
+            sql`lower(${brandName}) = ANY(SELECT lower(unnest(${brands.aliases})))`,
+          ),
+        ))
+        .limit(1);
 
-    if (existingBrand.length > 0) {
-      brandId = existingBrand[0].id;
-    } else {
-      const [created] = await db
-        .insert(brands)
-        .values({
-          workspaceId,
-          projectId,
-          name: brandName,
-          isOwn: false,
-          aliases: [],
-          domains: [],
-        })
-        .returning({ id: brands.id });
-      brandId = created.id;
+      let brandId: string;
+      if (existingBrand.length > 0) {
+        brandId = existingBrand[0].id;
+      } else {
+        // Auto-create brand so mention is recorded immediately (visibility works)
+        const [created] = await db
+          .insert(brands)
+          .values({
+            workspaceId,
+            projectId,
+            name: brandName,
+            isOwn: false,
+            aliases: [],
+            domains: [],
+          })
+          .returning({ id: brands.id });
+        brandId = created.id;
+      }
+
+      await db.insert(brandMentions).values({
+        workspaceId, chatId,
+        brandId,
+        position:    typeof brand.position   === "number" ? brand.position   : null,
+        sentiment:   typeof brand.sentiment  === "number" ? brand.sentiment  : null,
+        confidence:  typeof brand.confidence === "number" ? brand.confidence : null,
+        mentionText: brand.mentionText || brandName,
+      });
     }
+  }, `persist-brand-mentions [${engine}]`);
 
-    // Store NULL when the LLM omits sentiment/position so SQL avg() ignores
-    // them instead of skewing toward fake defaults (50 / 1). Both columns are
-    // nullable in the schema.
-    await db.insert(brandMentions).values({
-      workspaceId,
-      chatId,
-      brandId,
-      position: typeof brand.position === "number" ? brand.position : null,
-      sentiment: typeof brand.sentiment === "number" ? brand.sentiment : null,
-      confidence: typeof brand.confidence === "number" ? brand.confidence : null,
-      mentionText: brand.mentionText || brandName,
-    });
-  }
+  console.log(`[pipeline] step=persist-brand-mentions engine=${engine} done`);
+  console.log(`[pipeline] DONE engine=${engine} prompt=${promptId}`);
 }
 
 export async function runPipelineForAllEngines(jobs: PipelineJob[]): Promise<void> {
@@ -134,10 +176,7 @@ export async function runPipelineForAllEngines(jobs: PipelineJob[]): Promise<voi
     try {
       await runPipelineForOneEngine(job);
     } catch (err) {
-      console.error(
-        `[run-pipeline] job failed for engine=${job.engine} prompt=${job.promptId}:`,
-        err,
-      );
+      console.error(`[pipeline] job FAILED engine=${job.engine} prompt=${job.promptId}:`, err);
     }
   }
 }
