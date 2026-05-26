@@ -13,9 +13,11 @@ const COOKIE_OPTS = (maxAge: number) => ({
   path: "/",
 });
 
+const baseUrl = () => process.env.NEXT_PUBLIC_APP_URL!.replace(/\/$/, "");
+
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
-  if (!token) return NextResponse.redirect(new URL("/sign-in?error=missing_token", req.url));
+  if (!token) return NextResponse.redirect(`${baseUrl()}/sign-in?error=missing_token`);
 
   try {
     const [row] = await db
@@ -24,9 +26,9 @@ export async function GET(req: NextRequest) {
       .where(eq(magicLinkTokens.token, token))
       .limit(1);
 
-    if (!row) return NextResponse.redirect(new URL("/sign-in?error=invalid_token", req.url));
-    if (row.used) return NextResponse.redirect(new URL("/sign-in?error=token_used", req.url));
-    if (new Date() > row.expiresAt) return NextResponse.redirect(new URL("/sign-in?error=token_expired", req.url));
+    if (!row) return NextResponse.redirect(`${baseUrl()}/sign-in?error=invalid_token`);
+    if (row.used) return NextResponse.redirect(`${baseUrl()}/sign-in?error=token_used`);
+    if (new Date() > row.expiresAt) return NextResponse.redirect(`${baseUrl()}/sign-in?error=token_expired`);
 
     await db.update(magicLinkTokens).set({ used: true }).where(eq(magicLinkTokens.id, row.id));
 
@@ -62,7 +64,7 @@ export async function GET(req: NextRequest) {
     }
 
     const sessionValue = signSession({ email, userId, workspaceId: finalWorkspaceId, role: finalRole });
-    const response = NextResponse.redirect(new URL(destination, req.url));
+    const response = NextResponse.redirect(`${baseUrl()}${destination}`);
     response.cookies.set(SESSION_COOKIE, sessionValue, COOKIE_OPTS(SESSION_MAX_AGE));
     if (destination === "/") {
       response.cookies.set(SETUP_DONE_COOKIE, "1", COOKIE_OPTS(SESSION_MAX_AGE));
@@ -70,6 +72,6 @@ export async function GET(req: NextRequest) {
     return response;
   } catch (err) {
     console.error("verify error:", err);
-    return NextResponse.redirect(new URL("/sign-in?error=server_error", req.url));
+    return NextResponse.redirect(`${baseUrl()}/sign-in?error=server_error`);
   }
 }
