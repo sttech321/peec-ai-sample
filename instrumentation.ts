@@ -81,7 +81,7 @@ export async function register() {
     await runScans();
     setTimeout(() => { void runActions(); }, ACTIONS_DELAY_MS);
   };
-
+ 
   // Daily at 6 AM UTC, repeat every 24 hours
   const msUntilNext6amUtc = () => {
     const now = new Date();
