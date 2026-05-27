@@ -63,6 +63,7 @@ interface PromptMetric {
   sov: number;
   sovTrend: number;
   location: string;
+  isActive: boolean;
 }
 
 interface Topic {
@@ -1266,6 +1267,7 @@ export default function PromptsComparisonClient({
                     Volume <span className="pp-beta-pill">Beta</span>{" "}
                     {renderSortIcon("volumeTier")}
                   </th>
+                  <th>Status</th>
                   <th>Tags</th>
                   <th
                     className="pp-th-sortable"
@@ -1291,7 +1293,7 @@ export default function PromptsComparisonClient({
               <tbody>
                 {activeTab !== "active" || paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="pp-empty-cell">
+                    <td colSpan={13} className="pp-empty-cell">
                       <div className="pp-empty">
                         <div className="pp-empty-icon">
                           <Layers size={28} />
@@ -1313,7 +1315,7 @@ export default function PromptsComparisonClient({
                   </tr>
                 ) : (
                   paginated.map((p) => (
-                    <tr key={p.id}>
+                    <tr key={p.id} style={!p.isActive ? { opacity: 0.45 } : undefined}>
                       <td className="pp-td-checkbox">
                         <input
                           type="checkbox"
@@ -1325,6 +1327,22 @@ export default function PromptsComparisonClient({
                         <a href={`/prompts/${p.id}`} className="pp-prompt-link">
                           {p.query}
                         </a>
+                        {!p.isActive && (
+                          <span style={{
+                            marginLeft: 8,
+                            fontSize: 10,
+                            fontWeight: 600,
+                            letterSpacing: "0.04em",
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            background: "#f1f5f9",
+                            color: "#94a3b8",
+                            border: "1px solid #e2e8f0",
+                            verticalAlign: "middle",
+                          }}>
+                            PAUSED
+                          </span>
+                        )}
                       </td>
                       <td>
                         <div className="pp-cell-stack">
@@ -1384,6 +1402,27 @@ export default function PromptsComparisonClient({
                       </td>
                       <td>
                         <VolumeBars tier={p.volumeTier} />
+                      </td>
+                      <td>
+                        {p.isActive ? (
+                          <span style={{
+                            display: "inline-flex", alignItems: "center", gap: 4,
+                            fontSize: 11, fontWeight: 600, padding: "2px 8px",
+                            borderRadius: 20, background: "#dcfce7", color: "#16a34a",
+                          }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#16a34a" }} />
+                            Active
+                          </span>
+                        ) : (
+                          <span style={{
+                            display: "inline-flex", alignItems: "center", gap: 4,
+                            fontSize: 11, fontWeight: 600, padding: "2px 8px",
+                            borderRadius: 20, background: "#f1f5f9", color: "#94a3b8",
+                          }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#94a3b8" }} />
+                            Deactive
+                          </span>
+                        )}
                       </td>
                       <td>
                         <PromptTagsCell
@@ -2568,6 +2607,7 @@ function BatchActionsBar({
 }) {
   const [showTagPicker, setShowTagPicker] = useState(false);
   const [showTopicPicker, setShowTopicPicker] = useState(false);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -2680,23 +2720,41 @@ function BatchActionsBar({
           )}
         </div>
 
-        {activeTab === "active" ? (
+        <div className="pp-batch-action-wrap">
           <button
             className="pp-batch-btn"
             disabled={busy}
-            onClick={() => toggleActive(false)}
+            onClick={() => {
+              setShowStatusPicker((v) => !v);
+              setShowTagPicker(false);
+              setShowTopicPicker(false);
+            }}
           >
-            <Archive size={13} /> Deactivate
+            <Archive size={13} /> Status <ChevronDown size={11} />
           </button>
-        ) : (
-          <button
-            className="pp-batch-btn"
-            disabled={busy}
-            onClick={() => toggleActive(true)}
-          >
-            <Check size={13} /> Activate
-          </button>
-        )}
+          {showStatusPicker && (
+            <div className="pp-batch-popover">
+              <div className="pp-batch-popover-list">
+                <button
+                  className="pp-batch-popover-item"
+                  onClick={async () => { setShowStatusPicker(false); await toggleActive(true); }}
+                  disabled={busy}
+                >
+                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#10b981", marginRight: 6 }} />
+                  Active
+                </button>
+                <button
+                  className="pp-batch-popover-item"
+                  onClick={async () => { setShowStatusPicker(false); await toggleActive(false); }}
+                  disabled={busy}
+                >
+                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#94a3b8", marginRight: 6 }} />
+                  Deactive
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <button
           className="pp-batch-btn pp-batch-btn-danger"
