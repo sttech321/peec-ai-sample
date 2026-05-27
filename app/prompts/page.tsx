@@ -57,6 +57,7 @@ export default async function PromptsPage() {
       topicId: prompts.topicId,
       topicName: topics.name,
       location: prompts.location,
+      isActive: prompts.isActive,
     })
     .from(prompts)
     .leftJoin(topics, eq(prompts.topicId, topics.id))
@@ -403,6 +404,7 @@ export default async function PromptsPage() {
       sov,
       sovTrend,
       location: (p.location || "US").toUpperCase(),
+      isActive: p.isActive ?? true,
     };
   });
 
