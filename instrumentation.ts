@@ -7,12 +7,16 @@ export async function register() {
     console.log(`[cron] ${new Date().toISOString()} — Starting daily scan`);
     try {
       const { db }                    = await import("./db");
-      const { prompts }               = await import("./db/schema");
-      const { eq }                    = await import("drizzle-orm");
+      const { prompts, projects }     = await import("./db/schema");
+      const { eq, and }               = await import("drizzle-orm");
       const { DEFAULT_ENGINES }       = await import("./lib/ai-clients");
       const { runPipelineForAllEngines } = await import("./lib/run-pipeline");
 
-      const activePrompts = await db.select().from(prompts).where(eq(prompts.isActive, true));
+      const activePrompts = await db
+        .select({ id: prompts.id, workspaceId: prompts.workspaceId, query: prompts.query })
+        .from(prompts)
+        .innerJoin(projects, eq(prompts.projectId, projects.id))
+        .where(and(eq(prompts.isActive, true), eq(projects.status, "active")));
       if (activePrompts.length === 0) {
         console.log("[cron] No active prompts — skipping scan");
         return;
@@ -77,7 +81,7 @@ export async function register() {
     await runScans();
     setTimeout(() => { void runActions(); }, ACTIONS_DELAY_MS);
   };
-
+ 
   // Daily at 6 AM UTC, repeat every 24 hours
   const msUntilNext6amUtc = () => {
     const now = new Date();
