@@ -76,7 +76,7 @@ export async function register() {
       console.error("[cron] Actions generation error:", err);
     }
   };
-    
+
   const runCycle = async () => {
     await runScans();
     setTimeout(() => { void runActions(); }, ACTIONS_DELAY_MS);
