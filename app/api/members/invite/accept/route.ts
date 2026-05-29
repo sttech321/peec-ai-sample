@@ -13,10 +13,12 @@ const COOKIE_OPTS = (maxAge: number) => ({
   path: "/",
 });
 
+const baseUrl = () => (process.env.NEXT_PUBLIC_APP_URL ?? "https://peec-ai-demo.onrender.com").replace(/\/$/, "");
+
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
   if (!token) {
-    return NextResponse.redirect(new URL("/sign-in?error=missing_token", req.url));
+    return NextResponse.redirect(`${baseUrl()}/sign-in?error=missing_token`);
   }
 
   try {
@@ -26,9 +28,9 @@ export async function GET(req: NextRequest) {
       .where(eq(workspaceInvitations.token, token))
       .limit(1);
 
-    if (!invite) return NextResponse.redirect(new URL("/sign-in?error=invalid_invite", req.url));
-    if (invite.used) return NextResponse.redirect(new URL("/sign-in?error=invite_used", req.url));
-    if (new Date() > invite.expiresAt) return NextResponse.redirect(new URL("/sign-in?error=invite_expired", req.url));
+    if (!invite) return NextResponse.redirect(`${baseUrl()}/sign-in?error=invalid_invite`);
+    if (invite.used) return NextResponse.redirect(`${baseUrl()}/sign-in?error=invite_used`);
+    if (new Date() > invite.expiresAt) return NextResponse.redirect(`${baseUrl()}/sign-in?error=invite_expired`);
 
     // Mark invitation as used
     await db.update(workspaceInvitations).set({ used: true }).where(eq(workspaceInvitations.id, invite.id));
@@ -70,12 +72,12 @@ export async function GET(req: NextRequest) {
       role: invite.role,
     };
 
-    const response = NextResponse.redirect(new URL("/", req.url));
+    const response = NextResponse.redirect(`${baseUrl()}/`);
     response.cookies.set(SESSION_COOKIE, signSession(sessionPayload), COOKIE_OPTS(SESSION_MAX_AGE));
     response.cookies.set(SETUP_DONE_COOKIE, "1", COOKIE_OPTS(SESSION_MAX_AGE));
     return response;
   } catch (err) {
     console.error("invite accept error:", err);
-    return NextResponse.redirect(new URL("/sign-in?error=server_error", req.url));
+    return NextResponse.redirect(`${baseUrl()}/sign-in?error=server_error`);
   }
 }
