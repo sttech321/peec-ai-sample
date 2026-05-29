@@ -19,7 +19,7 @@ import GeneratingStep from "../../components/setup/GeneratingStep";
 import TopicsStep from "../../components/setup/TopicsStep";
 import PromptsStep from "../../components/setup/PromptsStep";
 
-const STORAGE_KEY = "peec_setup_state_v1";
+const STORAGE_KEY = "tv_setup_state_v1";
 
 function loadState(): SetupState {
   if (typeof window === "undefined") return INITIAL_SETUP_STATE;

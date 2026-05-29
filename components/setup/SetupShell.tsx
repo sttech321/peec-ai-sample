@@ -15,7 +15,7 @@ export default function SetupShell({ left, right, onLogout }: Props) {
       <header className="setup-shell-header">
         <div className="setup-shell-brand">
           <div className="setup-shell-logo-box" />
-          <span className="setup-shell-brand-name">Peec AI</span>
+          <span className="setup-shell-brand-name">Thrive Vision</span>
         </div>
         <button
           type="button"
@@ -31,7 +31,7 @@ export default function SetupShell({ left, right, onLogout }: Props) {
         <section className="setup-shell-left">
           <div className="setup-shell-left-inner">{left}</div>
           <footer className="setup-shell-footer">
-            <span>©{new Date().getFullYear()} Peec AI</span>
+            <span>©{new Date().getFullYear()} Thrive Vision</span>
             <div className="setup-shell-footer-links">
               <a href="#">Privacy policy</a>
               <span>·</span>

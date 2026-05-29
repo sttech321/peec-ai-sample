@@ -8,8 +8,8 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-[#e8e8e8]">
         <div className="max-w-7xl mx-auto px-6 h-[60px] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <PeecLogo />
-            <span className="text-[15px] font-semibold tracking-tight text-[#1a1a1a]">Peec AI</span>
+            <ThriveVisionLogo />
+            <span className="text-[15px] font-semibold tracking-tight text-[#1a1a1a]">Thrive Vision</span>
           </div>
 
           <div className="hidden md:flex items-center gap-1">
@@ -126,10 +126,10 @@ export default function LandingPage() {
       <footer className="py-8 border-t border-[#e8e8e8] bg-white px-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between text-sm text-[#999]">
           <div className="flex items-center gap-2">
-            <PeecLogo size={20} />
-            <span className="font-semibold text-[#555]">Peec AI</span>
+            <ThriveVisionLogo size={20} />
+            <span className="font-semibold text-[#555]">Thrive Vision</span>
           </div>
-          <span>© 2026 Peec AI. All rights reserved.</span>
+          <span>© 2026 Thrive Vision. All rights reserved.</span>
           <div className="flex gap-6">
             <Link href="#" className="hover:text-[#555] transition-colors">Privacy</Link>
             <Link href="#" className="hover:text-[#555] transition-colors">Terms</Link>
@@ -141,15 +141,16 @@ export default function LandingPage() {
   );
 }
 
-function PeecLogo({ size = 24 }: { size?: number }) {
-  const s = size / 2 - 1;
+function ThriveVisionLogo({ size = 24 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <rect x="2" y="2" width={s} height={s} fill="#1a1a1a" rx="1" />
-      <rect x={2 + s + 2} y="2" width={s} height={s} fill="#1a1a1a" rx="1" />
-      <rect x="2" y={2 + s + 2} width={s} height={s} fill="#1a1a1a" rx="1" />
-      <rect x={2 + s + 2} y={2 + s + 2} width={s} height={s} fill="#1a1a1a" rx="1" />
-    </svg>
+    <div style={{
+      width: size, height: size, background: "#1a1a1a", borderRadius: size * 0.2,
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      color: "#fff", fontSize: size * 0.42, fontWeight: 700, letterSpacing: "-0.5px",
+      flexShrink: 0,
+    }}>
+      TV
+    </div>
   );
 }
 

@@ -45,7 +45,7 @@ function SignUpWithClerk() {
     try {
       await signUp.create({ emailAddress: email.trim() });
       await signUp.prepareEmailAddressVerification({ strategy: "email_link", redirectUrl: `${window.location.origin}/sign-up/sso-callback` });
-      sessionStorage.setItem("peec_auth_email", email.trim());
+      sessionStorage.setItem("tv_auth_email", email.trim());
       router.push("/sign-up/verify");
     } catch (err: any) {
       setError(err?.errors?.[0]?.message ?? "Failed to send magic link.");
@@ -103,7 +103,7 @@ function SignUpCustom() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Failed to send magic link."); return; }
-      sessionStorage.setItem("peec_auth_email", email.trim());
+      sessionStorage.setItem("tv_auth_email", email.trim());
       setDevLink(data.devLink ?? null);
       setSent(true);
     } catch {
@@ -116,7 +116,7 @@ function SignUpCustom() {
   if (sent) {
     return (
       <div className="su-wrap">
-        <div className="su-logo"><PeecIcon /></div>
+        <div className="su-logo"><ThriveIcon /></div>
         <div className="auth-verify-icon">✉️</div>
         <h1 className="auth-verify-title">Check your inbox</h1>
         <p className="auth-verify-body">
@@ -157,7 +157,7 @@ function AuthForm({ mode, email, loading, error, devLink, onEmailChange, onSubmi
   const isSignUp = mode === "signup";
   return (
     <div className="su-wrap">
-      <div className="su-logo"><PeecIcon /></div>
+      <div className="su-logo"><ThriveIcon /></div>
       <h1 className="su-title">{isSignUp ? "Sign up" : "Log in"}</h1>
       <p className="su-sub">{isSignUp ? "Sign up" : "Log in"} using Google or Microsoft.</p>
 
@@ -205,14 +205,15 @@ function AuthForm({ mode, email, loading, error, devLink, onEmailChange, onSubmi
   );
 }
 
-function PeecIcon() {
+function ThriveIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-      <rect x="2" y="2" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-      <rect x="16" y="2" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-      <rect x="2" y="16" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-      <rect x="16" y="16" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-    </svg>
+    <div style={{
+      width: 44, height: 44, background: "#1a1a1a", borderRadius: 10,
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      color: "#fff", fontSize: 16, fontWeight: 700, letterSpacing: "-0.5px",
+    }}>
+      TV
+    </div>
   );
 }
 

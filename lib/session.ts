@@ -1,8 +1,8 @@
 import { createHmac } from "crypto";
 
 const SECRET = process.env.AUTH_SECRET ?? "dev-secret-please-set-AUTH_SECRET-in-env";
-export const SESSION_COOKIE = "peec_session";
-export const SETUP_DONE_COOKIE = "peec_setup_done";
+export const SESSION_COOKIE = "tv_session";
+export const SETUP_DONE_COOKIE = "tv_setup_done";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 export interface SessionPayload {

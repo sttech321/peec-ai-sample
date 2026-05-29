@@ -82,6 +82,10 @@ function SignInCustom() {
       oauth_denied: "You cancelled the sign-in. Try again.",
       invalid_state: "Sign-in session expired. Please try again.",
       oauth_failed: "Sign-in failed. Please try again or use the magic link.",
+      token_used: "This magic link has already been used. Please request a new one.",
+      token_expired: "This magic link has expired. Please request a new one.",
+      missing_token: "Invalid magic link. Please request a new one.",
+      invalid_token: "Invalid or unrecognised magic link. Please request a new one.",
     };
     setError(msgs[err] ?? "Something went wrong. Please try again.");
   }, [searchParams]);
@@ -108,7 +112,7 @@ function SignInCustom() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Failed to send magic link."); return; }
-      sessionStorage.setItem("peec_auth_email", email.trim());
+      sessionStorage.setItem("tv_auth_email", email.trim());
       setDevLink(data.devLink ?? null);
       setSent(true);
     } catch {
@@ -130,7 +134,7 @@ function SignInUI({ email, loading, error, sent, devLink, onEmailChange, onSubmi
 }) {
   return (
     <div className="su-wrap">
-      <div className="su-logo"><PeecIcon /></div>
+      <div className="su-logo"><ThriveIcon /></div>
       <h1 className="su-title">Log in</h1>
       <p className="su-sub">Log in using Google or Microsoft.</p>
 
@@ -181,14 +185,15 @@ function SignInUI({ email, loading, error, sent, devLink, onEmailChange, onSubmi
   );
 }
 
-function PeecIcon() {
+function ThriveIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-      <rect x="2" y="2" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-      <rect x="16" y="2" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-      <rect x="2" y="16" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-      <rect x="16" y="16" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-    </svg>
+    <div style={{
+      width: 44, height: 44, background: "#1a1a1a", borderRadius: 10,
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      color: "#fff", fontSize: 16, fontWeight: 700, letterSpacing: "-0.5px",
+    }}>
+      TV
+    </div>
   );
 }
 function GoogleIcon() {
