@@ -49,7 +49,7 @@ export async function runPipelineForOneEngine(job: PipelineJob): Promise<void> {
   );
   console.log(`[pipeline] step=call-ai-engine ok=${aiResponse.ok} engine=${engine}`);
 
-  // Step 2: Persist chat (record failures too)
+  // Step 2: Persist chat (record failures too) 
   const rawResponse = aiResponse.ok
     ? aiResponse.text
     : `[ERROR:${aiResponse.errorCode}] ${aiResponse.error}`;
