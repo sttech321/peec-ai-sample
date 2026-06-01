@@ -8,10 +8,14 @@ const isClerkConfigured =
   CLERK_KEY.length > 40 &&
   !CLERK_KEY.includes("dummy");
 
+const TV_PASSWORD = "Thrive4Life!";
+const TV_COOKIE = "tv_access";
+
 const isPublicRoute = createRouteMatcher([
   '/landing(.*)',
   '/sign-in(.*)',
   '/sign-up(.*)',
+  '/password(.*)',
   '/api/inngest(.*)',
   '/api/auth(.*)',
   '/api/members/invite/accept(.*)',
@@ -28,13 +32,32 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
 });
 
 export default function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // ── Password gate — runs first, before auth ──────────────────────
+  const isPasswordRoute = pathname.startsWith('/password') || pathname.startsWith('/api/auth/password');
+  const isStaticAsset = pathname.startsWith('/_next') || pathname.startsWith('/favicon');
+  // Exempt magic link + invite accept from password gate so email links always work
+  const isMagicLinkRoute = pathname.startsWith('/api/auth/verify') || pathname.startsWith('/api/members/invite/accept');
+
+  if (!isPasswordRoute && !isStaticAsset && !isMagicLinkRoute) {
+    const tvCookie = req.cookies.get(TV_COOKIE)?.value;
+    if (tvCookie !== TV_PASSWORD) {
+      const url = req.nextUrl.clone();
+      // Include full path + query string so tokens survive the redirect
+      const fullPath = pathname + req.nextUrl.search;
+      url.pathname = '/password';
+      url.search = `?from=${encodeURIComponent(fullPath)}`;
+      return NextResponse.redirect(url);
+    }
+  }
+
   // ── Clerk mode ───────────────────────────────────────────────────
   if (isClerkConfigured) {
     return (clerkHandler as any)(req);
   }
 
   // ── Custom session mode ──────────────────────────────────────────
-  const { pathname } = req.nextUrl;
 
   // Public routes — always allow
   if (isPublicRoute(req)) return NextResponse.next();
@@ -44,7 +67,9 @@ export default function middleware(req: NextRequest) {
   const user = rawSession ? verifySession(rawSession) : null;
 
   if (!user) {
-    // Not logged in → landing
+    // Not logged in at root → sign-in page (not landing)
+    if (pathname === '/') return NextResponse.redirect(new URL('/sign-in', req.url));
+    // Not logged in elsewhere → landing
     return NextResponse.redirect(new URL('/landing', req.url));
   }
 

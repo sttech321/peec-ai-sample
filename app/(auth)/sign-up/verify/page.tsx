@@ -22,7 +22,7 @@ function VerifyWithClerk() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("peec_auth_email");
+    const stored = sessionStorage.getItem("tv_auth_email");
     if (stored) setEmail(stored);
   }, []);
 
@@ -50,7 +50,7 @@ function VerifyWithClerk() {
 function VerifyMock() {
   const [email, setEmail] = useState("");
   useEffect(() => {
-    const stored = sessionStorage.getItem("peec_auth_email");
+    const stored = sessionStorage.getItem("tv_auth_email");
     if (stored) setEmail(stored);
   }, []);
   return <VerifyUI email={email} resent={false} loading={false} error={null} onResend={() => {}} />;
@@ -68,12 +68,11 @@ function VerifyUI({
   return (
     <div className="auth-verify-wrap">
       <div className="su-logo" style={{ marginBottom: 28 }}>
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-          <rect x="2" y="2" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-          <rect x="16" y="2" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-          <rect x="2" y="16" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-          <rect x="16" y="16" width="10" height="10" rx="1.5" fill="#1a1a1a" />
-        </svg>
+        <div style={{
+          width: 44, height: 44, background: "#1a1a1a", borderRadius: 10,
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          color: "#fff", fontSize: 16, fontWeight: 700, letterSpacing: "-0.5px",
+        }}>TV</div>
       </div>
 
       <div className="auth-verify-icon">✉️</div>

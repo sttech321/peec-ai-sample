@@ -92,7 +92,7 @@ export function VisibilityChart() {
         </svg>
 
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-3xl font-semibold tracking-tight text-zinc-100">
-          Peec AI
+          Thrive Vision
         </div>
       </div>
 

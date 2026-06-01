@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PEEC AI",
+  title: "Thrive Vision",
   description: "AI Visibility Tracker",
+  robots: { index: false, follow: false },
 };
 
 const CLERK_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";

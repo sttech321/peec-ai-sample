@@ -16,7 +16,7 @@ function SocialProofPanel() {
     <div className="auth-sp-wrap">
       {/* Blurred background text */}
       <div className="auth-sp-blur-bg">
-        <p>As LLMs like ChatGPT and Perplexity are driving traffic and conversions — Peec AI helps marketers capture these opportunities and get ahead with monitoring and insights tailored to AI and generative search</p>
+        <p>As LLMs like ChatGPT and Perplexity are driving traffic and conversions — Thrive Vision helps marketers capture these opportunities and get ahead with monitoring and insights tailored to AI and generative search</p>
         <br />
         <p>Crystal Carter — Head of SEO Communications</p>
       </div>
@@ -24,7 +24,7 @@ function SocialProofPanel() {
       {/* Testimonial card — clearly visible in center */}
       <div className="auth-sp-card">
         <p className="auth-sp-quote">
-          &ldquo;Peec avoids the issues we see with other SEO/AEO platforms, where there&apos;s often an overload of features and information that isn&apos;t of primary importance. It keeps things simple - set up your prompts, see your AI visibility, and act on top citations.&rdquo;
+          &ldquo;Thrive Vision avoids the issues we see with other SEO/AEO platforms, where there&apos;s often an overload of features and information that isn&apos;t of primary importance. It keeps things simple - set up your prompts, see your AI visibility, and act on top citations.&rdquo;
         </p>
         <div className="auth-sp-author">
           <div className="auth-sp-avatar">ES</div>

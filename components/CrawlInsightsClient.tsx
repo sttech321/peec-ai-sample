@@ -261,7 +261,7 @@ export default function CrawlInsightsClient({ projectName }: { projectName: stri
             <div>
               <h2 className="ci-setup-title">Agent analytics setup</h2>
               <p className="ci-setup-desc">
-                Let Peec AI analyze traffic on your website, to gain insights into AI traffic and usage.
+                Let Thrive Vision analyze traffic on your website, to gain insights into AI traffic and usage.
               </p>
             </div>
 
