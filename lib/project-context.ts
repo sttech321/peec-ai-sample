@@ -126,7 +126,13 @@ export const getActiveProjectId = cache(async (): Promise<string> => {
     .where(eq(projects.workspaceId, workspaceId))
     .limit(1);
 
-  return firstProject?.id ?? FALLBACK_WORKSPACE_ID;
+  if (!firstProject) {
+    // No projects — redirect to setup so user can create one
+    const { redirect } = await import("next/navigation");
+    redirect("/setup");
+  }
+
+  return firstProject.id;
 });
 
 async function fetchProjectDomains(projectIds: string[]): Promise<Map<string, string>> {

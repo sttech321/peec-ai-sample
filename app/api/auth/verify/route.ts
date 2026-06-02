@@ -55,13 +55,17 @@ export async function GET(req: NextRequest) {
     let finalRole = "owner";
     let destination = "/setup";
 
-    if (membership) {
+    if (firstProject) {
+      // User has their own projects → always log into own workspace
+      destination = "/";
+    } else if (membership) {
+      // User has NO own projects but is invited member of another workspace
+      // (pure guest user — no personal account setup yet)
       finalWorkspaceId = membership.workspaceId;
       finalRole = membership.role;
       destination = "/";
-    } else if (firstProject) {
-      destination = "/";
     }
+    // else: new user with no projects and no membership → /setup
 
     const sessionValue = signSession({ email, userId, workspaceId: finalWorkspaceId, role: finalRole });
     const response = NextResponse.redirect(`${baseUrl()}${destination}`);

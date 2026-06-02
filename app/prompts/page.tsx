@@ -29,6 +29,14 @@ import {
   batchSetActive,
   batchDeletePrompts,
 } from "./actions";
+import {
+  getPromptSuggestions,
+  generatePromptSuggestions,
+  acceptSuggestion,
+  rejectSuggestion,
+  acceptAllSuggestions,
+  rejectAllSuggestions,
+} from "./suggestions-actions";
 import { addBrand } from "../actions/brands";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
@@ -489,6 +497,9 @@ export default async function PromptsPage() {
     recentChatsErrored: Number(recentChatStats[0]?.errors ?? 0),
   };
 
+  // ── Prompt suggestions ────────────────────────────────────────────────────
+  const promptSuggestionsList = await getPromptSuggestions();
+
   return (
     <DashboardLayout currentPath="/prompts">
       <PromptsComparisonClient
@@ -504,6 +515,7 @@ export default async function PromptsPage() {
         projectName={projectName}
         availableBrands={projectBrands}
         setupHints={setupHints}
+        suggestions={promptSuggestionsList}
         addPromptAction={addPrompt}
         addPromptsBulkAction={addPromptsBulk}
         addPromptsFromCsvAction={addPromptsFromCsv}
@@ -517,6 +529,11 @@ export default async function PromptsPage() {
         batchAssignTopicAction={batchAssignTopic}
         batchSetActiveAction={batchSetActive}
         batchDeleteAction={batchDeletePrompts}
+        generateSuggestionsAction={generatePromptSuggestions}
+        acceptSuggestionAction={acceptSuggestion}
+        rejectSuggestionAction={rejectSuggestion}
+        acceptAllSuggestionsAction={acceptAllSuggestions}
+        rejectAllSuggestionsAction={rejectAllSuggestions}
         canEdit={canEdit}
         canRunScans={canRunScans}
       />

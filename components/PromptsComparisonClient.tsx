@@ -128,6 +128,26 @@ interface SetupHints {
   recentChatsErrored: number;
 }
 
+// ── Suggestion types ────────────────────────────────────────────────────────
+type SuggestionIntent = "transactional" | "informational" | "navigational" | "commercial";
+
+const INTENT_COLORS: Record<string, { bg: string; text: string }> = {
+  informational: { bg: "#dbeafe", text: "#1d4ed8" },
+  transactional:  { bg: "#fce7f3", text: "#be185d" },
+  navigational:   { bg: "#dcfce7", text: "#15803d" },
+  commercial:     { bg: "#ffedd5", text: "#c2410c" },
+};
+
+interface SuggestedPrompt {
+  id: string;
+  query: string;
+  intentType: SuggestionIntent;
+  volumeTier: string;
+  location: string;
+  topicName: string | null;
+  createdAt: string;
+}
+
 interface Props {
   prompts: PromptMetric[];
   totalCount: number;
@@ -137,6 +157,12 @@ interface Props {
   aggregates: Aggregates;
   projectName: string;
   setupHints: SetupHints;
+  suggestions: SuggestedPrompt[];
+  generateSuggestionsAction: () => Promise<{ ok: boolean; count: number; error?: string }>;
+  acceptSuggestionAction: (id: string) => Promise<{ ok: boolean }>;
+  rejectSuggestionAction: (id: string) => Promise<{ ok: boolean }>;
+  acceptAllSuggestionsAction: () => Promise<{ ok: boolean; accepted: number }>;
+  rejectAllSuggestionsAction: () => Promise<{ ok: boolean; rejected: number }>;
   addPromptAction: (formData: FormData) => Promise<void>;
   addPromptsBulkAction: (args: {
     texts: string[];
@@ -656,6 +682,12 @@ export default function PromptsComparisonClient({
   aggregates,
   projectName,
   setupHints,
+  suggestions,
+  generateSuggestionsAction,
+  acceptSuggestionAction,
+  rejectSuggestionAction,
+  acceptAllSuggestionsAction,
+  rejectAllSuggestionsAction,
   addPromptAction,
   addPromptsBulkAction,
   addPromptsFromCsvAction,
@@ -689,6 +721,45 @@ export default function PromptsComparisonClient({
   const [selectedModels, setSelectedModels] = useState<string[]>([...ALL_ENGINES]);
   const [dateRange, setDateRange] = useState<DateRange>(() => makeDateRange("7"));
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+
+  // ── Suggestions state ────────────────────────────────────────────────────
+  const [localSuggestions, setLocalSuggestions] = useState<SuggestedPrompt[]>(suggestions);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+
+  const handleGenerate = async () => {
+    setSuggestLoading(true);
+    setSuggestError(null);
+    const result = await generateSuggestionsAction();
+    setSuggestLoading(false);
+    if (!result.ok) { setSuggestError(result.error ?? "Generation failed"); return; }
+    startTransition(() => router.refresh());
+  };
+
+  const handleAccept = async (id: string) => {
+    setLocalSuggestions((prev) => prev.filter((s) => s.id !== id));
+    await acceptSuggestionAction(id);
+    startTransition(() => router.refresh());
+  };
+
+  const handleReject = async (id: string) => {
+    setLocalSuggestions((prev) => prev.filter((s) => s.id !== id));
+    await rejectSuggestionAction(id);
+  };
+
+  const handleAcceptAll = async () => {
+    setLocalSuggestions([]);
+    await acceptAllSuggestionsAction();
+    startTransition(() => router.refresh());
+  };
+
+  const handleRejectAll = async () => {
+    setLocalSuggestions([]);
+    await rejectAllSuggestionsAction();
+  };
+
+  // Keep local in sync when server refreshes
+  React.useEffect(() => { setLocalSuggestions(suggestions); }, [suggestions]);
 
   // ── Column visibility + indicator mode (persisted to localStorage) ─────────
   const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
@@ -942,7 +1013,7 @@ export default function PromptsComparisonClient({
 
   // ── Tab counts (dynamic) ──────────────────────────────────────────────────
   const activeCount = prompts.length; // all current prompts are "active"
-  const suggestedCount = 0;
+  const suggestedCount = localSuggestions.length;
   const archivedCount = 0;
 
   const tabFiltered = filtered; // Active tab uses filtered; other tabs are 0 for now
@@ -1246,6 +1317,32 @@ export default function PromptsComparisonClient({
               </li>
             ))}
           </ul>
+
+          {/* Suggested Topics */}
+          {activeTab === "suggested" && localSuggestions.length > 0 && (() => {
+            const topicCounts = new Map<string, number>();
+            localSuggestions.forEach((s) => {
+              const t = s.topicName ?? "General";
+              topicCounts.set(t, (topicCounts.get(t) ?? 0) + 1);
+            });
+            return (
+              <>
+                <div className="pp-topics-head" style={{ marginTop: 16 }}>
+                  <span className="pp-topics-title" style={{ fontSize: 11, color: "#aaa" }}>Suggested Topics</span>
+                </div>
+                <ul className="pp-topics-list">
+                  {[...topicCounts.entries()].map(([topic, count]) => (
+                    <li key={topic}>
+                      <div className="pp-topic-item" style={{ cursor: "default" }}>
+                        <span>{topic}</span>
+                        <span className="pp-topic-count">{count}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            );
+          })()}
         </aside>
 
         {/* Content */}
@@ -1264,6 +1361,11 @@ export default function PromptsComparisonClient({
                 onClick={() => setActiveTab("suggested")}
               >
                 Suggested
+                {suggestedCount > 0 && (
+                  <span style={{ marginLeft: 5, background: "#3b82f6", color: "#fff", borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 6px" }}>
+                    {suggestedCount}
+                  </span>
+                )}
               </button>
               <button
                 className={`pp-tab ${activeTab === "archived" ? "pp-tab-active" : ""}`}
@@ -1315,8 +1417,28 @@ export default function PromptsComparisonClient({
                   Add Prompt
                 </button>
               )}
+              {canEdit && (
+                <button
+                  className="pp-add-btn"
+                  onClick={handleGenerate}
+                  disabled={suggestLoading}
+                  style={{ background: "#6366f1", color: "white" }}
+                  title="AI-generate new prompt suggestions based on your brand profile"
+                >
+                  {suggestLoading ? (
+                    <><Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Generating…</>
+                  ) : (
+                    <><Plus size={13} /> Suggest more</>
+                  )}
+                </button>
+              )}
             </div>
           </div>
+          {suggestError && (
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 14px", fontSize: 13, color: "#dc2626", margin: "0 0 8px" }}>
+              {suggestError}
+            </div>
+          )}
 
           {/* Aggregate metrics + utility icons */}
           <div className="pp-summary-row">
@@ -1456,8 +1578,112 @@ export default function PromptsComparisonClient({
             />
           )}
 
-          {/* Table */}
-          <div className="pp-table-wrap">
+          {/* ── Suggested tab table ─────────────────────────────────── */}
+          {activeTab === "suggested" && (
+            <>
+              <div className="pp-table-wrap">
+                <table className="pp-table">
+                  <thead>
+                    <tr>
+                      <th className="pp-th-checkbox"><input type="checkbox" disabled /></th>
+                      <th className="pp-th-sortable">Prompt</th>
+                      <th>Volume <span className="pp-beta-pill">Beta</span></th>
+                      <th>Tags <span className="pp-beta-pill">Beta</span></th>
+                      <th>Suggested At</th>
+                      <th>Location</th>
+                      <th style={{ width: 72 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {localSuggestions.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="pp-empty-cell">
+                          <div className="pp-empty">
+                            <div className="pp-empty-icon"><Layers size={28} /></div>
+                            <div className="pp-empty-title">No suggested prompts</div>
+                            <div className="pp-empty-sub">
+                              Click <strong>Suggest more</strong> to generate AI-powered prompt ideas based on your brand profile.
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      localSuggestions.map((s) => {
+                        const ic = INTENT_COLORS[s.intentType] ?? INTENT_COLORS.informational;
+                        return (
+                          <tr key={s.id} style={{ opacity: 1 }}>
+                            <td className="pp-td-checkbox"><input type="checkbox" disabled /></td>
+                            <td className="pp-td-prompt">
+                              <span style={{ color: "#1a1a1a", fontWeight: 500 }}>{s.query}</span>
+                            </td>
+                            <td><VolumeBars tier={s.volumeTier} /></td>
+                            <td>
+                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 20, background: "#f1f5f9", color: "#64748b", fontWeight: 600 }}>
+                                  non-branded
+                                </span>
+                                <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 20, background: ic.bg, color: ic.text, fontWeight: 600 }}>
+                                  {s.intentType}
+                                </span>
+                              </div>
+                            </td>
+                            <td><span className="pp-added">{formatRelativeTime(s.createdAt)}</span></td>
+                            <td>
+                              <span className="pp-location">
+                                <img src={`https://flagcdn.com/w40/${s.location.toLowerCase()}.png`} alt={s.location} width={18} height={13} className="pp-flag-img" />
+                                {s.location}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button
+                                  onClick={() => handleReject(s.id)}
+                                  title="Reject"
+                                  style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid #e2e8f0", background: "white", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 14, fontWeight: 700 }}
+                                >
+                                  ×
+                                </button>
+                                <button
+                                  onClick={() => handleAccept(s.id)}
+                                  title="Accept & track"
+                                  style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid #10b981", background: "white", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#10b981", fontSize: 14, fontWeight: 700 }}
+                                >
+                                  ✓
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {/* Bottom bar — Reject all / Track all */}
+              {localSuggestions.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderTop: "1px solid #f0f0f0", background: "#fafafa", fontSize: 13 }}>
+                  <span style={{ color: "#64748b", fontWeight: 500 }}>{localSuggestions.length} Prompt{localSuggestions.length !== 1 ? "s" : ""}</span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={handleRejectAll}
+                      style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid #e2e8f0", background: "white", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}
+                    >
+                      × Reject all
+                    </button>
+                    <button
+                      onClick={handleAcceptAll}
+                      style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid #10b981", background: "#10b981", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "white", display: "flex", alignItems: "center", gap: 4 }}
+                    >
+                      ✓ Track all
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Active/Archived Table */}
+          {activeTab !== "suggested" && <div className="pp-table-wrap">
             <table className="pp-table">
               <thead>
                 <tr>
@@ -1489,9 +1715,7 @@ export default function PromptsComparisonClient({
                           <Layers size={28} />
                         </div>
                         <div className="pp-empty-title">
-                          {activeTab === "suggested"
-                            ? "No suggested prompts"
-                            : activeTab === "archived"
+                          {activeTab === "archived"
                             ? "No archived prompts"
                             : "No prompts found"}
                         </div>
@@ -1630,10 +1854,10 @@ export default function PromptsComparisonClient({
                 )}
               </tbody>
             </table>
-          </div>
+          </div>}
 
-          {/* Pagination row */}
-          <div className="pp-pagination">
+          {/* Pagination row — hidden on Suggested tab */}
+          {activeTab !== "suggested" && <div className="pp-pagination">
             <div className="pp-pagination-left">
               <Dropdown
                 width={120}
@@ -1700,7 +1924,7 @@ export default function PromptsComparisonClient({
               <Archive size={13} />
               Archive all
             </button>
-          </div>
+          </div>}
         </section>
       </div>
 

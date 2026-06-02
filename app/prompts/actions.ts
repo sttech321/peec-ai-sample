@@ -1,12 +1,12 @@
 "use server";
 
 import { db } from "../../db";
-import { prompts, topics, tags, promptTags } from "../../db/schema";
+import { prompts, topics, tags, promptTags, promptSuggestions, brandProfiles } from "../../db/schema";
 import { revalidatePath } from "next/cache";
 import { getActiveProjectId, getWorkspaceId } from "../../lib/project-context";
 import { runPipelineForAllEngines, type PipelineJob } from "../../lib/run-pipeline";
 import { DEFAULT_ENGINES } from "../../lib/ai-clients";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 
 export async function addPrompt(formData: FormData) {
   const query = formData.get("query") as string;
