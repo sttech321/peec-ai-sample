@@ -375,10 +375,12 @@ export async function addPromptsFromCsv(args: {
     }
     return -1;
   };
-  const promptCol   = col(["prompt", "query"]);
+  const promptCol   = col(["prompts", "prompt", "query"]); // "Prompts" is Peec AI format
   const locationCol = col(["location"]);
   const topicCol    = col(["topic_name", "topic"]);
   const tagsCol     = col(["tags"]);
+  // Peec AI format: Tag 1, Tag 2, Persona... are extra tag columns (col index 3+)
+  // We collect them all when useHeaders is true
   // If header has a 'prompt' column, use named mapping; otherwise use positional
   const useHeaders  = promptCol >= 0;
 
@@ -442,13 +444,24 @@ export async function addPromptsFromCsv(args: {
     let tagNames: string[];
 
     if (useHeaders) {
-      // ── Named column mapping (Peec/Thrive Vision export format) ─────────
+      // ── Named column mapping — supports both Peec AI format and export format ─
       promptText = (row[promptCol] ?? "").trim();
       location = ((locationCol >= 0 ? row[locationCol] : "") || "US").trim().toUpperCase().slice(0, 2) || "US";
       topicName = (topicCol >= 0 ? row[topicCol] : "").trim();
-      // tags column may be comma-separated string: "branded, commercial"
-      const rawTags = tagsCol >= 0 ? (row[tagsCol] ?? "") : "";
-      tagNames = rawTags.split(",").map((t) => t.trim()).filter(isValidTag);
+
+      if (tagsCol >= 0) {
+        // Export format: single "tags" column with comma-separated values
+        const rawTags = row[tagsCol] ?? "";
+        tagNames = rawTags.split(",").map((t) => t.trim()).filter(isValidTag);
+      } else {
+        // Peec AI template format: "Tag 1", "Tag 2", "Persona" etc as separate columns
+        // Collect all columns after topic (everything that is not prompt/location/topic)
+        const knownCols = new Set([promptCol, locationCol >= 0 ? locationCol : -1, topicCol >= 0 ? topicCol : -1]);
+        tagNames = row
+          .filter((_, idx) => !knownCols.has(idx))
+          .map((t) => t.trim())
+          .filter(isValidTag);
+      }
     } else {
       // ── Positional mapping (simple format: prompt, location, topic, tag…) ─
       promptText = (row[0] ?? "").trim();

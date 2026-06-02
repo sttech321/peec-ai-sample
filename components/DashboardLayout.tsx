@@ -6,8 +6,9 @@ import {
 } from "lucide-react";
 import NextLink from "next/link";
 import ProjectSwitcher from "./ProjectSwitcher";
-import { getAllProjects, getActiveProject } from "../lib/project-context";
-import { switchProject, createProject } from "../app/projects/actions";
+import InviteProjectsDropdown from "./InviteProjectsDropdown";
+import { getAllProjects, getActiveProject, getInvitedProjects } from "../lib/project-context";
+import { switchProject, createProject, switchToInvitedWorkspace, switchToOwnWorkspace } from "../app/projects/actions";
 import "../app/globals-sidebar.css";
 
 export default async function DashboardLayout({
@@ -21,6 +22,7 @@ export default async function DashboardLayout({
 }) {
   const allProjects = await getAllProjects();
   const activeProject = await getActiveProject();
+  const invitedProjects = await getInvitedProjects();
 
   return (
     <div className="flex h-screen bg-white text-zinc-800 font-sans overflow-hidden">
@@ -115,7 +117,7 @@ export default async function DashboardLayout({
       <main className="flex-1 flex flex-col overflow-hidden relative bg-white">
 
         {/* Header */}
-        <header className="h-14 flex items-center justify-between px-6 border-b border-zinc-200 z-10 shrink-0 bg-white">
+        <header className="h-14 flex items-center justify-between px-6 border-b border-zinc-200 shrink-0 bg-white" style={{ position: "relative", zIndex: 50, overflow: "visible" }}>
           <div className="flex items-center space-x-3">
             <button className="text-zinc-500 hover:text-zinc-900 transition-colors relative">
               <Bell className="w-5 h-5" />
@@ -127,9 +129,17 @@ export default async function DashboardLayout({
             {headerAction && (
               <div className="pl-2 border-l border-zinc-200">
                 {headerAction}
-              </div> 
+              </div>
             )}
           </div>
+          {/* Invite projects dropdown — shows invited workspaces + own workspace switch-back */}
+          {invitedProjects.length > 0 && (
+            <InviteProjectsDropdown
+              invitedProjects={invitedProjects}
+              switchAction={switchToInvitedWorkspace}
+              switchToOwnAction={switchToOwnWorkspace}
+            />
+          )}
         </header>
 
         {/* Dynamic Page Content */}

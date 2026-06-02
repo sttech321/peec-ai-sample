@@ -47,6 +47,16 @@ export default function OverviewWrapper({
   const [selectedModels, setSelectedModels] = useState<string[]>(ALL_ENGINES);
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
 
+  // Convert selected brand IDs → brand names for OverviewClient filtering.
+  // OverviewClient's aggregateBrands returns objects with `name` not `id`,
+  // so we must compare by name, not by ID.
+  const selectedBrandNames: string[] | null =
+    selectedBrandIds === null
+      ? null
+      : selectedBrandIds
+          .map((id) => filterBrands.find((b) => b.id === id)?.name)
+          .filter((n): n is string => !!n);
+
   return (
     <>
       <PageFilterBar
@@ -65,7 +75,7 @@ export default function OverviewWrapper({
         externalFilters={{
           dateRange,
           models: selectedModels,
-          brandIds: selectedBrandIds,
+          brandIds: selectedBrandNames,
         }}
       />
     </>

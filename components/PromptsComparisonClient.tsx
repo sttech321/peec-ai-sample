@@ -1417,6 +1417,7 @@ export default function PromptsComparisonClient({
                   Add Prompt
                 </button>
               )}
+              {/* Suggest more button — temporarily hidden
               {canEdit && (
                 <button
                   className="pp-add-btn"
@@ -1432,6 +1433,7 @@ export default function PromptsComparisonClient({
                   )}
                 </button>
               )}
+              */}
             </div>
           </div>
           {suggestError && (
@@ -2703,8 +2705,28 @@ function AddPromptModal({
   const [csvPreview, setCsvPreview] = useState<string[][] | null>(null);
   const [parsedItems, setParsedItems] = useState<ParsedItem[] | null>(null);
   const [fileType, setFileType] = useState<"csv" | "json" | "xlsx" | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function downloadExample() {
+    // Exact Peec AI CSV template format (semicolon-separated)
+    const csv = [
+      "Prompts;Location;Topic;Tag 1;Tag 2;Persona (also a tag)",
+      "Is this an example prompt?;US;Test Topic;Test Tag;My Tag;Leon",
+      "Yes, this is an example prompt. With a comma!;US;Other Topic;Test Tag;My Tag;Daniel",
+      "If the location is empty, we use the default location.;;Test Topic;Test Tag;My Tag;Daniel",
+      "Prompts don't need tags or topics.;US;;;;",
+      "Prompts can be very long.;CA;;Tag Test;;Leon",
+      "Or short;GB;;Tag Test;;Daniel",
+      "¡Muy bien!;ES;;Tag Test;;Leon",
+    ].join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "Peec CSV Template.csv";
+    a.click();
+  }
 
   const lines = useMemo(
     () => text.split("\n").map((s) => s.trim()).filter((s) => s.length > 0),
@@ -2713,31 +2735,57 @@ function AddPromptModal({
   const overLimit = lines.filter((l) => l.length > 200);
 
   async function handleCsvFile(f: File) {
-    setCsvFile(f);
     setError(null);
     setParsedItems(null);
+    setCsvPreview(null);
     const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+
+    // Validate file type first
+    const allowed = ["csv", "xlsx", "xls", "json"];
+    if (!allowed.includes(ext)) {
+      setError(`❌ Invalid file type ".${ext}". Please upload a CSV, XLSX, or JSON file.`);
+      return;
+    }
+
+    setCsvFile(f);
     setFileType(ext === "json" ? "json" : ext === "xlsx" || ext === "xls" ? "xlsx" : "csv");
 
     if (ext === "json") {
-      // ── JSON export format (from Peec/Thrive Vision export) ───────────
+      // ── JSON export format ─────────────────────────────────────────────
       try {
         const txt = await f.text();
-        const data = JSON.parse(txt);
-        const arr = Array.isArray(data) ? data : [data];
+        let data: unknown;
+        try { data = JSON.parse(txt); } catch {
+          setError("❌ Invalid JSON — file is not valid JSON. Download the example to see the correct format.");
+          return;
+        }
+        if (!Array.isArray(data)) {
+          setError("❌ JSON must be an array of objects with a \"prompt\" field. Download the example to see the correct format.");
+          return;
+        }
+        const arr = data as Record<string, unknown>[];
+        const hasPromptField = arr.some((d) => d.prompt || d.query);
+        if (!hasPromptField) {
+          setError("❌ No \"prompt\" field found in JSON objects. Each item must have a \"prompt\" key. Download the example to see the correct format.");
+          return;
+        }
         const items: ParsedItem[] = arr
-          .filter((d: any) => d.prompt || d.query)
-          .map((d: any) => ({
+          .filter((d) => d.prompt || d.query)
+          .map((d) => ({
             prompt: String(d.prompt ?? d.query ?? "").trim(),
             location: String(d.location ?? "US").toUpperCase().slice(0, 2),
             topic: String(d.topic_name ?? d.topic ?? "").trim(),
-            tags: Array.isArray(d.tags) ? d.tags.map(String).filter((t: string) => t.trim()) : [],
+            tags: Array.isArray(d.tags) ? (d.tags as unknown[]).map(String).filter((t) => t.trim()) : [],
           }))
-          .filter((i: ParsedItem) => i.prompt.length > 0 && i.prompt.length <= 200);
+          .filter((i) => i.prompt.length > 0 && i.prompt.length <= 200);
+        if (items.length === 0) {
+          setError("❌ No valid prompts found in the JSON file. Check that your prompts are under 200 characters.");
+          return;
+        }
         setParsedItems(items);
         setCsvPreview(items.slice(0, 6).map((i) => [i.prompt, i.location, i.topic, ...i.tags]));
       } catch {
-        setError("Invalid JSON file. Please check the format.");
+        setError("❌ Failed to read JSON file. Download the example to see the correct format.");
       }
     } else if (ext === "xlsx" || ext === "xls") {
       // ── Excel file ─────────────────────────────────────────────────────
@@ -2747,18 +2795,25 @@ function AddPromptModal({
         const wb = read(buffer);
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = utils.sheet_to_json<string[]>(ws, { header: 1 }) as string[][];
-        if (rows.length < 2) { setError("Excel file has no data rows."); return; }
+        if (rows.length < 2) {
+          setError("❌ Excel file has no data rows. Add at least one prompt row below the header.");
+          return;
+        }
 
-        // Detect column indexes from header row
         const header = rows[0].map((h) => String(h ?? "").toLowerCase().trim());
-        const promptCol = header.findIndex((h) => h === "prompt" || h === "query");
+        const promptCol = header.findIndex((h) => h === "prompts" || h === "prompt" || h === "query");
+        if (promptCol < 0) {
+          setError(`❌ No "Prompts" column found in Excel header. Your columns are: [${header.join(", ")}]. Download the example to see the required format.`);
+          return;
+        }
+
         const locationCol = header.findIndex((h) => h === "location");
         const topicCol = header.findIndex((h) => h === "topic_name" || h === "topic");
         const tagsCol = header.findIndex((h) => h === "tags");
 
         const items: ParsedItem[] = rows.slice(1)
           .map((row) => {
-            const prompt = String(row[promptCol >= 0 ? promptCol : 0] ?? "").trim();
+            const prompt = String(row[promptCol] ?? "").trim();
             const loc = String(row[locationCol >= 0 ? locationCol : 1] ?? "US").toUpperCase().slice(0, 2) || "US";
             const topic = String(row[topicCol >= 0 ? topicCol : 2] ?? "").trim();
             let tags: string[] = [];
@@ -2772,19 +2827,54 @@ function AddPromptModal({
           })
           .filter((i) => i.prompt.length > 0 && i.prompt.length <= 200);
 
+        if (items.length === 0) {
+          setError("❌ No valid prompts found in the Excel file. Check that the \"prompt\" column has text values.");
+          return;
+        }
         setParsedItems(items);
-        setCsvPreview(rows.slice(0, 6));
+        setCsvPreview(rows.slice(0, 7));
       } catch {
-        setError("Failed to parse Excel file. Please check the format.");
+        setError("❌ Failed to parse Excel file. Download the example to see the required format.");
       }
     } else {
       // ── CSV ─────────────────────────────────────────────────────────────
-      const txt = await f.text();
-      const rows = txt
-        .split(/\r?\n/)
-        .map((r) => r.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, "")))
-        .filter((r) => r.some((c) => c.length > 0));
-      setCsvPreview(rows.slice(0, 6));
+      try {
+        const txt = await f.text();
+        const rows = txt
+          .split(/\r?\n/)
+          .map((r) => r.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, "")))
+          .filter((r) => r.some((c) => c.length > 0));
+
+        if (rows.length < 2) {
+          setError("❌ CSV has no data rows. Add at least one prompt row below the header.");
+          return;
+        }
+        // Check that first row looks like a header or that first column has prompt data
+        const header = rows[0].map((h) => h.toLowerCase().trim());
+        // Detect header row — includes Peec AI "Prompts" column name
+        const hasHeader = header.some((h) => ["prompts", "prompt", "query", "status", "id"].includes(h));
+        const promptCol = header.findIndex((h) => h === "prompts" || h === "prompt" || h === "query");
+
+        if (hasHeader && promptCol < 0) {
+          setError(`❌ No "Prompts" column found. Your columns: [${rows[0].join(", ")}]. Download the example to see the required format.`);
+          return;
+        }
+
+        const dataRows = hasHeader ? rows.slice(1) : rows;
+        const validRows = dataRows.filter((r) => {
+          const val = r[promptCol >= 0 ? promptCol : 0]?.trim();
+          return val && val.length > 0 && val.length <= 200;
+        });
+
+        if (validRows.length === 0) {
+          setError("❌ No valid prompts found. Ensure the \"prompt\" column has text (max 200 characters per row).");
+          return;
+        }
+
+        setCsvPreview(rows.slice(0, 7));
+      } catch {
+        setError("❌ Failed to read CSV file. Make sure it's a valid comma or semicolon separated file.");
+      }
     }
   }
 
@@ -2861,7 +2951,7 @@ function AddPromptModal({
             onClick={() => setTab("manual")}
             type="button"
           >
-            Manual
+            Add Prompt
           </button>
           <button
             className={`pp-modal-tab ${tab === "csv" ? "pp-modal-tab-active" : ""}`}
@@ -2957,46 +3047,117 @@ function AddPromptModal({
           </>
         ) : (
           <>
-            <label className="pp-modal-label">Upload file</label>
-            <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-              {(["CSV", "XLSX", "JSON"] as const).map((fmt) => (
-                <span key={fmt} style={{
-                  fontSize: 11, fontWeight: 600, padding: "2px 8px",
-                  borderRadius: 4, background: "#f1f5f9", color: "#64748b",
-                  border: "1px solid #e2e8f0",
-                }}>
-                  {fmt}
-                </span>
-              ))}
-            </div>
+            {/* Format info + download example */}
+            <p style={{ fontSize: 13, color: "#64748b", textAlign: "center", margin: "0 0 14px" }}>
+              Make sure your file follows the{" "}
+              <button type="button" onClick={() => {
+                alert(
+                  "Required Format (CSV / XLSX):\n\n" +
+                  "Columns (semicolon OR comma separated):\n" +
+                  "  Prompts ; Location ; Topic ; Tag 1 ; Tag 2 ; Persona\n\n" +
+                  "Rules:\n" +
+                  "  • 'Prompts' column is required (case-insensitive)\n" +
+                  "  • Location: 2-letter country code (US, CA, GB, DE...)\n" +
+                  "  • Location can be empty → uses default US\n" +
+                  "  • Topic, Tags, Persona are optional\n" +
+                  "  • You can add multiple tag columns (Tag 1, Tag 2, Persona...)\n" +
+                  "  • Max 200 characters per prompt\n\n" +
+                  "Example row:\n" +
+                  "  Best security services in Texas ; US ; Security ; non-branded ; commercial\n\n" +
+                  "JSON format:\n" +
+                  "  Array of objects: { \"prompt\", \"location\", \"topic_name\", \"tags\" }\n\n" +
+                  "Click 'download example' to get the ready-to-use CSV template."
+                );
+              }} style={{ color: "#3b82f6", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0, textDecoration: "underline" }}>
+                required format
+              </button>
+              {" "}or{" "}
+              <button type="button" onClick={downloadExample} style={{ color: "#3b82f6", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0, textDecoration: "underline" }}>
+                download example
+              </button>.
+            </p>
+
+            {/* Hidden file input */}
             <input
+              ref={fileInputRef}
               type="file"
               accept=".csv,.xlsx,.xls,.json,text/csv,application/json"
+              style={{ display: "none" }}
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) handleCsvFile(f);
+                e.target.value = "";
               }}
             />
-            {fileType && csvFile && (
-              <div style={{ marginTop: 6, fontSize: 12, color: "#10b981", fontWeight: 600 }}>
-                ✓ {csvFile.name} detected as {fileType.toUpperCase()}
-                {parsedItems && ` — ${parsedItems.length} prompts found`}
-              </div>
-            )}
-            <div className="pp-modal-hint" style={{ marginTop: 6 }}>
-              <strong>CSV/XLSX:</strong> header row + columns: prompt, location, topic, tag, tag…<br />
-              <strong>JSON:</strong> array of objects with <code>prompt</code>, <code>location</code>, <code>topic_name</code>, <code>tags</code> fields
+
+            {/* Drag & drop zone */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) handleCsvFile(f);
+              }}
+              style={{
+                border: `2px dashed ${isDragging ? "#3b82f6" : csvFile && !error ? "#10b981" : "#d1d5db"}`,
+                borderRadius: 12,
+                padding: "32px 24px",
+                textAlign: "center",
+                cursor: "pointer",
+                background: isDragging ? "#eff6ff" : csvFile && !error ? "#f0fdf4" : "#fafafa",
+                transition: "all 0.15s",
+                userSelect: "none",
+              }}
+            >
+              {csvFile && !error ? (
+                <>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
+                  <div style={{ fontWeight: 600, color: "#16a34a", fontSize: 14 }}>{csvFile.name}</div>
+                  <div style={{ fontSize: 12, color: "#16a34a", marginTop: 4 }}>
+                    {fileType?.toUpperCase()} detected
+                    {parsedItems ? ` — ${parsedItems.length} prompts ready to import` : " — processing…"}
+                  </div>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setCsvFile(null); setCsvPreview(null); setParsedItems(null); setFileType(null); setError(null); }}
+                    style={{ marginTop: 10, fontSize: 11, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                    Remove file
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Upload icon */}
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5" style={{ margin: "0 auto 10px", display: "block" }}>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  <div style={{ fontSize: 14, color: "#374151", fontWeight: 500 }}>
+                    Drag and drop your file here, or{" "}
+                    <span style={{ color: "#3b82f6", textDecoration: "underline" }}>click to browse</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>
+                    Supports CSV, XLSX, JSON
+                  </div>
+                </>
+              )}
             </div>
-            {csvPreview && csvPreview.length > 0 && (
-              <div className="pp-csv-preview">
-                <div className="pp-modal-hint">Preview (first {csvPreview.length} rows):</div>
+
+            {/* Preview table */}
+            {csvPreview && csvPreview.length > 0 && !error && (
+              <div className="pp-csv-preview" style={{ marginTop: 12 }}>
+                <div className="pp-modal-hint">Preview ({csvPreview.length - 1} data rows):</div>
                 <table className="pp-csv-preview-table">
                   <tbody>
                     {csvPreview.map((row, i) => (
                       <tr key={i} className={i === 0 ? "pp-csv-header-row" : ""}>
-                        {row.map((cell, j) => (
-                          <td key={j}>{cell}</td>
+                        {row.slice(0, 5).map((cell, j) => (
+                          <td key={j} style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {cell}
+                          </td>
                         ))}
+                        {row.length > 5 && <td style={{ color: "#9ca3af" }}>+{row.length - 5} more</td>}
                       </tr>
                     ))}
                   </tbody>
@@ -3020,7 +3181,7 @@ function AddPromptModal({
           <button
             type="button"
             className="pp-modal-submit"
-            disabled={busy}
+            disabled={busy || (tab === "csv" && (!csvFile || !!error))}
             onClick={tab === "manual" ? submitManual : submitCsv}
           >
             {busy ? (
