@@ -2,8 +2,9 @@
 
 import { db } from "../../db";
 import { tags, promptTags } from "../../db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, like, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { getActiveProjectId } from "../../lib/project-context";
 
 /** Fetch tags for a project with real usage counts from promptTags. */
 export async function getTags(projectId: string) {
@@ -66,4 +67,35 @@ export async function deleteTag(id: string) {
   await db.delete(tags).where(eq(tags.id, id));
   revalidatePath("/tags");
   revalidatePath("/prompts");
+}
+
+/** Delete tags that look like garbage — prompt IDs, questions, long phrases */
+export async function deleteInvalidTags(): Promise<{ deleted: number }> {
+  const projectId = await getActiveProjectId();
+
+  const allTags = await db
+    .select({ id: tags.id, name: tags.name })
+    .from(tags)
+    .where(eq(tags.projectId, projectId));
+
+  const invalidIds = allTags
+    .filter(({ name }) => {
+      if (/^pr_[a-f0-9-]{8,}$/i.test(name)) return true;   // prompt IDs
+      if (/[?!]/.test(name)) return true;                    // questions/sentences
+      if (name.length > 50) return true;                     // too long
+      if ((name.match(/\s+/g) ?? []).length > 4) return true; // >4 words
+      return false;
+    })
+    .map((t) => t.id);
+
+  if (invalidIds.length === 0) return { deleted: 0 };
+
+  for (const id of invalidIds) {
+    await db.delete(promptTags).where(eq(promptTags.tagId, id));
+    await db.delete(tags).where(eq(tags.id, id));
+  }
+
+  revalidatePath("/tags");
+  revalidatePath("/prompts");
+  return { deleted: invalidIds.length };
 }

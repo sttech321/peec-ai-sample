@@ -119,6 +119,9 @@ interface Props {
   addPromptsFromCsvAction: (args: {
     csvText: string;
   }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
+  addPromptsFromParsedAction: (args: {
+    items: { prompt: string; location: string; topic: string; tags: string[] }[];
+  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
   runNowAction: (
     promptId: string,
     query: string,
@@ -628,6 +631,7 @@ export default function PromptsComparisonClient({
   addPromptAction,
   addPromptsBulkAction,
   addPromptsFromCsvAction,
+  addPromptsFromParsedAction,
   runNowAction,
   addBrandAction,
   createTopicAction,
@@ -861,30 +865,30 @@ export default function PromptsComparisonClient({
   const allOnPageSelected =
     paginated.length > 0 && paginated.every((p) => selectedRows.has(p.id));
 
-  // Crawl the currently-filtered prompts across the currently-selected engines.
-  // We run in batches of 4 so a 100-prompt project doesn't fire 600 simultaneous
-  // engine calls and trip rate limits. After all batches finish we refresh the
-  // server component to pull the new chats / metrics into view.
+  // Crawl only the selected prompts (checkbox-ticked rows).
+  // Runs in batches of 4 to avoid rate-limit spikes.
   async function runBulkCrawl() {
     if (crawlState.running) return;
-    if (filtered.length === 0) return;
+    if (selectedRows.size === 0) return;
+
+    const targetPrompts = paginated.filter((p) => selectedRows.has(p.id));
     const engines = selectedModels.length > 0 ? selectedModels : [...ALL_ENGINES];
     const confirmed = window.confirm(
-      `Run a fresh crawl for ${filtered.length} prompt${filtered.length === 1 ? "" : "s"} × ${engines.length} engine${engines.length === 1 ? "" : "s"}?\n\nThis hits paid AI APIs.`,
+      `Run a fresh crawl for ${targetPrompts.length} selected prompt${targetPrompts.length === 1 ? "" : "s"} × ${engines.length} engine${engines.length === 1 ? "" : "s"}?\n\nThis hits paid AI APIs.`,
     );
     if (!confirmed) return;
 
-    setCrawlState({ running: true, done: 0, total: filtered.length });
+    setCrawlState({ running: true, done: 0, total: targetPrompts.length });
 
     const BATCH = 4;
     let done = 0;
-    for (let i = 0; i < filtered.length; i += BATCH) {
-      const batch = filtered.slice(i, i + BATCH);
+    for (let i = 0; i < targetPrompts.length; i += BATCH) {
+      const batch = targetPrompts.slice(i, i + BATCH);
       await Promise.allSettled(
         batch.map((p) => runNowAction(p.id, p.query, engines)),
       );
       done += batch.length;
-      setCrawlState({ running: true, done, total: filtered.length });
+      setCrawlState({ running: true, done, total: targetPrompts.length });
     }
 
     setCrawlState({ running: false, done: 0, total: 0 });
@@ -1122,16 +1126,19 @@ export default function PromptsComparisonClient({
                 <button
                   className="pp-add-btn"
                   onClick={runBulkCrawl}
-                  disabled={crawlState.running || filtered.length === 0}
+                  disabled={crawlState.running || selectedRows.size === 0}
                   title={
-                    filtered.length === 0
-                      ? "No prompts match the current filter"
-                      : `Crawl ${filtered.length} prompt(s) across ${selectedModels.length || ALL_ENGINES.length} engine(s)`
+                    selectedRows.size === 0
+                      ? "Select prompts to crawl"
+                      : crawlState.running
+                      ? `Crawling ${crawlState.done}/${crawlState.total}…`
+                      : `Crawl ${selectedRows.size} selected prompt${selectedRows.size === 1 ? "" : "s"} × ${selectedModels.length || ALL_ENGINES.length} engine(s)`
                   }
                   style={{
-                    background: crawlState.running ? "#94a3b8" : "#10b981",
+                    background: crawlState.running || selectedRows.size === 0 ? "#94a3b8" : "#10b981",
                     color: "white",
                     marginRight: 8,
+                    cursor: selectedRows.size === 0 ? "not-allowed" : "pointer",
                   }}
                 >
                   {crawlState.running ? (
@@ -1142,7 +1149,7 @@ export default function PromptsComparisonClient({
                   ) : (
                     <>
                       <Play size={13} />
-                      Crawl Now
+                      {selectedRows.size > 0 ? `Crawl ${selectedRows.size}` : "Crawl Now"}
                     </>
                   )}
                 </button>
@@ -1577,6 +1584,7 @@ export default function PromptsComparisonClient({
           onClose={() => setShowAddForm(false)}
           addBulkAction={addPromptsBulkAction}
           fromCsvAction={addPromptsFromCsvAction}
+          fromParsedAction={addPromptsFromParsedAction}
           onDone={() => {
             setShowAddForm(false);
             startTransition(() => router.refresh());
@@ -2295,6 +2303,8 @@ function SetupHintsBanner({
 // Two tabs: "Manual" (paste one prompt per line, set location/topic/tags) and
 // "Bulk Upload" (drop a CSV). Per Peec docs the manual form supports both
 // single-line and multi-line input — we use a textarea so both work.
+type ParsedItem = { prompt: string; location: string; topic: string; tags: string[] };
+
 function AddPromptModal({
   topics,
   availableTags,
@@ -2302,6 +2312,7 @@ function AddPromptModal({
   onClose,
   addBulkAction,
   fromCsvAction,
+  fromParsedAction,
   onDone,
 }: {
   topics: Topic[];
@@ -2317,6 +2328,9 @@ function AddPromptModal({
   fromCsvAction: (args: {
     csvText: string;
   }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
+  fromParsedAction: (args: {
+    items: ParsedItem[];
+  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
   onDone: () => void;
 }) {
   const [tab, setTab] = useState<"manual" | "csv">("manual");
@@ -2326,6 +2340,8 @@ function AddPromptModal({
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<string[][] | null>(null);
+  const [parsedItems, setParsedItems] = useState<ParsedItem[] | null>(null);
+  const [fileType, setFileType] = useState<"csv" | "json" | "xlsx" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -2338,12 +2354,77 @@ function AddPromptModal({
   async function handleCsvFile(f: File) {
     setCsvFile(f);
     setError(null);
-    const txt = await f.text();
-    const rows = txt
-      .split(/\r?\n/)
-      .map((r) => r.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, "")))
-      .filter((r) => r.some((c) => c.length > 0));
-    setCsvPreview(rows.slice(0, 6));
+    setParsedItems(null);
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    setFileType(ext === "json" ? "json" : ext === "xlsx" || ext === "xls" ? "xlsx" : "csv");
+
+    if (ext === "json") {
+      // ── JSON export format (from Peec/Thrive Vision export) ───────────
+      try {
+        const txt = await f.text();
+        const data = JSON.parse(txt);
+        const arr = Array.isArray(data) ? data : [data];
+        const items: ParsedItem[] = arr
+          .filter((d: any) => d.prompt || d.query)
+          .map((d: any) => ({
+            prompt: String(d.prompt ?? d.query ?? "").trim(),
+            location: String(d.location ?? "US").toUpperCase().slice(0, 2),
+            topic: String(d.topic_name ?? d.topic ?? "").trim(),
+            tags: Array.isArray(d.tags) ? d.tags.map(String).filter((t: string) => t.trim()) : [],
+          }))
+          .filter((i: ParsedItem) => i.prompt.length > 0 && i.prompt.length <= 200);
+        setParsedItems(items);
+        setCsvPreview(items.slice(0, 6).map((i) => [i.prompt, i.location, i.topic, ...i.tags]));
+      } catch {
+        setError("Invalid JSON file. Please check the format.");
+      }
+    } else if (ext === "xlsx" || ext === "xls") {
+      // ── Excel file ─────────────────────────────────────────────────────
+      try {
+        const { read, utils } = await import("xlsx");
+        const buffer = await f.arrayBuffer();
+        const wb = read(buffer);
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = utils.sheet_to_json<string[]>(ws, { header: 1 }) as string[][];
+        if (rows.length < 2) { setError("Excel file has no data rows."); return; }
+
+        // Detect column indexes from header row
+        const header = rows[0].map((h) => String(h ?? "").toLowerCase().trim());
+        const promptCol = header.findIndex((h) => h === "prompt" || h === "query");
+        const locationCol = header.findIndex((h) => h === "location");
+        const topicCol = header.findIndex((h) => h === "topic_name" || h === "topic");
+        const tagsCol = header.findIndex((h) => h === "tags");
+
+        const items: ParsedItem[] = rows.slice(1)
+          .map((row) => {
+            const prompt = String(row[promptCol >= 0 ? promptCol : 0] ?? "").trim();
+            const loc = String(row[locationCol >= 0 ? locationCol : 1] ?? "US").toUpperCase().slice(0, 2) || "US";
+            const topic = String(row[topicCol >= 0 ? topicCol : 2] ?? "").trim();
+            let tags: string[] = [];
+            if (tagsCol >= 0) {
+              const rawTags = String(row[tagsCol] ?? "");
+              tags = rawTags.startsWith("[")
+                ? JSON.parse(rawTags).map(String)
+                : rawTags.split(",").map((t) => t.trim()).filter(Boolean);
+            }
+            return { prompt, location: loc, topic, tags };
+          })
+          .filter((i) => i.prompt.length > 0 && i.prompt.length <= 200);
+
+        setParsedItems(items);
+        setCsvPreview(rows.slice(0, 6));
+      } catch {
+        setError("Failed to parse Excel file. Please check the format.");
+      }
+    } else {
+      // ── CSV ─────────────────────────────────────────────────────────────
+      const txt = await f.text();
+      const rows = txt
+        .split(/\r?\n/)
+        .map((r) => r.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, "")))
+        .filter((r) => r.some((c) => c.length > 0));
+      setCsvPreview(rows.slice(0, 6));
+    }
   }
 
   async function submitManual() {
@@ -2373,16 +2454,31 @@ function AddPromptModal({
 
   async function submitCsv() {
     if (!csvFile) {
-      setError("Choose a CSV file");
+      setError("Choose a file (CSV, XLSX, or JSON)");
       return;
     }
     setBusy(true);
     setError(null);
-    const csvText = await csvFile.text();
-    const result = await fromCsvAction({ csvText });
+
+    let result: { ok: boolean; inserted: number; error?: string };
+
+    if (fileType === "json" || fileType === "xlsx") {
+      // JSON + XLSX: use pre-parsed items
+      if (!parsedItems || parsedItems.length === 0) {
+        setError("No valid prompts found in file.");
+        setBusy(false);
+        return;
+      }
+      result = await fromParsedAction({ items: parsedItems });
+    } else {
+      // CSV: send raw text to server
+      const csvText = await csvFile.text();
+      result = await fromCsvAction({ csvText });
+    }
+
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "Failed to import CSV");
+      setError(result.error ?? "Failed to import file");
       return;
     }
     onDone();
@@ -2470,7 +2566,7 @@ function AddPromptModal({
             </div>
 
             <label className="pp-modal-label">Tags (optional)</label>
-            <div className="pp-modal-tags">
+            <div className="pp-modal-tags" style={{ maxHeight: 80, overflowY: "auto", flexWrap: "wrap" }}>
               {availableTags.length === 0 ? (
                 <span className="pp-modal-empty">
                   No tags yet — create them on the Tags page
@@ -2500,17 +2596,35 @@ function AddPromptModal({
           </>
         ) : (
           <>
-            <label className="pp-modal-label">CSV file</label>
+            <label className="pp-modal-label">Upload file</label>
+            <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+              {(["CSV", "XLSX", "JSON"] as const).map((fmt) => (
+                <span key={fmt} style={{
+                  fontSize: 11, fontWeight: 600, padding: "2px 8px",
+                  borderRadius: 4, background: "#f1f5f9", color: "#64748b",
+                  border: "1px solid #e2e8f0",
+                }}>
+                  {fmt}
+                </span>
+              ))}
+            </div>
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,.xls,.json,text/csv,application/json"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) handleCsvFile(f);
               }}
             />
-            <div className="pp-modal-hint">
-              Format: header row + one prompt per row. Columns: prompt, location (ISO-2), topic, tag, tag, …
+            {fileType && csvFile && (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#10b981", fontWeight: 600 }}>
+                ✓ {csvFile.name} detected as {fileType.toUpperCase()}
+                {parsedItems && ` — ${parsedItems.length} prompts found`}
+              </div>
+            )}
+            <div className="pp-modal-hint" style={{ marginTop: 6 }}>
+              <strong>CSV/XLSX:</strong> header row + columns: prompt, location, topic, tag, tag…<br />
+              <strong>JSON:</strong> array of objects with <code>prompt</code>, <code>location</code>, <code>topic_name</code>, <code>tags</code> fields
             </div>
             {csvPreview && csvPreview.length > 0 && (
               <div className="pp-csv-preview">
@@ -2556,7 +2670,11 @@ function AddPromptModal({
             ) : tab === "manual" ? (
               `Add ${lines.length || ""} prompt${lines.length === 1 ? "" : "s"}`.trim()
             ) : (
-              "Import CSV"
+              parsedItems
+                ? `Import ${parsedItems.length} prompts`
+                : fileType === "csv" || !fileType
+                ? "Import CSV"
+                : `Import ${(fileType ?? "").toUpperCase()}`
             )}
           </button>
         </div>

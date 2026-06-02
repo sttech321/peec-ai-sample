@@ -19,6 +19,7 @@ import {
   addPrompt,
   addPromptsBulk,
   addPromptsFromCsv,
+  addPromptsFromParsed,
   runNow,
   createTopic,
   assignTagToPromptByName,
@@ -506,6 +507,7 @@ export default async function PromptsPage() {
         addPromptAction={addPrompt}
         addPromptsBulkAction={addPromptsBulk}
         addPromptsFromCsvAction={addPromptsFromCsv}
+        addPromptsFromParsedAction={addPromptsFromParsed}
         runNowAction={runNow}
         addBrandAction={addBrand}
         createTopicAction={createTopic}

@@ -8,7 +8,7 @@ const isClerkConfigured =
   CLERK_KEY.length > 40 &&
   !CLERK_KEY.includes("dummy");
 
-const TV_PASSWORD = "Thrive4Life!";
+const TV_PASSWORD = process.env.TV_APP_PASSWORD ?? "Thrive4Life!";
 const TV_COOKIE = "tv_access";
 
 const isPublicRoute = createRouteMatcher([
