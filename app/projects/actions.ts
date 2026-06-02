@@ -130,13 +130,15 @@ export async function deleteProject(projectId: string) {
 
   await db.delete(projects).where(eq(projects.id, projectId));
 
+  // Check remaining projects after deletion
+  const [next] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(eq(projects.workspaceId, workspaceId))
+    .limit(1);
+
   const active = cookieStore.get(ACTIVE_PROJECT_COOKIE)?.value;
   if (active === projectId) {
-    const [next] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(eq(projects.workspaceId, workspaceId))
-      .limit(1);
     if (next) {
       cookieStore.set(ACTIVE_PROJECT_COOKIE, next.id, {
         path: "/",
@@ -145,6 +147,11 @@ export async function deleteProject(projectId: string) {
     } else {
       cookieStore.delete(ACTIVE_PROJECT_COOKIE);
     }
+  }
+
+  // No projects left → clear setup-done cookie so middleware redirects to /setup
+  if (!next) {
+    cookieStore.delete("tv_setup_done");
   }
 
   revalidatePath("/", "layout");

@@ -14,16 +14,44 @@ import {
   Layers,
   ArrowUpDown,
   Settings as SettingsIcon,
-  Share2,
   RefreshCw,
   Archive,
   Building2,
   Check,
   Loader2,
   Play,
+  Columns,
+  Download,
 } from "lucide-react";
 import EngineIcon from "./EngineIcon";
 import { DEFAULT_ENGINES } from "../lib/engines";
+
+// ── Indicator mode ───────────────────────────────────────────────────────────
+type IndicatorMode = "default" | "indicators_only" | "none";
+
+// ── Column definitions ───────────────────────────────────────────────────────
+const COL_DEFS = [
+  { key: "visibility", label: "Visibility" },
+  { key: "sentiment",  label: "Sentiment" },
+  { key: "position",   label: "Position" },
+  { key: "mentions",   label: "Mentions" },
+  { key: "volume",     label: "Volume" },
+  { key: "status",     label: "Status" },
+  { key: "tags",       label: "Tags" },
+  { key: "location",   label: "Location" },
+  { key: "sov",        label: "SOV" },
+  { key: "added",      label: "Added" },
+] as const;
+
+type ColKey = typeof COL_DEFS[number]["key"];
+
+const DEFAULT_COLS = new Set<ColKey>([
+  "visibility", "sentiment", "position", "mentions",
+  "volume", "status", "tags", "location", "sov", "added",
+]);
+
+const LS_COLS = "pp_visible_cols";
+const LS_INDICATOR = "pp_indicator_mode";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface PromptBrand {
@@ -100,6 +128,26 @@ interface SetupHints {
   recentChatsErrored: number;
 }
 
+// ── Suggestion types ────────────────────────────────────────────────────────
+type SuggestionIntent = "transactional" | "informational" | "navigational" | "commercial";
+
+const INTENT_COLORS: Record<string, { bg: string; text: string }> = {
+  informational: { bg: "#dbeafe", text: "#1d4ed8" },
+  transactional:  { bg: "#fce7f3", text: "#be185d" },
+  navigational:   { bg: "#dcfce7", text: "#15803d" },
+  commercial:     { bg: "#ffedd5", text: "#c2410c" },
+};
+
+interface SuggestedPrompt {
+  id: string;
+  query: string;
+  intentType: SuggestionIntent;
+  volumeTier: string;
+  location: string;
+  topicName: string | null;
+  createdAt: string;
+}
+
 interface Props {
   prompts: PromptMetric[];
   totalCount: number;
@@ -109,6 +157,12 @@ interface Props {
   aggregates: Aggregates;
   projectName: string;
   setupHints: SetupHints;
+  suggestions: SuggestedPrompt[];
+  generateSuggestionsAction: () => Promise<{ ok: boolean; count: number; error?: string }>;
+  acceptSuggestionAction: (id: string) => Promise<{ ok: boolean }>;
+  rejectSuggestionAction: (id: string) => Promise<{ ok: boolean }>;
+  acceptAllSuggestionsAction: () => Promise<{ ok: boolean; accepted: number }>;
+  rejectAllSuggestionsAction: () => Promise<{ ok: boolean; rejected: number }>;
   addPromptAction: (formData: FormData) => Promise<void>;
   addPromptsBulkAction: (args: {
     texts: string[];
@@ -118,6 +172,9 @@ interface Props {
   }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
   addPromptsFromCsvAction: (args: {
     csvText: string;
+  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
+  addPromptsFromParsedAction: (args: {
+    items: { prompt: string; location: string; topic: string; tags: string[] }[];
   }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
   runNowAction: (
     promptId: string,
@@ -625,9 +682,16 @@ export default function PromptsComparisonClient({
   aggregates,
   projectName,
   setupHints,
+  suggestions,
+  generateSuggestionsAction,
+  acceptSuggestionAction,
+  rejectSuggestionAction,
+  acceptAllSuggestionsAction,
+  rejectAllSuggestionsAction,
   addPromptAction,
   addPromptsBulkAction,
   addPromptsFromCsvAction,
+  addPromptsFromParsedAction,
   runNowAction,
   addBrandAction,
   createTopicAction,
@@ -657,6 +721,172 @@ export default function PromptsComparisonClient({
   const [selectedModels, setSelectedModels] = useState<string[]>([...ALL_ENGINES]);
   const [dateRange, setDateRange] = useState<DateRange>(() => makeDateRange("7"));
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+
+  // ── Suggestions state ────────────────────────────────────────────────────
+  const [localSuggestions, setLocalSuggestions] = useState<SuggestedPrompt[]>(suggestions);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+
+  const handleGenerate = async () => {
+    setSuggestLoading(true);
+    setSuggestError(null);
+    const result = await generateSuggestionsAction();
+    setSuggestLoading(false);
+    if (!result.ok) { setSuggestError(result.error ?? "Generation failed"); return; }
+    startTransition(() => router.refresh());
+  };
+
+  const handleAccept = async (id: string) => {
+    setLocalSuggestions((prev) => prev.filter((s) => s.id !== id));
+    await acceptSuggestionAction(id);
+    startTransition(() => router.refresh());
+  };
+
+  const handleReject = async (id: string) => {
+    setLocalSuggestions((prev) => prev.filter((s) => s.id !== id));
+    await rejectSuggestionAction(id);
+  };
+
+  const handleAcceptAll = async () => {
+    setLocalSuggestions([]);
+    await acceptAllSuggestionsAction();
+    startTransition(() => router.refresh());
+  };
+
+  const handleRejectAll = async () => {
+    setLocalSuggestions([]);
+    await rejectAllSuggestionsAction();
+  };
+
+  // Keep local in sync when server refreshes
+  React.useEffect(() => { setLocalSuggestions(suggestions); }, [suggestions]);
+
+  // ── Column visibility + indicator mode (persisted to localStorage) ─────────
+  const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
+    if (typeof window === "undefined") return new Set(DEFAULT_COLS);
+    try {
+      const saved = localStorage.getItem(LS_COLS);
+      if (saved) return new Set(JSON.parse(saved) as ColKey[]);
+    } catch {}
+    return new Set(DEFAULT_COLS);
+  });
+  const [indicatorMode, setIndicatorMode] = useState<IndicatorMode>(() => {
+    if (typeof window === "undefined") return "default";
+    return (localStorage.getItem(LS_INDICATOR) as IndicatorMode) ?? "default";
+  });
+
+  const toggleCol = (key: ColKey) => {
+    setVisibleCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      localStorage.setItem(LS_COLS, JSON.stringify([...next]));
+      return next;
+    });
+  };
+  const resetCols = () => {
+    setVisibleCols(new Set(DEFAULT_COLS));
+    localStorage.setItem(LS_COLS, JSON.stringify([...DEFAULT_COLS]));
+  };
+  const setMode = (m: IndicatorMode) => {
+    setIndicatorMode(m);
+    localStorage.setItem(LS_INDICATOR, m);
+  };
+
+  // Dynamic colSpan for empty-row (fixed 3 cols: checkbox + prompt + crawl)
+  const visibleColCount = visibleCols.size + 3;
+
+  // ── Toolbar dropdown states ──────────────────────────────────────────────
+  const [showColPanel, setShowColPanel]   = useState(false);
+  const [showExport,   setShowExport]     = useState(false);
+  const [showIndPanel, setShowIndPanel]   = useState(false);
+  const colPanelRef  = useRef<HTMLDivElement>(null);
+  const exportRef    = useRef<HTMLDivElement>(null);
+  const indPanelRef  = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (showColPanel && colPanelRef.current && !colPanelRef.current.contains(e.target as Node)) setShowColPanel(false);
+      if (showExport   && exportRef.current    && !exportRef.current.contains(e.target as Node))   setShowExport(false);
+      if (showIndPanel && indPanelRef.current  && !indPanelRef.current.contains(e.target as Node)) setShowIndPanel(false);
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [showColPanel, showExport, showIndPanel]);
+
+  // ── Export helpers ───────────────────────────────────────────────────────
+  function exportData(format: "csv" | "xlsx" | "json") {
+    const exportRows = filtered;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    if (format === "json") {
+      const json = JSON.stringify(exportRows.map((p) => ({
+        status: "active",
+        topic_id: p.topicId,
+        topic_name: p.topicName,
+        id: p.id,
+        prompt: p.query,
+        visibility: p.visibility,
+        visibility_delta: p.visibilityTrend,
+        sentiment: p.sentiment || null,
+        sentiment_delta: p.sentimentTrend,
+        position: p.avgPosition || null,
+        position_delta: p.positionTrend,
+        mentions: p.topBrands.map((b) => b.name),
+        volume: null,
+        tags: p.tags.map((t) => t.name),
+        location: p.location,
+        share_of_voice: p.sov,
+        share_of_voice_delta: p.sovTrend,
+        added_at: p.createdAt,
+      })), null, 2);
+      download(`prompts-export-${dateStr}.json`, "application/json", json);
+    } else if (format === "csv") {
+      const header = "status,topic_id,topic_name,id,prompt,visibility,visibility_delta,sentiment,sentiment_delta,position,position_delta,mentions,volume,tags,location,share_of_voice,share_of_voice_delta,added_at";
+      const rows = exportRows.map((p) => [
+        "active", p.topicId ?? "", p.topicName ?? "", p.id, csvCell(p.query),
+        p.visibility, p.visibilityTrend, p.sentiment || "", p.sentimentTrend,
+        p.avgPosition || "", p.positionTrend,
+        csvCell(p.topBrands.map((b) => b.name).join(", ")),
+        "",
+        csvCell(p.tags.map((t) => t.name).join(", ")),
+        p.location, p.sov, p.sovTrend, p.createdAt,
+      ].join(",")).join("\n");
+      download(`prompts-export-${dateStr}.csv`, "text/csv", header + "\n" + rows);
+    } else {
+      import("xlsx").then(({ utils, writeFile }) => {
+        const ws = utils.json_to_sheet(exportRows.map((p) => ({
+          status: "active",
+          topic_id: p.topicId ?? "",
+          topic_name: p.topicName ?? "",
+          id: p.id,
+          prompt: p.query,
+          visibility: p.visibility,
+          visibility_delta: p.visibilityTrend,
+          sentiment: p.sentiment || null,
+          sentiment_delta: p.sentimentTrend,
+          position: p.avgPosition || null,
+          position_delta: p.positionTrend,
+          mentions: p.topBrands.map((b) => b.name).join(", "),
+          volume: null,
+          tags: p.tags.map((t) => t.name).join(", "),
+          location: p.location,
+          share_of_voice: p.sov,
+          share_of_voice_delta: p.sovTrend,
+          added_at: p.createdAt,
+        })));
+        const wb = utils.book_new();
+        utils.book_append_sheet(wb, ws, "Prompts");
+        writeFile(wb, `prompts-export-${dateStr}.xlsx`);
+      });
+    }
+    setShowExport(false);
+  }
+  function csvCell(v: string) { return `"${String(v).replace(/"/g, '""')}"`; }
+  function download(name: string, type: string, content: string) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([content], { type }));
+    a.download = name;
+    a.click();
+  }
 
   // Bulk-crawl state for the "Crawl Now" button. Progress is "N of M completed"
   // — we fire prompts in small parallel batches so a 100-prompt project doesn't
@@ -783,7 +1013,7 @@ export default function PromptsComparisonClient({
 
   // ── Tab counts (dynamic) ──────────────────────────────────────────────────
   const activeCount = prompts.length; // all current prompts are "active"
-  const suggestedCount = 0;
+  const suggestedCount = localSuggestions.length;
   const archivedCount = 0;
 
   const tabFiltered = filtered; // Active tab uses filtered; other tabs are 0 for now
@@ -861,30 +1091,30 @@ export default function PromptsComparisonClient({
   const allOnPageSelected =
     paginated.length > 0 && paginated.every((p) => selectedRows.has(p.id));
 
-  // Crawl the currently-filtered prompts across the currently-selected engines.
-  // We run in batches of 4 so a 100-prompt project doesn't fire 600 simultaneous
-  // engine calls and trip rate limits. After all batches finish we refresh the
-  // server component to pull the new chats / metrics into view.
+  // Crawl only the selected prompts (checkbox-ticked rows).
+  // Runs in batches of 4 to avoid rate-limit spikes.
   async function runBulkCrawl() {
     if (crawlState.running) return;
-    if (filtered.length === 0) return;
+    if (selectedRows.size === 0) return;
+
+    const targetPrompts = paginated.filter((p) => selectedRows.has(p.id));
     const engines = selectedModels.length > 0 ? selectedModels : [...ALL_ENGINES];
     const confirmed = window.confirm(
-      `Run a fresh crawl for ${filtered.length} prompt${filtered.length === 1 ? "" : "s"} × ${engines.length} engine${engines.length === 1 ? "" : "s"}?\n\nThis hits paid AI APIs.`,
+      `Run a fresh crawl for ${targetPrompts.length} selected prompt${targetPrompts.length === 1 ? "" : "s"} × ${engines.length} engine${engines.length === 1 ? "" : "s"}?\n\nThis hits paid AI APIs.`,
     );
     if (!confirmed) return;
 
-    setCrawlState({ running: true, done: 0, total: filtered.length });
+    setCrawlState({ running: true, done: 0, total: targetPrompts.length });
 
     const BATCH = 4;
     let done = 0;
-    for (let i = 0; i < filtered.length; i += BATCH) {
-      const batch = filtered.slice(i, i + BATCH);
+    for (let i = 0; i < targetPrompts.length; i += BATCH) {
+      const batch = targetPrompts.slice(i, i + BATCH);
       await Promise.allSettled(
         batch.map((p) => runNowAction(p.id, p.query, engines)),
       );
       done += batch.length;
-      setCrawlState({ running: true, done, total: filtered.length });
+      setCrawlState({ running: true, done, total: targetPrompts.length });
     }
 
     setCrawlState({ running: false, done: 0, total: 0 });
@@ -1087,6 +1317,32 @@ export default function PromptsComparisonClient({
               </li>
             ))}
           </ul>
+
+          {/* Suggested Topics */}
+          {activeTab === "suggested" && localSuggestions.length > 0 && (() => {
+            const topicCounts = new Map<string, number>();
+            localSuggestions.forEach((s) => {
+              const t = s.topicName ?? "General";
+              topicCounts.set(t, (topicCounts.get(t) ?? 0) + 1);
+            });
+            return (
+              <>
+                <div className="pp-topics-head" style={{ marginTop: 16 }}>
+                  <span className="pp-topics-title" style={{ fontSize: 11, color: "#aaa" }}>Suggested Topics</span>
+                </div>
+                <ul className="pp-topics-list">
+                  {[...topicCounts.entries()].map(([topic, count]) => (
+                    <li key={topic}>
+                      <div className="pp-topic-item" style={{ cursor: "default" }}>
+                        <span>{topic}</span>
+                        <span className="pp-topic-count">{count}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            );
+          })()}
         </aside>
 
         {/* Content */}
@@ -1105,6 +1361,11 @@ export default function PromptsComparisonClient({
                 onClick={() => setActiveTab("suggested")}
               >
                 Suggested
+                {suggestedCount > 0 && (
+                  <span style={{ marginLeft: 5, background: "#3b82f6", color: "#fff", borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 6px" }}>
+                    {suggestedCount}
+                  </span>
+                )}
               </button>
               <button
                 className={`pp-tab ${activeTab === "archived" ? "pp-tab-active" : ""}`}
@@ -1122,16 +1383,19 @@ export default function PromptsComparisonClient({
                 <button
                   className="pp-add-btn"
                   onClick={runBulkCrawl}
-                  disabled={crawlState.running || filtered.length === 0}
+                  disabled={crawlState.running || selectedRows.size === 0}
                   title={
-                    filtered.length === 0
-                      ? "No prompts match the current filter"
-                      : `Crawl ${filtered.length} prompt(s) across ${selectedModels.length || ALL_ENGINES.length} engine(s)`
+                    selectedRows.size === 0
+                      ? "Select prompts to crawl"
+                      : crawlState.running
+                      ? `Crawling ${crawlState.done}/${crawlState.total}…`
+                      : `Crawl ${selectedRows.size} selected prompt${selectedRows.size === 1 ? "" : "s"} × ${selectedModels.length || ALL_ENGINES.length} engine(s)`
                   }
                   style={{
-                    background: crawlState.running ? "#94a3b8" : "#10b981",
+                    background: crawlState.running || selectedRows.size === 0 ? "#94a3b8" : "#10b981",
                     color: "white",
                     marginRight: 8,
+                    cursor: selectedRows.size === 0 ? "not-allowed" : "pointer",
                   }}
                 >
                   {crawlState.running ? (
@@ -1142,7 +1406,7 @@ export default function PromptsComparisonClient({
                   ) : (
                     <>
                       <Play size={13} />
-                      Crawl Now
+                      {selectedRows.size > 0 ? `Crawl ${selectedRows.size}` : "Crawl Now"}
                     </>
                   )}
                 </button>
@@ -1153,8 +1417,28 @@ export default function PromptsComparisonClient({
                   Add Prompt
                 </button>
               )}
+              {canEdit && (
+                <button
+                  className="pp-add-btn"
+                  onClick={handleGenerate}
+                  disabled={suggestLoading}
+                  style={{ background: "#6366f1", color: "white" }}
+                  title="AI-generate new prompt suggestions based on your brand profile"
+                >
+                  {suggestLoading ? (
+                    <><Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Generating…</>
+                  ) : (
+                    <><Plus size={13} /> Suggest more</>
+                  )}
+                </button>
+              )}
             </div>
           </div>
+          {suggestError && (
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 14px", fontSize: 13, color: "#dc2626", margin: "0 0 8px" }}>
+              {suggestError}
+            </div>
+          )}
 
           {/* Aggregate metrics + utility icons */}
           <div className="pp-summary-row">
@@ -1190,15 +1474,86 @@ export default function PromptsComparisonClient({
                 <strong>#&nbsp;{aggregates.position || "—"}</strong>
               </span>
               <div className="pp-summary-icons">
-                <button className="pp-icon-btn" title="Refresh">
+                {/* Refresh */}
+                <button className="pp-icon-btn" title="Refresh" onClick={() => startTransition(() => router.refresh())}>
                   <RefreshCw size={14} />
                 </button>
-                <button className="pp-icon-btn" title="Share">
-                  <Share2 size={14} />
-                </button>
-                <button className="pp-icon-btn" title="Settings">
-                  <SettingsIcon size={14} />
-                </button>
+
+                {/* Export dropdown */}
+                <div style={{ position: "relative" }} ref={exportRef}>
+                  <button className={`pp-icon-btn ${showExport ? "pp-icon-btn-active" : ""}`} title="Export" onClick={() => { setShowExport((v) => !v); setShowColPanel(false); setShowIndPanel(false); }}>
+                    <Download size={14} />
+                  </button>
+                  {showExport && (
+                    <div className="pp-dd-menu" style={{ right: 0, left: "auto", width: 160, top: "calc(100% + 6px)" }}>
+                      <div className="pp-dd-heading">Export format</div>
+                      {(["CSV", "XLSX", "JSON"] as const).map((fmt) => (
+                        <button key={fmt} className="pp-dd-item" onClick={() => exportData(fmt.toLowerCase() as "csv" | "xlsx" | "json")}>
+                          {fmt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Column settings dropdown */}
+                <div style={{ position: "relative" }} ref={colPanelRef}>
+                  <button className={`pp-icon-btn ${showColPanel ? "pp-icon-btn-active" : ""}`} title="Column settings" onClick={() => { setShowColPanel((v) => !v); setShowExport(false); setShowIndPanel(false); }}>
+                    <Columns size={14} />
+                  </button>
+                  {showColPanel && (
+                    <div className="pp-dd-menu" style={{ right: 0, left: "auto", width: 220, top: "calc(100% + 6px)", maxHeight: 400, overflowY: "auto" }}>
+                      <div className="pp-dd-heading">Column settings</div>
+                      <div className="pp-dd-section-label" style={{ padding: "4px 12px", fontSize: 10, color: "#aaa", fontWeight: 600 }}>Fixed columns</div>
+                      <div className="pp-dd-item" style={{ opacity: 0.6, cursor: "default" }}>
+                        <Check size={12} style={{ marginRight: 6, color: "#3b82f6" }} /> Prompts
+                      </div>
+                      <div className="pp-dd-section-label" style={{ padding: "6px 12px 2px", fontSize: 10, color: "#aaa", fontWeight: 600 }}>Active columns</div>
+                      {COL_DEFS.map(({ key, label }) => (
+                        <button key={key} className="pp-dd-item" onClick={() => toggleCol(key)} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ width: 14, height: 14, border: "1.5px solid #3b82f6", borderRadius: 3, background: visibleCols.has(key) ? "#3b82f6" : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            {visibleCols.has(key) && <Check size={9} style={{ color: "white" }} />}
+                          </span>
+                          {label}
+                        </button>
+                      ))}
+                      <div className="pp-dd-section-label" style={{ padding: "6px 12px 2px", fontSize: 10, color: "#aaa", fontWeight: 600 }}>Available columns</div>
+                      {["Shopping", "Product Comparison", "Ads", "Map", "Web Search"].map((label) => (
+                        <div key={label} className="pp-dd-item" style={{ opacity: 0.4, cursor: "not-allowed", display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ width: 14, height: 14, border: "1.5px solid #d1d5db", borderRadius: 3, display: "inline-block", flexShrink: 0 }} />
+                          {label}
+                          <span style={{ marginLeft: "auto", fontSize: 10, color: "#aaa" }}>Soon</span>
+                        </div>
+                      ))}
+                      <div style={{ borderTop: "1px solid #f0f0f0", margin: "6px 0" }} />
+                      <button className="pp-dd-item" onClick={resetCols} style={{ color: "#6b7280", fontSize: 12 }}>
+                        ↺ Reset to default
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Indicators dropdown */}
+                <div style={{ position: "relative" }} ref={indPanelRef}>
+                  <button className={`pp-icon-btn ${showIndPanel ? "pp-icon-btn-active" : ""}`} title="Change indicators" onClick={() => { setShowIndPanel((v) => !v); setShowExport(false); setShowColPanel(false); }}>
+                    <SettingsIcon size={14} />
+                  </button>
+                  {showIndPanel && (
+                    <div className="pp-dd-menu" style={{ right: 0, left: "auto", width: 190, top: "calc(100% + 6px)" }}>
+                      <div className="pp-dd-heading">Change indicators</div>
+                      {([
+                        { value: "default",         label: "Default" },
+                        { value: "indicators_only", label: "Indicators only" },
+                        { value: "none",            label: "None" },
+                      ] as const).map(({ value, label }) => (
+                        <button key={value} className="pp-dd-item" onClick={() => { setMode(value); setShowIndPanel(false); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          {label}
+                          {indicatorMode === value && <Check size={13} />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1223,85 +1578,144 @@ export default function PromptsComparisonClient({
             />
           )}
 
-          {/* Table */}
-          <div className="pp-table-wrap">
+          {/* ── Suggested tab table ─────────────────────────────────── */}
+          {activeTab === "suggested" && (
+            <>
+              <div className="pp-table-wrap">
+                <table className="pp-table">
+                  <thead>
+                    <tr>
+                      <th className="pp-th-checkbox"><input type="checkbox" disabled /></th>
+                      <th className="pp-th-sortable">Prompt</th>
+                      <th>Volume <span className="pp-beta-pill">Beta</span></th>
+                      <th>Tags <span className="pp-beta-pill">Beta</span></th>
+                      <th>Suggested At</th>
+                      <th>Location</th>
+                      <th style={{ width: 72 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {localSuggestions.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="pp-empty-cell">
+                          <div className="pp-empty">
+                            <div className="pp-empty-icon"><Layers size={28} /></div>
+                            <div className="pp-empty-title">No suggested prompts</div>
+                            <div className="pp-empty-sub">
+                              Click <strong>Suggest more</strong> to generate AI-powered prompt ideas based on your brand profile.
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      localSuggestions.map((s) => {
+                        const ic = INTENT_COLORS[s.intentType] ?? INTENT_COLORS.informational;
+                        return (
+                          <tr key={s.id} style={{ opacity: 1 }}>
+                            <td className="pp-td-checkbox"><input type="checkbox" disabled /></td>
+                            <td className="pp-td-prompt">
+                              <span style={{ color: "#1a1a1a", fontWeight: 500 }}>{s.query}</span>
+                            </td>
+                            <td><VolumeBars tier={s.volumeTier} /></td>
+                            <td>
+                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 20, background: "#f1f5f9", color: "#64748b", fontWeight: 600 }}>
+                                  non-branded
+                                </span>
+                                <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 20, background: ic.bg, color: ic.text, fontWeight: 600 }}>
+                                  {s.intentType}
+                                </span>
+                              </div>
+                            </td>
+                            <td><span className="pp-added">{formatRelativeTime(s.createdAt)}</span></td>
+                            <td>
+                              <span className="pp-location">
+                                <img src={`https://flagcdn.com/w40/${s.location.toLowerCase()}.png`} alt={s.location} width={18} height={13} className="pp-flag-img" />
+                                {s.location}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button
+                                  onClick={() => handleReject(s.id)}
+                                  title="Reject"
+                                  style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid #e2e8f0", background: "white", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 14, fontWeight: 700 }}
+                                >
+                                  ×
+                                </button>
+                                <button
+                                  onClick={() => handleAccept(s.id)}
+                                  title="Accept & track"
+                                  style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid #10b981", background: "white", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#10b981", fontSize: 14, fontWeight: 700 }}
+                                >
+                                  ✓
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {/* Bottom bar — Reject all / Track all */}
+              {localSuggestions.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderTop: "1px solid #f0f0f0", background: "#fafafa", fontSize: 13 }}>
+                  <span style={{ color: "#64748b", fontWeight: 500 }}>{localSuggestions.length} Prompt{localSuggestions.length !== 1 ? "s" : ""}</span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={handleRejectAll}
+                      style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid #e2e8f0", background: "white", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}
+                    >
+                      × Reject all
+                    </button>
+                    <button
+                      onClick={handleAcceptAll}
+                      style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid #10b981", background: "#10b981", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "white", display: "flex", alignItems: "center", gap: 4 }}
+                    >
+                      ✓ Track all
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Active/Archived Table */}
+          {activeTab !== "suggested" && <div className="pp-table-wrap">
             <table className="pp-table">
               <thead>
                 <tr>
                   <th className="pp-th-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={allOnPageSelected}
-                      onChange={toggleAllRows}
-                    />
+                    <input type="checkbox" checked={allOnPageSelected} onChange={toggleAllRows} />
                   </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("query")}
-                  >
+                  <th className="pp-th-sortable" onClick={() => handleSort("query")}>
                     Prompt {renderSortIcon("query")}
                   </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("visibility")}
-                  >
-                    Visibility {renderSortIcon("visibility")}
-                  </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("sentiment")}
-                  >
-                    Sentiment {renderSortIcon("sentiment")}
-                  </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("avgPosition")}
-                  >
-                    Position {renderSortIcon("avgPosition")}
-                  </th>
-                  <th>Mentions</th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("volumeTier")}
-                  >
-                    Volume <span className="pp-beta-pill">Beta</span>{" "}
-                    {renderSortIcon("volumeTier")}
-                  </th>
-                  <th>Status</th>
-                  <th>Tags</th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("location")}
-                  >
-                    Location {renderSortIcon("location")}
-                  </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("sov")}
-                  >
-                    SOV {renderSortIcon("sov")}
-                  </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("createdAt")}
-                  >
-                    Added {renderSortIcon("createdAt")}
-                  </th>
+                  {visibleCols.has("visibility") && <th className="pp-th-sortable" onClick={() => handleSort("visibility")}>Visibility {renderSortIcon("visibility")}</th>}
+                  {visibleCols.has("sentiment")  && <th className="pp-th-sortable" onClick={() => handleSort("sentiment")}>Sentiment {renderSortIcon("sentiment")}</th>}
+                  {visibleCols.has("position")   && <th className="pp-th-sortable" onClick={() => handleSort("avgPosition")}>Position {renderSortIcon("avgPosition")}</th>}
+                  {visibleCols.has("mentions")   && <th>Mentions</th>}
+                  {visibleCols.has("volume")     && <th className="pp-th-sortable" onClick={() => handleSort("volumeTier")}>Volume <span className="pp-beta-pill">Beta</span> {renderSortIcon("volumeTier")}</th>}
+                  {visibleCols.has("status")     && <th>Status</th>}
+                  {visibleCols.has("tags")       && <th>Tags</th>}
+                  {visibleCols.has("location")   && <th className="pp-th-sortable" onClick={() => handleSort("location")}>Location {renderSortIcon("location")}</th>}
+                  {visibleCols.has("sov")        && <th className="pp-th-sortable" onClick={() => handleSort("sov")}>SOV {renderSortIcon("sov")}</th>}
+                  {visibleCols.has("added")      && <th className="pp-th-sortable" onClick={() => handleSort("createdAt")}>Added {renderSortIcon("createdAt")}</th>}
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {activeTab !== "active" || paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="pp-empty-cell">
+                    <td colSpan={visibleColCount} className="pp-empty-cell">
                       <div className="pp-empty">
                         <div className="pp-empty-icon">
                           <Layers size={28} />
                         </div>
                         <div className="pp-empty-title">
-                          {activeTab === "suggested"
-                            ? "No suggested prompts"
-                            : activeTab === "archived"
+                          {activeTab === "archived"
                             ? "No archived prompts"
                             : "No prompts found"}
                         </div>
@@ -1314,151 +1728,105 @@ export default function PromptsComparisonClient({
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((p) => (
+                  paginated.map((p) => {
+                    const showVal = indicatorMode !== "indicators_only";
+                    const showDelta = indicatorMode !== "none";
+                    return (
                     <tr key={p.id} style={!p.isActive ? { opacity: 0.45 } : undefined}>
                       <td className="pp-td-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.has(p.id)}
-                          onChange={() => toggleRow(p.id)}
-                        />
+                        <input type="checkbox" checked={selectedRows.has(p.id)} onChange={() => toggleRow(p.id)} />
                       </td>
                       <td className="pp-td-prompt">
-                        <a href={`/prompts/${p.id}`} className="pp-prompt-link">
-                          {p.query}
-                        </a>
+                        <a href={`/prompts/${p.id}`} className="pp-prompt-link">{p.query}</a>
                         {!p.isActive && (
-                          <span style={{
-                            marginLeft: 8,
-                            fontSize: 10,
-                            fontWeight: 600,
-                            letterSpacing: "0.04em",
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            background: "#f1f5f9",
-                            color: "#94a3b8",
-                            border: "1px solid #e2e8f0",
-                            verticalAlign: "middle",
-                          }}>
+                          <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", padding: "2px 6px", borderRadius: 4, background: "#f1f5f9", color: "#94a3b8", border: "1px solid #e2e8f0", verticalAlign: "middle" }}>
                             PAUSED
                           </span>
                         )}
                       </td>
-                      <td>
-                        <div className="pp-cell-stack">
-                          <span className="pp-metric-val">{p.visibility}%</span>
-                          <TrendLabel value={p.visibilityTrend} suffix="%" />
-                        </div>
-                      </td>
-                      <td>
-                        {p.sentiment > 0 ? (
-                          <div className="pp-cell-stack pp-cell-row">
-                            <span className="pp-cell-inline">
-                              <span
-                                className="pp-dot"
-                                style={{
-                                  background: sentimentDotColor(p.sentiment),
-                                }}
-                              />
-                              <span className="pp-metric-val">
-                                {p.sentiment.toFixed(0)}
-                              </span>
-                            </span>
-                            <TrendLabel value={p.sentimentTrend} />
-                          </div>
-                        ) : (
-                          <span className="pp-empty-val">—</span>
-                        )}
-                      </td>
-                      <td>
-                        {p.avgPosition > 0 ? (
+                      {visibleCols.has("visibility") && (
+                        <td>
                           <div className="pp-cell-stack">
-                            <span className="pp-metric-val">
-                              #&nbsp;{p.avgPosition.toFixed(1)}
+                            {showVal && <span className="pp-metric-val">{p.visibility}%</span>}
+                            {showDelta && <TrendLabel value={p.visibilityTrend} suffix="%" />}
+                          </div>
+                        </td>
+                      )}
+                      {visibleCols.has("sentiment") && (
+                        <td>
+                          {p.sentiment > 0 ? (
+                            <div className="pp-cell-stack pp-cell-row">
+                              {showVal && (
+                                <span className="pp-cell-inline">
+                                  <span className="pp-dot" style={{ background: sentimentDotColor(p.sentiment) }} />
+                                  <span className="pp-metric-val">{p.sentiment.toFixed(0)}</span>
+                                </span>
+                              )}
+                              {showDelta && <TrendLabel value={p.sentimentTrend} />}
+                            </div>
+                          ) : <span className="pp-empty-val">—</span>}
+                        </td>
+                      )}
+                      {visibleCols.has("position") && (
+                        <td>
+                          {p.avgPosition > 0 ? (
+                            <div className="pp-cell-stack">
+                              {showVal && <span className="pp-metric-val">#&nbsp;{p.avgPosition.toFixed(1)}</span>}
+                              {showDelta && <TrendLabel value={p.positionTrend} invert />}
+                            </div>
+                          ) : <span className="pp-empty-val">—</span>}
+                        </td>
+                      )}
+                      {visibleCols.has("mentions") && (
+                        <td>
+                          {p.topBrands.length > 0 ? (
+                            <div className="pp-mentions-stack">
+                              {p.topBrands.slice(0, 3).map((b) => <span key={b.id} className="pp-mention-chip"><BrandFavicon brand={b} /></span>)}
+                              {p.totalBrandsCount > 3 && <span className="pp-mention-plus">+{p.totalBrandsCount - 3}</span>}
+                            </div>
+                          ) : <span className="pp-empty-val">—</span>}
+                        </td>
+                      )}
+                      {visibleCols.has("volume") && <td><VolumeBars tier={p.volumeTier} /></td>}
+                      {visibleCols.has("status") && (
+                        <td>
+                          {p.isActive ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: "#dcfce7", color: "#16a34a" }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#16a34a" }} /> Active
                             </span>
-                            <TrendLabel value={p.positionTrend} invert />
-                          </div>
-                        ) : (
-                          <span className="pp-empty-val">—</span>
-                        )}
-                      </td>
-                      <td>
-                        {p.topBrands.length > 0 ? (
-                          <div className="pp-mentions-stack">
-                            {p.topBrands.slice(0, 3).map((b) => (
-                              <span key={b.id} className="pp-mention-chip">
-                                <BrandFavicon brand={b} />
-                              </span>
-                            ))}
-                            {p.totalBrandsCount > 3 && (
-                              <span className="pp-mention-plus">
-                                +{p.totalBrandsCount - 3}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="pp-empty-val">—</span>
-                        )}
-                      </td>
-                      <td>
-                        <VolumeBars tier={p.volumeTier} />
-                      </td>
-                      <td>
-                        {p.isActive ? (
-                          <span style={{
-                            display: "inline-flex", alignItems: "center", gap: 4,
-                            fontSize: 11, fontWeight: 600, padding: "2px 8px",
-                            borderRadius: 20, background: "#dcfce7", color: "#16a34a",
-                          }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#16a34a" }} />
-                            Active
+                          ) : (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: "#f1f5f9", color: "#94a3b8" }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#94a3b8" }} /> Deactive
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {visibleCols.has("tags") && (
+                        <td>
+                          <PromptTagsCell promptId={p.id} promptTags={p.tags} availableTags={availableTags}
+                            onTagClick={(tagId) => { setSelectedTagIds([tagId]); setTagOp("or"); setCurrentPage(1); }}
+                            assignTagAction={assignTagAction} removeTagAction={removeTagAction} />
+                        </td>
+                      )}
+                      {visibleCols.has("location") && (
+                        <td>
+                          <span className="pp-location">
+                            <img src={`https://flagcdn.com/w40/${p.location.toLowerCase()}.png`} alt={p.location} width={18} height={13} className="pp-flag-img" />
+                            {p.location}
                           </span>
-                        ) : (
-                          <span style={{
-                            display: "inline-flex", alignItems: "center", gap: 4,
-                            fontSize: 11, fontWeight: 600, padding: "2px 8px",
-                            borderRadius: 20, background: "#f1f5f9", color: "#94a3b8",
-                          }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#94a3b8" }} />
-                            Deactive
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <PromptTagsCell
-                          promptId={p.id}
-                          promptTags={p.tags}
-                          availableTags={availableTags}
-                          onTagClick={(tagId) => {
-                            setSelectedTagIds([tagId]);
-                            setTagOp("or");
-                            setCurrentPage(1);
-                          }}
-                          assignTagAction={assignTagAction}
-                          removeTagAction={removeTagAction}
-                        />
-                      </td>
-                      <td>
-                        <span className="pp-location">
-                          <img
-                            src={`https://flagcdn.com/w40/${p.location.toLowerCase()}.png`}
-                            alt={p.location}
-                            width={18}
-                            height={13}
-                            className="pp-flag-img"
-                          />
-                          {p.location}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="pp-cell-stack">
-                          <span className="pp-metric-val">{p.sov}%</span>
-                          <TrendLabel value={p.sovTrend} suffix="%" />
-                        </div>
-                      </td>
-                      <td>
-                        <span className="pp-added">{formatRelativeTime(p.createdAt)}</span>
-                      </td>
+                        </td>
+                      )}
+                      {visibleCols.has("sov") && (
+                        <td>
+                          <div className="pp-cell-stack">
+                            {showVal && <span className="pp-metric-val">{p.sov}%</span>}
+                            {showDelta && <TrendLabel value={p.sovTrend} suffix="%" />}
+                          </div>
+                        </td>
+                      )}
+                      {visibleCols.has("added") && (
+                        <td><span className="pp-added">{formatRelativeTime(p.createdAt)}</span></td>
+                      )}
                       <td>
                         {canRunScans ? (
                           <button
@@ -1482,14 +1850,14 @@ export default function PromptsComparisonClient({
                         )}
                       </td>
                     </tr>
-                  ))
+                  );})
                 )}
               </tbody>
             </table>
-          </div>
+          </div>}
 
-          {/* Pagination row */}
-          <div className="pp-pagination">
+          {/* Pagination row — hidden on Suggested tab */}
+          {activeTab !== "suggested" && <div className="pp-pagination">
             <div className="pp-pagination-left">
               <Dropdown
                 width={120}
@@ -1556,7 +1924,7 @@ export default function PromptsComparisonClient({
               <Archive size={13} />
               Archive all
             </button>
-          </div>
+          </div>}
         </section>
       </div>
 
@@ -1577,6 +1945,7 @@ export default function PromptsComparisonClient({
           onClose={() => setShowAddForm(false)}
           addBulkAction={addPromptsBulkAction}
           fromCsvAction={addPromptsFromCsvAction}
+          fromParsedAction={addPromptsFromParsedAction}
           onDone={() => {
             setShowAddForm(false);
             startTransition(() => router.refresh());
@@ -2295,6 +2664,8 @@ function SetupHintsBanner({
 // Two tabs: "Manual" (paste one prompt per line, set location/topic/tags) and
 // "Bulk Upload" (drop a CSV). Per Peec docs the manual form supports both
 // single-line and multi-line input — we use a textarea so both work.
+type ParsedItem = { prompt: string; location: string; topic: string; tags: string[] };
+
 function AddPromptModal({
   topics,
   availableTags,
@@ -2302,6 +2673,7 @@ function AddPromptModal({
   onClose,
   addBulkAction,
   fromCsvAction,
+  fromParsedAction,
   onDone,
 }: {
   topics: Topic[];
@@ -2317,6 +2689,9 @@ function AddPromptModal({
   fromCsvAction: (args: {
     csvText: string;
   }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
+  fromParsedAction: (args: {
+    items: ParsedItem[];
+  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
   onDone: () => void;
 }) {
   const [tab, setTab] = useState<"manual" | "csv">("manual");
@@ -2326,6 +2701,8 @@ function AddPromptModal({
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<string[][] | null>(null);
+  const [parsedItems, setParsedItems] = useState<ParsedItem[] | null>(null);
+  const [fileType, setFileType] = useState<"csv" | "json" | "xlsx" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -2338,12 +2715,77 @@ function AddPromptModal({
   async function handleCsvFile(f: File) {
     setCsvFile(f);
     setError(null);
-    const txt = await f.text();
-    const rows = txt
-      .split(/\r?\n/)
-      .map((r) => r.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, "")))
-      .filter((r) => r.some((c) => c.length > 0));
-    setCsvPreview(rows.slice(0, 6));
+    setParsedItems(null);
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+    setFileType(ext === "json" ? "json" : ext === "xlsx" || ext === "xls" ? "xlsx" : "csv");
+
+    if (ext === "json") {
+      // ── JSON export format (from Peec/Thrive Vision export) ───────────
+      try {
+        const txt = await f.text();
+        const data = JSON.parse(txt);
+        const arr = Array.isArray(data) ? data : [data];
+        const items: ParsedItem[] = arr
+          .filter((d: any) => d.prompt || d.query)
+          .map((d: any) => ({
+            prompt: String(d.prompt ?? d.query ?? "").trim(),
+            location: String(d.location ?? "US").toUpperCase().slice(0, 2),
+            topic: String(d.topic_name ?? d.topic ?? "").trim(),
+            tags: Array.isArray(d.tags) ? d.tags.map(String).filter((t: string) => t.trim()) : [],
+          }))
+          .filter((i: ParsedItem) => i.prompt.length > 0 && i.prompt.length <= 200);
+        setParsedItems(items);
+        setCsvPreview(items.slice(0, 6).map((i) => [i.prompt, i.location, i.topic, ...i.tags]));
+      } catch {
+        setError("Invalid JSON file. Please check the format.");
+      }
+    } else if (ext === "xlsx" || ext === "xls") {
+      // ── Excel file ─────────────────────────────────────────────────────
+      try {
+        const { read, utils } = await import("xlsx");
+        const buffer = await f.arrayBuffer();
+        const wb = read(buffer);
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = utils.sheet_to_json<string[]>(ws, { header: 1 }) as string[][];
+        if (rows.length < 2) { setError("Excel file has no data rows."); return; }
+
+        // Detect column indexes from header row
+        const header = rows[0].map((h) => String(h ?? "").toLowerCase().trim());
+        const promptCol = header.findIndex((h) => h === "prompt" || h === "query");
+        const locationCol = header.findIndex((h) => h === "location");
+        const topicCol = header.findIndex((h) => h === "topic_name" || h === "topic");
+        const tagsCol = header.findIndex((h) => h === "tags");
+
+        const items: ParsedItem[] = rows.slice(1)
+          .map((row) => {
+            const prompt = String(row[promptCol >= 0 ? promptCol : 0] ?? "").trim();
+            const loc = String(row[locationCol >= 0 ? locationCol : 1] ?? "US").toUpperCase().slice(0, 2) || "US";
+            const topic = String(row[topicCol >= 0 ? topicCol : 2] ?? "").trim();
+            let tags: string[] = [];
+            if (tagsCol >= 0) {
+              const rawTags = String(row[tagsCol] ?? "");
+              tags = rawTags.startsWith("[")
+                ? JSON.parse(rawTags).map(String)
+                : rawTags.split(",").map((t) => t.trim()).filter(Boolean);
+            }
+            return { prompt, location: loc, topic, tags };
+          })
+          .filter((i) => i.prompt.length > 0 && i.prompt.length <= 200);
+
+        setParsedItems(items);
+        setCsvPreview(rows.slice(0, 6));
+      } catch {
+        setError("Failed to parse Excel file. Please check the format.");
+      }
+    } else {
+      // ── CSV ─────────────────────────────────────────────────────────────
+      const txt = await f.text();
+      const rows = txt
+        .split(/\r?\n/)
+        .map((r) => r.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, "")))
+        .filter((r) => r.some((c) => c.length > 0));
+      setCsvPreview(rows.slice(0, 6));
+    }
   }
 
   async function submitManual() {
@@ -2373,16 +2815,31 @@ function AddPromptModal({
 
   async function submitCsv() {
     if (!csvFile) {
-      setError("Choose a CSV file");
+      setError("Choose a file (CSV, XLSX, or JSON)");
       return;
     }
     setBusy(true);
     setError(null);
-    const csvText = await csvFile.text();
-    const result = await fromCsvAction({ csvText });
+
+    let result: { ok: boolean; inserted: number; error?: string };
+
+    if (fileType === "json" || fileType === "xlsx") {
+      // JSON + XLSX: use pre-parsed items
+      if (!parsedItems || parsedItems.length === 0) {
+        setError("No valid prompts found in file.");
+        setBusy(false);
+        return;
+      }
+      result = await fromParsedAction({ items: parsedItems });
+    } else {
+      // CSV: send raw text to server
+      const csvText = await csvFile.text();
+      result = await fromCsvAction({ csvText });
+    }
+
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "Failed to import CSV");
+      setError(result.error ?? "Failed to import file");
       return;
     }
     onDone();
@@ -2470,7 +2927,7 @@ function AddPromptModal({
             </div>
 
             <label className="pp-modal-label">Tags (optional)</label>
-            <div className="pp-modal-tags">
+            <div className="pp-modal-tags" style={{ maxHeight: 80, overflowY: "auto", flexWrap: "wrap" }}>
               {availableTags.length === 0 ? (
                 <span className="pp-modal-empty">
                   No tags yet — create them on the Tags page
@@ -2500,17 +2957,35 @@ function AddPromptModal({
           </>
         ) : (
           <>
-            <label className="pp-modal-label">CSV file</label>
+            <label className="pp-modal-label">Upload file</label>
+            <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+              {(["CSV", "XLSX", "JSON"] as const).map((fmt) => (
+                <span key={fmt} style={{
+                  fontSize: 11, fontWeight: 600, padding: "2px 8px",
+                  borderRadius: 4, background: "#f1f5f9", color: "#64748b",
+                  border: "1px solid #e2e8f0",
+                }}>
+                  {fmt}
+                </span>
+              ))}
+            </div>
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,.xls,.json,text/csv,application/json"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) handleCsvFile(f);
               }}
             />
-            <div className="pp-modal-hint">
-              Format: header row + one prompt per row. Columns: prompt, location (ISO-2), topic, tag, tag, …
+            {fileType && csvFile && (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#10b981", fontWeight: 600 }}>
+                ✓ {csvFile.name} detected as {fileType.toUpperCase()}
+                {parsedItems && ` — ${parsedItems.length} prompts found`}
+              </div>
+            )}
+            <div className="pp-modal-hint" style={{ marginTop: 6 }}>
+              <strong>CSV/XLSX:</strong> header row + columns: prompt, location, topic, tag, tag…<br />
+              <strong>JSON:</strong> array of objects with <code>prompt</code>, <code>location</code>, <code>topic_name</code>, <code>tags</code> fields
             </div>
             {csvPreview && csvPreview.length > 0 && (
               <div className="pp-csv-preview">
@@ -2556,7 +3031,11 @@ function AddPromptModal({
             ) : tab === "manual" ? (
               `Add ${lines.length || ""} prompt${lines.length === 1 ? "" : "s"}`.trim()
             ) : (
-              "Import CSV"
+              parsedItems
+                ? `Import ${parsedItems.length} prompts`
+                : fileType === "csv" || !fileType
+                ? "Import CSV"
+                : `Import ${(fileType ?? "").toUpperCase()}`
             )}
           </button>
         </div>

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PASSWORD = "Thrive4Life!";
 const COOKIE = "tv_access";
 
 export async function POST(req: NextRequest) {
+  const PASSWORD = process.env.TV_APP_PASSWORD ?? "Thrive4Life!";
   const { password, from } = await req.json();
 
   if (password !== PASSWORD) {

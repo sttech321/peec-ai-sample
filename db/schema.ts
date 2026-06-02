@@ -286,6 +286,23 @@ export const brandSuggestions = pgTable("brand_suggestions", {
   workspaceIdx: index("brand_suggestions_workspace_idx").on(t.workspaceId),
 }));
 
+// ─── Prompt Suggestions ───────────────────────────────────────────────────────
+export const promptSuggestions = pgTable("prompt_suggestions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  query: varchar("query", { length: 500 }).notNull(),
+  intentType: varchar("intent_type", { length: 50 }).default("informational").notNull(),
+  volumeTier: varchar("volume_tier", { length: 50 }).default("Medium").notNull(),
+  location: varchar("location", { length: 10 }).default("US").notNull(),
+  topicName: varchar("topic_name", { length: 255 }),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  projectIdx: index("prompt_suggestions_project_idx").on(t.projectId),
+  statusIdx:  index("prompt_suggestions_status_idx").on(t.status),
+}));
+
 // ─── Analytics Snapshots ──────────────────────────────────────────────────────
 export const analyticsSnapshots = pgTable("analytics_snapshots", {
   id: uuid("id").primaryKey().defaultRandom(),

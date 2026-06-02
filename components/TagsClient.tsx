@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Plus, X, ChevronsUpDown } from "lucide-react";
-import { createTag, updateTag, deleteTag } from "../app/tags/actions";
+import { createTag, updateTag, deleteTag, deleteInvalidTags } from "../app/tags/actions";
 
 // ─── Tag color palette ───────────────────────────────────────────────────────
 const COLOR_OPTIONS = [
@@ -195,6 +195,22 @@ export default function TagsClient({
     await deleteTag(id);
   };
 
+  const [cleaning, setCleaning] = useState(false);
+  const doCleanup = async () => {
+    if (!window.confirm("Delete all invalid tags (IDs, questions, long phrases)?")) return;
+    setCleaning(true);
+    const result = await deleteInvalidTags();
+    setTagList((p) => p.filter((t) => {
+      if (/^pr_[a-f0-9-]{8,}$/i.test(t.name)) return false;
+      if (/[?!]/.test(t.name)) return false;
+      if (t.name.length > 50) return false;
+      if ((t.name.match(/\s+/g) ?? []).length > 4) return false;
+      return true;
+    }));
+    setCleaning(false);
+    alert(`Cleaned up ${result.deleted} invalid tags.`);
+  };
+
   const isEdit = modal === "edit";
 
   return (
@@ -202,9 +218,19 @@ export default function TagsClient({
       {/* Header */}
       <div className="tc-topbar">
         <h1 className="tc-title">Tags</h1>
-        <button className="tc-btn-add" onClick={openCreate}>
-          <Plus size={14} strokeWidth={2.5} /> Create Tag
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="tc-btn-add"
+            onClick={doCleanup}
+            disabled={cleaning}
+            style={{ background: "#ef4444", color: "#fff" }}
+          >
+            {cleaning ? "Cleaning…" : "Clean up invalid tags"}
+          </button>
+          <button className="tc-btn-add" onClick={openCreate}>
+            <Plus size={14} strokeWidth={2.5} /> Create Tag
+          </button>
+        </div>
       </div>
 
       {/* Search + count */}

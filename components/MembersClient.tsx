@@ -220,16 +220,14 @@ export default function MembersClient({
             </tr>
           </thead>
           <tbody>
-            {/* Owner row (the workspace creator = workspaceId email) */}
+            {/* Owner row */}
             <tr>
               <td>
                 <div className="member-info">
-                  <div className="member-avatar">{getInitial(workspaceId)}</div>
+                  <div className="member-avatar">{getInitial(currentEmail || workspaceId)}</div>
                   <span className="member-email">
-                    {workspaceId}
-                    {workspaceId === currentEmail && (
-                      <span className="member-you-tag" style={{ marginLeft: 6 }}>You</span>
-                    )}
+                    {currentEmail || workspaceId}
+                    <span className="member-you-tag" style={{ marginLeft: 6 }}>You</span>
                   </span>
                 </div>
               </td>

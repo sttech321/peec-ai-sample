@@ -1,12 +1,12 @@
 "use server";
 
 import { db } from "../../db";
-import { prompts, topics, tags, promptTags } from "../../db/schema";
+import { prompts, topics, tags, promptTags, promptSuggestions, brandProfiles } from "../../db/schema";
 import { revalidatePath } from "next/cache";
 import { getActiveProjectId, getWorkspaceId } from "../../lib/project-context";
 import { runPipelineForAllEngines, type PipelineJob } from "../../lib/run-pipeline";
 import { DEFAULT_ENGINES } from "../../lib/ai-clients";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 
 export async function addPrompt(formData: FormData) {
   const query = formData.get("query") as string;
@@ -366,8 +366,23 @@ export async function addPromptsFromCsv(args: {
   const rows = parseCsv(args.csvText);
   if (rows.length <= 1) return { ok: false, inserted: 0, error: "CSV has no data rows" };
 
-  // Skip header.
-  const dataRows = rows.slice(1).filter((r) => r.length > 0 && r[0]?.trim());
+  // ── Detect column mapping from header row ────────────────────────────────
+  const headerRow = rows[0].map((h) => h.toLowerCase().trim());
+  const col = (names: string[]) => {
+    for (const n of names) {
+      const i = headerRow.indexOf(n);
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
+  const promptCol   = col(["prompt", "query"]);
+  const locationCol = col(["location"]);
+  const topicCol    = col(["topic_name", "topic"]);
+  const tagsCol     = col(["tags"]);
+  // If header has a 'prompt' column, use named mapping; otherwise use positional
+  const useHeaders  = promptCol >= 0;
+
+  const dataRows = rows.slice(1).filter((r) => r.length > 0 && r[promptCol >= 0 ? promptCol : 0]?.trim());
 
   // Pre-build topic + tag caches so each row doesn't hit the DB on its own.
   const existingTopics = await db
@@ -406,19 +421,43 @@ export async function addPromptsFromCsv(args: {
     return created.id;
   }
 
+  function isValidTag(t: string): boolean {
+    if (t.length === 0 || t.length > 50) return false;
+    if (/^pr_[a-f0-9-]{8,}$/i.test(t)) return false;       // prompt IDs
+    if (/[?!]/.test(t)) return false;                        // questions
+    if (/^\d{4}-\d{2}-\d{2}/.test(t)) return false;         // dates/timestamps
+    if (/^-?\d+(\.\d+)?$/.test(t)) return false;             // pure numbers
+    if ((t.match(/\s+/g) ?? []).length > 4) return false;    // >4 words
+    return true;
+  }
+
   // Default topic for rows with no topic specified.
   let defaultTopicId: string | null = null;
 
   let inserted = 0;
   for (const row of dataRows) {
-    const promptText = (row[0] ?? "").trim();
+    let promptText: string;
+    let location: string;
+    let topicName: string;
+    let tagNames: string[];
+
+    if (useHeaders) {
+      // ── Named column mapping (Peec/Thrive Vision export format) ─────────
+      promptText = (row[promptCol] ?? "").trim();
+      location = ((locationCol >= 0 ? row[locationCol] : "") || "US").trim().toUpperCase().slice(0, 2) || "US";
+      topicName = (topicCol >= 0 ? row[topicCol] : "").trim();
+      // tags column may be comma-separated string: "branded, commercial"
+      const rawTags = tagsCol >= 0 ? (row[tagsCol] ?? "") : "";
+      tagNames = rawTags.split(",").map((t) => t.trim()).filter(isValidTag);
+    } else {
+      // ── Positional mapping (simple format: prompt, location, topic, tag…) ─
+      promptText = (row[0] ?? "").trim();
+      location = ((row[1] ?? "US").trim() || "US").toUpperCase().slice(0, 2);
+      topicName = (row[2] ?? "").trim();
+      tagNames = row.slice(3).map((t) => t.trim()).filter(isValidTag);
+    }
+
     if (!promptText || promptText.length > 200) continue;
-    const location = ((row[1] ?? "US").trim() || "US").toUpperCase().slice(0, 2);
-    const topicName = (row[2] ?? "").trim();
-    const tagNames = row
-      .slice(3)
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0 && t.length <= 100);
 
     let topicId: string;
     if (topicName) topicId = await ensureTopic(topicName);
@@ -448,6 +487,74 @@ export async function addPromptsFromCsv(args: {
           tagId,
         })),
       );
+    }
+    inserted++;
+  }
+
+  revalidatePath("/prompts");
+  revalidatePath("/");
+  return { ok: true, inserted };
+}
+
+// ─── Import from pre-parsed rows (JSON / XLSX / CSV all use this) ────────────
+export async function addPromptsFromParsed(args: {
+  items: { prompt: string; location: string; topic: string; tags: string[] }[];
+}): Promise<{ ok: boolean; inserted: number; error?: string }> {
+  const workspaceId = await getWorkspaceId();
+  const projectId = await getActiveProjectId();
+
+  const validItems = args.items.filter(
+    (i) => i.prompt.trim().length > 0 && i.prompt.trim().length <= 200,
+  );
+  if (validItems.length === 0) return { ok: false, inserted: 0, error: "No valid prompts found" };
+
+  const existingTopics = await db
+    .select({ id: topics.id, name: topics.name })
+    .from(topics)
+    .where(eq(topics.projectId, projectId));
+  const topicByName = new Map(existingTopics.map((t) => [t.name.toLowerCase(), t.id]));
+
+  const existingTags = await db
+    .select({ id: tags.id, name: tags.name })
+    .from(tags)
+    .where(eq(tags.projectId, projectId));
+  const tagByName = new Map(existingTags.map((t) => [t.name.toLowerCase(), t.id]));
+
+  async function ensureTopic(name: string): Promise<string> {
+    const key = (name || "General Topic").toLowerCase();
+    const ex = topicByName.get(key);
+    if (ex) return ex;
+    const [c] = await db.insert(topics).values({ workspaceId, projectId, name: name || "General Topic" }).returning({ id: topics.id });
+    topicByName.set(key, c.id);
+    return c.id;
+  }
+
+  async function ensureTag(name: string): Promise<string> {
+    const key = name.toLowerCase();
+    const ex = tagByName.get(key);
+    if (ex) return ex;
+    const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const [c] = await db.insert(tags).values({ workspaceId, projectId, name, slug, color: "gray" }).returning({ id: tags.id });
+    tagByName.set(key, c.id);
+    return c.id;
+  }
+
+  let inserted = 0;
+  for (const item of validItems) {
+    const topicId = await ensureTopic(item.topic);
+    const location = (item.location || "US").toUpperCase().slice(0, 2);
+
+    const [created] = await db
+      .insert(prompts)
+      .values({ workspaceId, projectId, topicId, query: item.prompt.trim(), volumeTier: "Medium", location })
+      .returning({ id: prompts.id });
+
+    const validTags = item.tags.filter(
+      (t) => t.trim().length > 0 && t.length <= 50 && !/[?!]/.test(t),
+    );
+    if (validTags.length > 0) {
+      const tagIds = await Promise.all(validTags.map(ensureTag));
+      await db.insert(promptTags).values(tagIds.map((tagId) => ({ workspaceId, promptId: created.id, tagId })));
     }
     inserted++;
   }
