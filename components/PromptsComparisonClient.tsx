@@ -14,16 +14,44 @@ import {
   Layers,
   ArrowUpDown,
   Settings as SettingsIcon,
-  Share2,
   RefreshCw,
   Archive,
   Building2,
   Check,
   Loader2,
   Play,
+  Columns,
+  Download,
 } from "lucide-react";
 import EngineIcon from "./EngineIcon";
 import { DEFAULT_ENGINES } from "../lib/engines";
+
+// ── Indicator mode ───────────────────────────────────────────────────────────
+type IndicatorMode = "default" | "indicators_only" | "none";
+
+// ── Column definitions ───────────────────────────────────────────────────────
+const COL_DEFS = [
+  { key: "visibility", label: "Visibility" },
+  { key: "sentiment",  label: "Sentiment" },
+  { key: "position",   label: "Position" },
+  { key: "mentions",   label: "Mentions" },
+  { key: "volume",     label: "Volume" },
+  { key: "status",     label: "Status" },
+  { key: "tags",       label: "Tags" },
+  { key: "location",   label: "Location" },
+  { key: "sov",        label: "SOV" },
+  { key: "added",      label: "Added" },
+] as const;
+
+type ColKey = typeof COL_DEFS[number]["key"];
+
+const DEFAULT_COLS = new Set<ColKey>([
+  "visibility", "sentiment", "position", "mentions",
+  "volume", "status", "tags", "location", "sov", "added",
+]);
+
+const LS_COLS = "pp_visible_cols";
+const LS_INDICATOR = "pp_indicator_mode";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface PromptBrand {
@@ -662,6 +690,133 @@ export default function PromptsComparisonClient({
   const [dateRange, setDateRange] = useState<DateRange>(() => makeDateRange("7"));
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
+  // ── Column visibility + indicator mode (persisted to localStorage) ─────────
+  const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
+    if (typeof window === "undefined") return new Set(DEFAULT_COLS);
+    try {
+      const saved = localStorage.getItem(LS_COLS);
+      if (saved) return new Set(JSON.parse(saved) as ColKey[]);
+    } catch {}
+    return new Set(DEFAULT_COLS);
+  });
+  const [indicatorMode, setIndicatorMode] = useState<IndicatorMode>(() => {
+    if (typeof window === "undefined") return "default";
+    return (localStorage.getItem(LS_INDICATOR) as IndicatorMode) ?? "default";
+  });
+
+  const toggleCol = (key: ColKey) => {
+    setVisibleCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      localStorage.setItem(LS_COLS, JSON.stringify([...next]));
+      return next;
+    });
+  };
+  const resetCols = () => {
+    setVisibleCols(new Set(DEFAULT_COLS));
+    localStorage.setItem(LS_COLS, JSON.stringify([...DEFAULT_COLS]));
+  };
+  const setMode = (m: IndicatorMode) => {
+    setIndicatorMode(m);
+    localStorage.setItem(LS_INDICATOR, m);
+  };
+
+  // Dynamic colSpan for empty-row (fixed 3 cols: checkbox + prompt + crawl)
+  const visibleColCount = visibleCols.size + 3;
+
+  // ── Toolbar dropdown states ──────────────────────────────────────────────
+  const [showColPanel, setShowColPanel]   = useState(false);
+  const [showExport,   setShowExport]     = useState(false);
+  const [showIndPanel, setShowIndPanel]   = useState(false);
+  const colPanelRef  = useRef<HTMLDivElement>(null);
+  const exportRef    = useRef<HTMLDivElement>(null);
+  const indPanelRef  = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (showColPanel && colPanelRef.current && !colPanelRef.current.contains(e.target as Node)) setShowColPanel(false);
+      if (showExport   && exportRef.current    && !exportRef.current.contains(e.target as Node))   setShowExport(false);
+      if (showIndPanel && indPanelRef.current  && !indPanelRef.current.contains(e.target as Node)) setShowIndPanel(false);
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [showColPanel, showExport, showIndPanel]);
+
+  // ── Export helpers ───────────────────────────────────────────────────────
+  function exportData(format: "csv" | "xlsx" | "json") {
+    const exportRows = filtered;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    if (format === "json") {
+      const json = JSON.stringify(exportRows.map((p) => ({
+        status: "active",
+        topic_id: p.topicId,
+        topic_name: p.topicName,
+        id: p.id,
+        prompt: p.query,
+        visibility: p.visibility,
+        visibility_delta: p.visibilityTrend,
+        sentiment: p.sentiment || null,
+        sentiment_delta: p.sentimentTrend,
+        position: p.avgPosition || null,
+        position_delta: p.positionTrend,
+        mentions: p.topBrands.map((b) => b.name),
+        volume: null,
+        tags: p.tags.map((t) => t.name),
+        location: p.location,
+        share_of_voice: p.sov,
+        share_of_voice_delta: p.sovTrend,
+        added_at: p.createdAt,
+      })), null, 2);
+      download(`prompts-export-${dateStr}.json`, "application/json", json);
+    } else if (format === "csv") {
+      const header = "status,topic_id,topic_name,id,prompt,visibility,visibility_delta,sentiment,sentiment_delta,position,position_delta,mentions,volume,tags,location,share_of_voice,share_of_voice_delta,added_at";
+      const rows = exportRows.map((p) => [
+        "active", p.topicId ?? "", p.topicName ?? "", p.id, csvCell(p.query),
+        p.visibility, p.visibilityTrend, p.sentiment || "", p.sentimentTrend,
+        p.avgPosition || "", p.positionTrend,
+        csvCell(p.topBrands.map((b) => b.name).join(", ")),
+        "",
+        csvCell(p.tags.map((t) => t.name).join(", ")),
+        p.location, p.sov, p.sovTrend, p.createdAt,
+      ].join(",")).join("\n");
+      download(`prompts-export-${dateStr}.csv`, "text/csv", header + "\n" + rows);
+    } else {
+      import("xlsx").then(({ utils, writeFile }) => {
+        const ws = utils.json_to_sheet(exportRows.map((p) => ({
+          status: "active",
+          topic_id: p.topicId ?? "",
+          topic_name: p.topicName ?? "",
+          id: p.id,
+          prompt: p.query,
+          visibility: p.visibility,
+          visibility_delta: p.visibilityTrend,
+          sentiment: p.sentiment || null,
+          sentiment_delta: p.sentimentTrend,
+          position: p.avgPosition || null,
+          position_delta: p.positionTrend,
+          mentions: p.topBrands.map((b) => b.name).join(", "),
+          volume: null,
+          tags: p.tags.map((t) => t.name).join(", "),
+          location: p.location,
+          share_of_voice: p.sov,
+          share_of_voice_delta: p.sovTrend,
+          added_at: p.createdAt,
+        })));
+        const wb = utils.book_new();
+        utils.book_append_sheet(wb, ws, "Prompts");
+        writeFile(wb, `prompts-export-${dateStr}.xlsx`);
+      });
+    }
+    setShowExport(false);
+  }
+  function csvCell(v: string) { return `"${String(v).replace(/"/g, '""')}"`; }
+  function download(name: string, type: string, content: string) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([content], { type }));
+    a.download = name;
+    a.click();
+  }
+
   // Bulk-crawl state for the "Crawl Now" button. Progress is "N of M completed"
   // — we fire prompts in small parallel batches so a 100-prompt project doesn't
   // create 100 simultaneous engine calls (which would trip rate limits per
@@ -1197,15 +1352,86 @@ export default function PromptsComparisonClient({
                 <strong>#&nbsp;{aggregates.position || "—"}</strong>
               </span>
               <div className="pp-summary-icons">
-                <button className="pp-icon-btn" title="Refresh">
+                {/* Refresh */}
+                <button className="pp-icon-btn" title="Refresh" onClick={() => startTransition(() => router.refresh())}>
                   <RefreshCw size={14} />
                 </button>
-                <button className="pp-icon-btn" title="Share">
-                  <Share2 size={14} />
-                </button>
-                <button className="pp-icon-btn" title="Settings">
-                  <SettingsIcon size={14} />
-                </button>
+
+                {/* Export dropdown */}
+                <div style={{ position: "relative" }} ref={exportRef}>
+                  <button className={`pp-icon-btn ${showExport ? "pp-icon-btn-active" : ""}`} title="Export" onClick={() => { setShowExport((v) => !v); setShowColPanel(false); setShowIndPanel(false); }}>
+                    <Download size={14} />
+                  </button>
+                  {showExport && (
+                    <div className="pp-dd-menu" style={{ right: 0, left: "auto", width: 160, top: "calc(100% + 6px)" }}>
+                      <div className="pp-dd-heading">Export format</div>
+                      {(["CSV", "XLSX", "JSON"] as const).map((fmt) => (
+                        <button key={fmt} className="pp-dd-item" onClick={() => exportData(fmt.toLowerCase() as "csv" | "xlsx" | "json")}>
+                          {fmt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Column settings dropdown */}
+                <div style={{ position: "relative" }} ref={colPanelRef}>
+                  <button className={`pp-icon-btn ${showColPanel ? "pp-icon-btn-active" : ""}`} title="Column settings" onClick={() => { setShowColPanel((v) => !v); setShowExport(false); setShowIndPanel(false); }}>
+                    <Columns size={14} />
+                  </button>
+                  {showColPanel && (
+                    <div className="pp-dd-menu" style={{ right: 0, left: "auto", width: 220, top: "calc(100% + 6px)", maxHeight: 400, overflowY: "auto" }}>
+                      <div className="pp-dd-heading">Column settings</div>
+                      <div className="pp-dd-section-label" style={{ padding: "4px 12px", fontSize: 10, color: "#aaa", fontWeight: 600 }}>Fixed columns</div>
+                      <div className="pp-dd-item" style={{ opacity: 0.6, cursor: "default" }}>
+                        <Check size={12} style={{ marginRight: 6, color: "#3b82f6" }} /> Prompts
+                      </div>
+                      <div className="pp-dd-section-label" style={{ padding: "6px 12px 2px", fontSize: 10, color: "#aaa", fontWeight: 600 }}>Active columns</div>
+                      {COL_DEFS.map(({ key, label }) => (
+                        <button key={key} className="pp-dd-item" onClick={() => toggleCol(key)} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ width: 14, height: 14, border: "1.5px solid #3b82f6", borderRadius: 3, background: visibleCols.has(key) ? "#3b82f6" : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            {visibleCols.has(key) && <Check size={9} style={{ color: "white" }} />}
+                          </span>
+                          {label}
+                        </button>
+                      ))}
+                      <div className="pp-dd-section-label" style={{ padding: "6px 12px 2px", fontSize: 10, color: "#aaa", fontWeight: 600 }}>Available columns</div>
+                      {["Shopping", "Product Comparison", "Ads", "Map", "Web Search"].map((label) => (
+                        <div key={label} className="pp-dd-item" style={{ opacity: 0.4, cursor: "not-allowed", display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ width: 14, height: 14, border: "1.5px solid #d1d5db", borderRadius: 3, display: "inline-block", flexShrink: 0 }} />
+                          {label}
+                          <span style={{ marginLeft: "auto", fontSize: 10, color: "#aaa" }}>Soon</span>
+                        </div>
+                      ))}
+                      <div style={{ borderTop: "1px solid #f0f0f0", margin: "6px 0" }} />
+                      <button className="pp-dd-item" onClick={resetCols} style={{ color: "#6b7280", fontSize: 12 }}>
+                        ↺ Reset to default
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Indicators dropdown */}
+                <div style={{ position: "relative" }} ref={indPanelRef}>
+                  <button className={`pp-icon-btn ${showIndPanel ? "pp-icon-btn-active" : ""}`} title="Change indicators" onClick={() => { setShowIndPanel((v) => !v); setShowExport(false); setShowColPanel(false); }}>
+                    <SettingsIcon size={14} />
+                  </button>
+                  {showIndPanel && (
+                    <div className="pp-dd-menu" style={{ right: 0, left: "auto", width: 190, top: "calc(100% + 6px)" }}>
+                      <div className="pp-dd-heading">Change indicators</div>
+                      {([
+                        { value: "default",         label: "Default" },
+                        { value: "indicators_only", label: "Indicators only" },
+                        { value: "none",            label: "None" },
+                      ] as const).map(({ value, label }) => (
+                        <button key={value} className="pp-dd-item" onClick={() => { setMode(value); setShowIndPanel(false); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          {label}
+                          {indicatorMode === value && <Check size={13} />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1236,71 +1462,28 @@ export default function PromptsComparisonClient({
               <thead>
                 <tr>
                   <th className="pp-th-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={allOnPageSelected}
-                      onChange={toggleAllRows}
-                    />
+                    <input type="checkbox" checked={allOnPageSelected} onChange={toggleAllRows} />
                   </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("query")}
-                  >
+                  <th className="pp-th-sortable" onClick={() => handleSort("query")}>
                     Prompt {renderSortIcon("query")}
                   </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("visibility")}
-                  >
-                    Visibility {renderSortIcon("visibility")}
-                  </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("sentiment")}
-                  >
-                    Sentiment {renderSortIcon("sentiment")}
-                  </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("avgPosition")}
-                  >
-                    Position {renderSortIcon("avgPosition")}
-                  </th>
-                  <th>Mentions</th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("volumeTier")}
-                  >
-                    Volume <span className="pp-beta-pill">Beta</span>{" "}
-                    {renderSortIcon("volumeTier")}
-                  </th>
-                  <th>Status</th>
-                  <th>Tags</th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("location")}
-                  >
-                    Location {renderSortIcon("location")}
-                  </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("sov")}
-                  >
-                    SOV {renderSortIcon("sov")}
-                  </th>
-                  <th
-                    className="pp-th-sortable"
-                    onClick={() => handleSort("createdAt")}
-                  >
-                    Added {renderSortIcon("createdAt")}
-                  </th>
+                  {visibleCols.has("visibility") && <th className="pp-th-sortable" onClick={() => handleSort("visibility")}>Visibility {renderSortIcon("visibility")}</th>}
+                  {visibleCols.has("sentiment")  && <th className="pp-th-sortable" onClick={() => handleSort("sentiment")}>Sentiment {renderSortIcon("sentiment")}</th>}
+                  {visibleCols.has("position")   && <th className="pp-th-sortable" onClick={() => handleSort("avgPosition")}>Position {renderSortIcon("avgPosition")}</th>}
+                  {visibleCols.has("mentions")   && <th>Mentions</th>}
+                  {visibleCols.has("volume")     && <th className="pp-th-sortable" onClick={() => handleSort("volumeTier")}>Volume <span className="pp-beta-pill">Beta</span> {renderSortIcon("volumeTier")}</th>}
+                  {visibleCols.has("status")     && <th>Status</th>}
+                  {visibleCols.has("tags")       && <th>Tags</th>}
+                  {visibleCols.has("location")   && <th className="pp-th-sortable" onClick={() => handleSort("location")}>Location {renderSortIcon("location")}</th>}
+                  {visibleCols.has("sov")        && <th className="pp-th-sortable" onClick={() => handleSort("sov")}>SOV {renderSortIcon("sov")}</th>}
+                  {visibleCols.has("added")      && <th className="pp-th-sortable" onClick={() => handleSort("createdAt")}>Added {renderSortIcon("createdAt")}</th>}
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {activeTab !== "active" || paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="pp-empty-cell">
+                    <td colSpan={visibleColCount} className="pp-empty-cell">
                       <div className="pp-empty">
                         <div className="pp-empty-icon">
                           <Layers size={28} />
@@ -1321,151 +1504,105 @@ export default function PromptsComparisonClient({
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((p) => (
+                  paginated.map((p) => {
+                    const showVal = indicatorMode !== "indicators_only";
+                    const showDelta = indicatorMode !== "none";
+                    return (
                     <tr key={p.id} style={!p.isActive ? { opacity: 0.45 } : undefined}>
                       <td className="pp-td-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.has(p.id)}
-                          onChange={() => toggleRow(p.id)}
-                        />
+                        <input type="checkbox" checked={selectedRows.has(p.id)} onChange={() => toggleRow(p.id)} />
                       </td>
                       <td className="pp-td-prompt">
-                        <a href={`/prompts/${p.id}`} className="pp-prompt-link">
-                          {p.query}
-                        </a>
+                        <a href={`/prompts/${p.id}`} className="pp-prompt-link">{p.query}</a>
                         {!p.isActive && (
-                          <span style={{
-                            marginLeft: 8,
-                            fontSize: 10,
-                            fontWeight: 600,
-                            letterSpacing: "0.04em",
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            background: "#f1f5f9",
-                            color: "#94a3b8",
-                            border: "1px solid #e2e8f0",
-                            verticalAlign: "middle",
-                          }}>
+                          <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", padding: "2px 6px", borderRadius: 4, background: "#f1f5f9", color: "#94a3b8", border: "1px solid #e2e8f0", verticalAlign: "middle" }}>
                             PAUSED
                           </span>
                         )}
                       </td>
-                      <td>
-                        <div className="pp-cell-stack">
-                          <span className="pp-metric-val">{p.visibility}%</span>
-                          <TrendLabel value={p.visibilityTrend} suffix="%" />
-                        </div>
-                      </td>
-                      <td>
-                        {p.sentiment > 0 ? (
-                          <div className="pp-cell-stack pp-cell-row">
-                            <span className="pp-cell-inline">
-                              <span
-                                className="pp-dot"
-                                style={{
-                                  background: sentimentDotColor(p.sentiment),
-                                }}
-                              />
-                              <span className="pp-metric-val">
-                                {p.sentiment.toFixed(0)}
-                              </span>
-                            </span>
-                            <TrendLabel value={p.sentimentTrend} />
-                          </div>
-                        ) : (
-                          <span className="pp-empty-val">—</span>
-                        )}
-                      </td>
-                      <td>
-                        {p.avgPosition > 0 ? (
+                      {visibleCols.has("visibility") && (
+                        <td>
                           <div className="pp-cell-stack">
-                            <span className="pp-metric-val">
-                              #&nbsp;{p.avgPosition.toFixed(1)}
+                            {showVal && <span className="pp-metric-val">{p.visibility}%</span>}
+                            {showDelta && <TrendLabel value={p.visibilityTrend} suffix="%" />}
+                          </div>
+                        </td>
+                      )}
+                      {visibleCols.has("sentiment") && (
+                        <td>
+                          {p.sentiment > 0 ? (
+                            <div className="pp-cell-stack pp-cell-row">
+                              {showVal && (
+                                <span className="pp-cell-inline">
+                                  <span className="pp-dot" style={{ background: sentimentDotColor(p.sentiment) }} />
+                                  <span className="pp-metric-val">{p.sentiment.toFixed(0)}</span>
+                                </span>
+                              )}
+                              {showDelta && <TrendLabel value={p.sentimentTrend} />}
+                            </div>
+                          ) : <span className="pp-empty-val">—</span>}
+                        </td>
+                      )}
+                      {visibleCols.has("position") && (
+                        <td>
+                          {p.avgPosition > 0 ? (
+                            <div className="pp-cell-stack">
+                              {showVal && <span className="pp-metric-val">#&nbsp;{p.avgPosition.toFixed(1)}</span>}
+                              {showDelta && <TrendLabel value={p.positionTrend} invert />}
+                            </div>
+                          ) : <span className="pp-empty-val">—</span>}
+                        </td>
+                      )}
+                      {visibleCols.has("mentions") && (
+                        <td>
+                          {p.topBrands.length > 0 ? (
+                            <div className="pp-mentions-stack">
+                              {p.topBrands.slice(0, 3).map((b) => <span key={b.id} className="pp-mention-chip"><BrandFavicon brand={b} /></span>)}
+                              {p.totalBrandsCount > 3 && <span className="pp-mention-plus">+{p.totalBrandsCount - 3}</span>}
+                            </div>
+                          ) : <span className="pp-empty-val">—</span>}
+                        </td>
+                      )}
+                      {visibleCols.has("volume") && <td><VolumeBars tier={p.volumeTier} /></td>}
+                      {visibleCols.has("status") && (
+                        <td>
+                          {p.isActive ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: "#dcfce7", color: "#16a34a" }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#16a34a" }} /> Active
                             </span>
-                            <TrendLabel value={p.positionTrend} invert />
-                          </div>
-                        ) : (
-                          <span className="pp-empty-val">—</span>
-                        )}
-                      </td>
-                      <td>
-                        {p.topBrands.length > 0 ? (
-                          <div className="pp-mentions-stack">
-                            {p.topBrands.slice(0, 3).map((b) => (
-                              <span key={b.id} className="pp-mention-chip">
-                                <BrandFavicon brand={b} />
-                              </span>
-                            ))}
-                            {p.totalBrandsCount > 3 && (
-                              <span className="pp-mention-plus">
-                                +{p.totalBrandsCount - 3}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="pp-empty-val">—</span>
-                        )}
-                      </td>
-                      <td>
-                        <VolumeBars tier={p.volumeTier} />
-                      </td>
-                      <td>
-                        {p.isActive ? (
-                          <span style={{
-                            display: "inline-flex", alignItems: "center", gap: 4,
-                            fontSize: 11, fontWeight: 600, padding: "2px 8px",
-                            borderRadius: 20, background: "#dcfce7", color: "#16a34a",
-                          }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#16a34a" }} />
-                            Active
+                          ) : (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: "#f1f5f9", color: "#94a3b8" }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#94a3b8" }} /> Deactive
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {visibleCols.has("tags") && (
+                        <td>
+                          <PromptTagsCell promptId={p.id} promptTags={p.tags} availableTags={availableTags}
+                            onTagClick={(tagId) => { setSelectedTagIds([tagId]); setTagOp("or"); setCurrentPage(1); }}
+                            assignTagAction={assignTagAction} removeTagAction={removeTagAction} />
+                        </td>
+                      )}
+                      {visibleCols.has("location") && (
+                        <td>
+                          <span className="pp-location">
+                            <img src={`https://flagcdn.com/w40/${p.location.toLowerCase()}.png`} alt={p.location} width={18} height={13} className="pp-flag-img" />
+                            {p.location}
                           </span>
-                        ) : (
-                          <span style={{
-                            display: "inline-flex", alignItems: "center", gap: 4,
-                            fontSize: 11, fontWeight: 600, padding: "2px 8px",
-                            borderRadius: 20, background: "#f1f5f9", color: "#94a3b8",
-                          }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#94a3b8" }} />
-                            Deactive
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <PromptTagsCell
-                          promptId={p.id}
-                          promptTags={p.tags}
-                          availableTags={availableTags}
-                          onTagClick={(tagId) => {
-                            setSelectedTagIds([tagId]);
-                            setTagOp("or");
-                            setCurrentPage(1);
-                          }}
-                          assignTagAction={assignTagAction}
-                          removeTagAction={removeTagAction}
-                        />
-                      </td>
-                      <td>
-                        <span className="pp-location">
-                          <img
-                            src={`https://flagcdn.com/w40/${p.location.toLowerCase()}.png`}
-                            alt={p.location}
-                            width={18}
-                            height={13}
-                            className="pp-flag-img"
-                          />
-                          {p.location}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="pp-cell-stack">
-                          <span className="pp-metric-val">{p.sov}%</span>
-                          <TrendLabel value={p.sovTrend} suffix="%" />
-                        </div>
-                      </td>
-                      <td>
-                        <span className="pp-added">{formatRelativeTime(p.createdAt)}</span>
-                      </td>
+                        </td>
+                      )}
+                      {visibleCols.has("sov") && (
+                        <td>
+                          <div className="pp-cell-stack">
+                            {showVal && <span className="pp-metric-val">{p.sov}%</span>}
+                            {showDelta && <TrendLabel value={p.sovTrend} suffix="%" />}
+                          </div>
+                        </td>
+                      )}
+                      {visibleCols.has("added") && (
+                        <td><span className="pp-added">{formatRelativeTime(p.createdAt)}</span></td>
+                      )}
                       <td>
                         {canRunScans ? (
                           <button
@@ -1489,7 +1626,7 @@ export default function PromptsComparisonClient({
                         )}
                       </td>
                     </tr>
-                  ))
+                  );})
                 )}
               </tbody>
             </table>

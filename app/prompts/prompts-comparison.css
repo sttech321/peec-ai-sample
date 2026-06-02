@@ -547,6 +547,7 @@
   transition: all 0.15s;
 }
 .pp-icon-btn:hover { background: #f4f4f5; color: #18181b; }
+.pp-icon-btn-active { background: #f4f4f5; color: #18181b; border-color: #e4e4e7; }
 
 .pp-new-topic {
   display: flex;
