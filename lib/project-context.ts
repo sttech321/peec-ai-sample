@@ -264,12 +264,18 @@ export const getInvitedProjects = cache(async (): Promise<InvitedProject[]> => {
 
   if (invitedWorkspaceIds.length > 0) {
     const invitedRows = await db
-      .select({ id: projects.id, name: projects.name, domain: projects.domain, workspaceId: projects.workspaceId })
+      .select({ id: projects.id, name: projects.name, workspaceId: projects.workspaceId })
       .from(projects)
       .where(inArray(projects.workspaceId, invitedWorkspaceIds))
       .orderBy(projects.name);
 
-    result.push(...invitedRows.map((p) => ({ ...p, domain: p.domain ?? null, isOwn: false })));
+    result.push(...invitedRows.map((p) => ({
+      id: String(p.id),
+      name: String(p.name),
+      domain: null as null,
+      workspaceId: String(p.workspaceId),
+      isOwn: false,
+    })));
   }
 
   // ── 2. Own workspace projects (only when currently in a different workspace) ─
@@ -285,12 +291,18 @@ export const getInvitedProjects = cache(async (): Promise<InvitedProject[]> => {
     // Only add own projects when user is currently in someone else's workspace
     if (personalWorkspaceId && personalWorkspaceId !== currentWorkspaceId) {
       const ownRows = await db
-        .select({ id: projects.id, name: projects.name, domain: projects.domain, workspaceId: projects.workspaceId })
+        .select({ id: projects.id, name: projects.name, workspaceId: projects.workspaceId })
         .from(projects)
         .where(eq(projects.workspaceId, personalWorkspaceId))
         .orderBy(projects.name);
 
-      result.unshift(...ownRows.map((p) => ({ ...p, domain: p.domain ?? null, isOwn: true })));
+      result.unshift(...ownRows.map((p) => ({
+        id: String(p.id),
+        name: String(p.name),
+        domain: null as null,
+        workspaceId: String(p.workspaceId),
+        isOwn: true,
+      })));
     }
   }
 

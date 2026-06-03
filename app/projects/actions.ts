@@ -22,6 +22,26 @@ export async function createProject(formData: FormData) {
 
   const workspaceId = await getWorkspaceId();
 
+  // Ensure workspace exists — if not, upsert via the user's session email
+  const { workspaces } = await import("../../db/schema");
+  const [wsExists] = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+
+  if (!wsExists) {
+    const cookieStore = await cookies();
+    const raw = cookieStore.get(SESSION_COOKIE)?.value;
+    const session = raw ? verifySession(raw) : null;
+    if (!session?.email) {
+      console.error("[createProject] No session email — cannot create workspace");
+      return;
+    }
+    const { upsertUser } = await import("../../lib/upsert-user");
+    await upsertUser({ email: session.email, provider: "magic_link", role: "owner" });
+  }
+
   const existingCount = await db
     .select({ id: projects.id })
     .from(projects)

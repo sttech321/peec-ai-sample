@@ -135,7 +135,12 @@ export default async function DashboardLayout({
           {/* Invite projects dropdown — shows invited workspaces + own workspace switch-back */}
           {invitedProjects.length > 0 && (
             <InviteProjectsDropdown
-              invitedProjects={invitedProjects}
+              invitedProjects={invitedProjects.map(p => ({
+                id: String(p.id),
+                name: String(p.name),
+                workspaceId: String(p.workspaceId),
+                isOwn: p.isOwn === true,
+              }))}
               switchAction={switchToInvitedWorkspace}
               switchToOwnAction={switchToOwnWorkspace}
             />

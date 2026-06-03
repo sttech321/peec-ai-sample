@@ -236,10 +236,12 @@ export default async function PromptsPage() {
   for (const b of brandMentionsPerPrompt) {
     const arr = brandsByPrompt.get(b.promptId) ?? [];
     arr.push({
-      id: b.brandId,
-      name: b.brandName,
-      isOwn: b.brandIsOwn,
-      domain: b.brandDomains?.[0] ?? guessBrandDomain(b.brandName),
+      id: String(b.brandId),
+      name: String(b.brandName),
+      isOwn: b.brandIsOwn === true,
+      domain: (Array.isArray(b.brandDomains) && typeof b.brandDomains[0] === "string")
+        ? b.brandDomains[0]
+        : guessBrandDomain(String(b.brandName)),
       count: Number(b.mentionCount),
     });
     brandsByPrompt.set(b.promptId, arr);
@@ -279,10 +281,12 @@ export default async function PromptsPage() {
     .orderBy(brands.name);
 
   const projectBrands = projectBrandsRaw.map((b) => ({
-    id: b.id,
-    name: b.name,
-    isOwn: b.isOwn,
-    domain: b.domains?.[0] ?? guessBrandDomain(b.name),
+    id: String(b.id),
+    name: String(b.name),
+    isOwn: b.isOwn === true,
+    domain: (Array.isArray(b.domains) && typeof b.domains[0] === "string")
+      ? b.domains[0]
+      : guessBrandDomain(String(b.name)),
   }));
 
   // ── 5. All tags in the project (for filter dropdown) ───────────────────────

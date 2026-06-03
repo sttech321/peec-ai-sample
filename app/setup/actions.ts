@@ -376,6 +376,25 @@ export async function finalizeSetup(args: {
   const workspaceId = await getWorkspaceId();
   const cookieStore = await cookies();
 
+  // Ensure workspace row exists before inserting project (FK constraint guard)
+  const { workspaces } = await import("../../db/schema");
+  const { eq } = await import("drizzle-orm");
+  const [wsExists] = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+
+  if (!wsExists) {
+    const { verifySession, SESSION_COOKIE } = await import("../../lib/session");
+    const raw = (await cookieStore).get(SESSION_COOKIE)?.value;
+    const session = raw ? verifySession(raw) : null;
+    if (session?.email) {
+      const { upsertUser } = await import("../../lib/upsert-user");
+      await upsertUser({ email: session.email, provider: "magic_link", role: "owner" });
+    }
+  }
+
   // 1. Create project
   const [project] = await db
     .insert(projects)
