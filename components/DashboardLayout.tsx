@@ -7,8 +7,9 @@ import {
 import NextLink from "next/link";
 import ProjectSwitcher from "./ProjectSwitcher";
 import InviteProjectsDropdown from "./InviteProjectsDropdown";
-import { getAllProjects, getActiveProject, getInvitedProjects } from "../lib/project-context";
+import { getAllProjects, getActiveProject, getInvitedProjects, getCurrentRole } from "../lib/project-context";
 import { switchProject, createProject, switchToInvitedWorkspace, switchToOwnWorkspace } from "../app/projects/actions";
+import { canManageWorkspace, canManageMembers } from "../lib/permissions";
 import "../app/globals-sidebar.css";
 
 export default async function DashboardLayout({
@@ -23,6 +24,9 @@ export default async function DashboardLayout({
   const allProjects = await getAllProjects();
   const activeProject = await getActiveProject();
   const invitedProjects = await getInvitedProjects();
+  const role = await getCurrentRole();
+  const isOwner = canManageWorkspace(role);
+  const canManageTeam = canManageMembers(role);
 
   return (
     <div className="flex h-screen bg-white text-zinc-800 font-sans overflow-hidden">
@@ -81,12 +85,12 @@ export default async function DashboardLayout({
           <NavItem href="/brands" icon={<Sparkles size={16} />} label="Brands" active={currentPath === "/brands"} />
           <NavItem href="/tags" icon={<Tag size={16} />} label="Tags" active={currentPath === "/tags"} />
 
-          {/* Company */}
+          {/* Company — items shown based on role */}
           <div className="sidebar-section-label">Company</div>
-          <NavItem href="/settings" icon={<Settings size={16} />} label="Settings" active={currentPath === "/settings"} />
+          {isOwner && <NavItem href="/settings" icon={<Settings size={16} />} label="Settings" active={currentPath === "/settings"} />}
           <NavItem href="/projects" icon={<FolderOpen size={16} />} label="Projects" active={currentPath === "/projects"} />
-          <NavItem href="/api-keys" icon={<Key size={16} />} label="API Keys" active={currentPath === "/api-keys"} />
-          <NavItem href="/members" icon={<Users size={16} />} label="Members" active={currentPath === "/members"} />
+          {isOwner && <NavItem href="/api-keys" icon={<Key size={16} />} label="API Keys" active={currentPath === "/api-keys"} />}
+          {canManageTeam && <NavItem href="/members" icon={<Users size={16} />} label="Members" active={currentPath === "/members"} />}
         </nav>
 
         {/* Setup Progress */}

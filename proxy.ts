@@ -22,6 +22,18 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 const isSetupRoute = createRouteMatcher(['/setup(.*)']);
+const isUnauthorizedRoute = createRouteMatcher(['/unauthorized(.*)']);
+
+// Owner-only routes — non-owners get redirected to /unauthorized
+const isOwnerOnlyRoute = createRouteMatcher([
+  '/settings(.*)',
+  '/api-keys(.*)',
+]);
+
+// Owner + company_member routes
+const isMemberManageRoute = createRouteMatcher([
+  '/members(.*)',
+]);
 
 const clerkHandler = clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(req)) return;
@@ -77,6 +89,21 @@ export default function middleware(req: NextRequest) {
   const setupDone = req.cookies.get(SETUP_DONE_COOKIE)?.value;
   if (!setupDone && !isSetupRoute(req)) {
     return NextResponse.redirect(new URL('/setup', req.url));
+  }
+
+  // ── Role-based route protection ──────────────────────────────────
+  const userRole = user.role ?? "project_viewer";
+  const isUnauthorized = isUnauthorizedRoute(req);
+
+  // Owner-only routes
+  if (!isUnauthorized && isOwnerOnlyRoute(req) && userRole !== "owner") {
+    return NextResponse.redirect(new URL('/unauthorized', req.url));
+  }
+
+  // Members manage: owner + company_member only
+  if (!isUnauthorized && isMemberManageRoute(req) &&
+    userRole !== "owner" && userRole !== "company_member") {
+    return NextResponse.redirect(new URL('/unauthorized', req.url));
   }
 
   return NextResponse.next();

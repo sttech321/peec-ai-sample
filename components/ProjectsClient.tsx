@@ -42,6 +42,7 @@ interface Props {
   updateProjectAction: (id: string, data: Partial<ProjectRow>) => Promise<void>;
   toggleStatusAction: (id: string) => Promise<void>;
   deleteProjectAction: (id: string) => Promise<void>;
+  canDelete?: boolean;
 }
 
 interface ToastItem {
@@ -306,7 +307,7 @@ function RowMenu({
   onTrackingSetup: () => void;
   onExport: () => void;
   onToggle: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -347,9 +348,11 @@ function RowMenu({
           ? <><Pause size={13} /> Pause Project</>
           : <><Play size={13} /> Resume Project</>}
       </button>
-      <button className="proj-row-menu-item danger" onClick={() => { onDelete(); close(); }}>
-        <Trash2 size={13} /> Delete Project
-      </button>
+      {onDelete && (
+        <button className="proj-row-menu-item danger" onClick={() => { onDelete(); close(); }}>
+          <Trash2 size={13} /> Delete Project
+        </button>
+      )}
     </div>,
     document.body
   ) : null;
@@ -888,6 +891,7 @@ export default function ProjectsClient({
   updateProjectAction,
   toggleStatusAction,
   deleteProjectAction,
+  canDelete = true,
 }: Props) {
   const router = useRouter();
   const { toasts, addToast, removeToast } = useToast();
@@ -1082,7 +1086,7 @@ export default function ProjectsClient({
                         onTrackingSetup={() => setTrackingProject(p)}
                         onExport={() => handleExport(p)}
                         onToggle={() => handleToggle(p.id)}
-                        onDelete={() => setDeleteTarget(p)}
+                        onDelete={canDelete ? () => setDeleteTarget(p) : undefined}
                       />
                     </td>
                   </tr>
