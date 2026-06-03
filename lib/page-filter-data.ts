@@ -44,10 +44,14 @@ export async function getPageFilterData(projectId: string) {
     .orderBy(brands.name);
 
   const projectBrands = projectBrandsRaw.map((b) => ({
-    id: b.id,
-    name: b.name,
-    isOwn: b.isOwn,
-    domain: b.domains?.[0] ?? guessBrandDomain(b.name),
+    id: String(b.id),
+    name: String(b.name),
+    isOwn: b.isOwn === true,
+    // Safely extract first domain — Drizzle array columns can return
+    // internal objects in some edge cases, so we validate the type explicitly.
+    domain: (Array.isArray(b.domains) && typeof b.domains[0] === "string")
+      ? b.domains[0]
+      : guessBrandDomain(String(b.name)),
   }));
 
   const tagRows = await db

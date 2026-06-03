@@ -1,11 +1,12 @@
 "use server";
 
 import { db } from "../../db";
-import { projects, topics } from "../../db/schema";
-import { eq } from "drizzle-orm";
+import { projects, topics, workspaceMembers } from "../../db/schema";
+import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { getWorkspaceId } from "../../lib/project-context";
+import { verifySession, signSession, SESSION_COOKIE, SETUP_DONE_COOKIE, SESSION_MAX_AGE } from "../../lib/session";
 
 const ACTIVE_PROJECT_COOKIE = "active_project_id";
 
@@ -20,6 +21,26 @@ export async function createProject(formData: FormData) {
   if (!name) return;
 
   const workspaceId = await getWorkspaceId();
+
+  // Ensure workspace exists — if not, upsert via the user's session email
+  const { workspaces } = await import("../../db/schema");
+  const [wsExists] = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+
+  if (!wsExists) {
+    const cookieStore = await cookies();
+    const raw = cookieStore.get(SESSION_COOKIE)?.value;
+    const session = raw ? verifySession(raw) : null;
+    if (!session?.email) {
+      console.error("[createProject] No session email — cannot create workspace");
+      return;
+    }
+    const { upsertUser } = await import("../../lib/upsert-user");
+    await upsertUser({ email: session.email, provider: "magic_link", role: "owner" });
+  }
 
   const existingCount = await db
     .select({ id: projects.id })
@@ -173,4 +194,113 @@ export async function switchProject(projectId: string) {
   });
 
   revalidatePath("/", "layout");
+}
+
+/**
+ * Switch current session to an invited workspace's project.
+ * Validates the user is actually a member before switching.
+ */
+export async function switchToInvitedWorkspace(projectId: string, targetWorkspaceId: string) {
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(SESSION_COOKIE)?.value;
+  const session = raw ? verifySession(raw) : null;
+  if (!session) return { ok: false, error: "Not authenticated" };
+
+  // Verify user is actually a member of the target workspace
+  const [membership] = await db
+    .select({ role: workspaceMembers.role })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, targetWorkspaceId),
+        eq(workspaceMembers.email, session.email),
+      ),
+    )
+    .limit(1);
+
+  if (!membership) return { ok: false, error: "Not a member of this workspace" };
+
+  // Verify the project belongs to that workspace
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, targetWorkspaceId)))
+    .limit(1);
+
+  if (!project) return { ok: false, error: "Project not found" };
+
+  // Update session to the invited workspace
+  const newSession = signSession({
+    email: session.email,
+    userId: session.userId,
+    workspaceId: targetWorkspaceId,
+    role: membership.role,
+  });
+
+  const COOKIE_OPTS = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: SESSION_MAX_AGE,
+    path: "/",
+  };
+
+  cookieStore.set(SESSION_COOKIE, newSession, COOKIE_OPTS);
+  cookieStore.set(SETUP_DONE_COOKIE, "1", COOKIE_OPTS);
+  cookieStore.set(ACTIVE_PROJECT_COOKIE, projectId, { path: "/", maxAge: 60 * 60 * 24 * 365 });
+
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/**
+ * Switch back to the user's own workspace from an invited workspace.
+ */
+export async function switchToOwnWorkspace(projectId: string) {
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(SESSION_COOKIE)?.value;
+  const session = raw ? verifySession(raw) : null;
+  if (!session) return { ok: false, error: "Not authenticated" };
+
+  // Find the user's own workspace
+  const { workspaces } = await import("../../db/schema");
+  const [ownWorkspace] = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(eq(workspaces.ownerUserId, session.userId))
+    .limit(1);
+
+  if (!ownWorkspace) return { ok: false, error: "Own workspace not found" };
+
+  // Verify project belongs to own workspace
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, ownWorkspace.id)))
+    .limit(1);
+
+  if (!project) return { ok: false, error: "Project not found in your workspace" };
+
+  const COOKIE_OPTS = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: SESSION_MAX_AGE,
+    path: "/",
+  };
+
+  // Restore session to own workspace as owner
+  const newSession = signSession({
+    email: session.email,
+    userId: session.userId,
+    workspaceId: ownWorkspace.id,
+    role: "owner",
+  });
+
+  cookieStore.set(SESSION_COOKIE, newSession, COOKIE_OPTS);
+  cookieStore.set(SETUP_DONE_COOKIE, "1", COOKIE_OPTS);
+  cookieStore.set(ACTIVE_PROJECT_COOKIE, projectId, { path: "/", maxAge: 60 * 60 * 24 * 365 });
+
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

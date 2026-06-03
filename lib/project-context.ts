@@ -215,3 +215,97 @@ export const getActiveProject = cache(async () => {
   };
 });
 
+export type InvitedProject = {
+  id: string;
+  name: string;
+  domain: string | null;
+  workspaceId: string;
+  isOwn: boolean; // true = user's own workspace project (switch-back option)
+};
+
+/**
+ * Returns two groups of projects for the "Invite projects" dropdown:
+ * 1. Projects from workspaces the user was invited to (isOwn: false)
+ * 2. Projects from the user's OWN workspace — only when they're currently
+ *    in a different (invited) workspace (isOwn: true)
+ */
+export const getInvitedProjects = cache(async (): Promise<InvitedProject[]> => {
+  const currentWorkspaceId = await getWorkspaceId();
+
+  // Get session for email + userId
+  let currentEmail = "";
+  let currentUserId = "";
+  try {
+    const { cookies } = await import("next/headers");
+    const { verifySession, SESSION_COOKIE } = await import("./session");
+    const cookieStore = await cookies();
+    const raw = cookieStore.get(SESSION_COOKIE)?.value;
+    if (raw) {
+      const session = verifySession(raw);
+      currentEmail  = session?.email  ?? "";
+      currentUserId = session?.userId ?? "";
+    }
+  } catch { /* ignore */ }
+
+  if (!currentEmail) return [];
+
+  const { inArray } = await import("drizzle-orm");
+  const result: InvitedProject[] = [];
+
+  // ── 1. Invited workspace projects ─────────────────────────────────────────
+  const memberships = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.email, currentEmail));
+
+  const invitedWorkspaceIds = memberships
+    .map((m) => m.workspaceId)
+    .filter((wid) => wid !== currentWorkspaceId);
+
+  if (invitedWorkspaceIds.length > 0) {
+    const invitedRows = await db
+      .select({ id: projects.id, name: projects.name, workspaceId: projects.workspaceId })
+      .from(projects)
+      .where(inArray(projects.workspaceId, invitedWorkspaceIds))
+      .orderBy(projects.name);
+
+    result.push(...invitedRows.map((p) => ({
+      id: String(p.id),
+      name: String(p.name),
+      domain: null as null,
+      workspaceId: String(p.workspaceId),
+      isOwn: false,
+    })));
+  }
+
+  // ── 2. Own workspace projects (only when currently in a different workspace) ─
+  if (currentUserId) {
+    const [ownWorkspaceRow] = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.ownerUserId, currentUserId))
+      .limit(1);
+
+    const personalWorkspaceId = ownWorkspaceRow?.id;
+
+    // Only add own projects when user is currently in someone else's workspace
+    if (personalWorkspaceId && personalWorkspaceId !== currentWorkspaceId) {
+      const ownRows = await db
+        .select({ id: projects.id, name: projects.name, workspaceId: projects.workspaceId })
+        .from(projects)
+        .where(eq(projects.workspaceId, personalWorkspaceId))
+        .orderBy(projects.name);
+
+      result.unshift(...ownRows.map((p) => ({
+        id: String(p.id),
+        name: String(p.name),
+        domain: null as null,
+        workspaceId: String(p.workspaceId),
+        isOwn: true,
+      })));
+    }
+  }
+
+  return result;
+});
+

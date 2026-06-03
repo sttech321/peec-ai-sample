@@ -290,7 +290,7 @@ export async function addPromptsBulk(args: {
   topicId: string | null;
   location: string;
   tagIds: string[];
-}): Promise<{ ok: boolean; inserted: number; error?: string }> {
+}): Promise<{ ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] }> {
   const workspaceId = await getWorkspaceId();
   const projectId = await getActiveProjectId();
 
@@ -342,7 +342,11 @@ export async function addPromptsBulk(args: {
 
   revalidatePath("/prompts");
   revalidatePath("/");
-  return { ok: true, inserted: inserted.length };
+  return {
+    ok: true,
+    inserted: inserted.length,
+    newPrompts: inserted.map((p, i) => ({ id: p.id, query: cleaned[i] })),
+  };
 }
 
 // ─── CSV bulk upload ────────────────────────────────────────────────────────
@@ -359,7 +363,7 @@ export async function addPromptsBulk(args: {
  */
 export async function addPromptsFromCsv(args: {
   csvText: string;
-}): Promise<{ ok: boolean; inserted: number; error?: string }> {
+}): Promise<{ ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] }> {
   const workspaceId = await getWorkspaceId();
   const projectId = await getActiveProjectId();
 
@@ -375,10 +379,12 @@ export async function addPromptsFromCsv(args: {
     }
     return -1;
   };
-  const promptCol   = col(["prompt", "query"]);
+  const promptCol   = col(["prompts", "prompt", "query"]); // "Prompts" is Peec AI format
   const locationCol = col(["location"]);
   const topicCol    = col(["topic_name", "topic"]);
   const tagsCol     = col(["tags"]);
+  // Peec AI format: Tag 1, Tag 2, Persona... are extra tag columns (col index 3+)
+  // We collect them all when useHeaders is true
   // If header has a 'prompt' column, use named mapping; otherwise use positional
   const useHeaders  = promptCol >= 0;
 
@@ -435,6 +441,7 @@ export async function addPromptsFromCsv(args: {
   let defaultTopicId: string | null = null;
 
   let inserted = 0;
+  const newPromptsList: { id: string; query: string }[] = [];
   for (const row of dataRows) {
     let promptText: string;
     let location: string;
@@ -442,13 +449,24 @@ export async function addPromptsFromCsv(args: {
     let tagNames: string[];
 
     if (useHeaders) {
-      // ── Named column mapping (Peec/Thrive Vision export format) ─────────
+      // ── Named column mapping — supports both Peec AI format and export format ─
       promptText = (row[promptCol] ?? "").trim();
       location = ((locationCol >= 0 ? row[locationCol] : "") || "US").trim().toUpperCase().slice(0, 2) || "US";
       topicName = (topicCol >= 0 ? row[topicCol] : "").trim();
-      // tags column may be comma-separated string: "branded, commercial"
-      const rawTags = tagsCol >= 0 ? (row[tagsCol] ?? "") : "";
-      tagNames = rawTags.split(",").map((t) => t.trim()).filter(isValidTag);
+
+      if (tagsCol >= 0) {
+        // Export format: single "tags" column with comma-separated values
+        const rawTags = row[tagsCol] ?? "";
+        tagNames = rawTags.split(",").map((t) => t.trim()).filter(isValidTag);
+      } else {
+        // Peec AI template format: "Tag 1", "Tag 2", "Persona" etc as separate columns
+        // Collect all columns after topic (everything that is not prompt/location/topic)
+        const knownCols = new Set([promptCol, locationCol >= 0 ? locationCol : -1, topicCol >= 0 ? topicCol : -1]);
+        tagNames = row
+          .filter((_, idx) => !knownCols.has(idx))
+          .map((t) => t.trim())
+          .filter(isValidTag);
+      }
     } else {
       // ── Positional mapping (simple format: prompt, location, topic, tag…) ─
       promptText = (row[0] ?? "").trim();
@@ -488,18 +506,19 @@ export async function addPromptsFromCsv(args: {
         })),
       );
     }
+    newPromptsList.push({ id: createdPrompt.id, query: promptText });
     inserted++;
   }
 
   revalidatePath("/prompts");
   revalidatePath("/");
-  return { ok: true, inserted };
+  return { ok: true, inserted, newPrompts: newPromptsList };
 }
 
 // ─── Import from pre-parsed rows (JSON / XLSX / CSV all use this) ────────────
 export async function addPromptsFromParsed(args: {
   items: { prompt: string; location: string; topic: string; tags: string[] }[];
-}): Promise<{ ok: boolean; inserted: number; error?: string }> {
+}): Promise<{ ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] }> {
   const workspaceId = await getWorkspaceId();
   const projectId = await getActiveProjectId();
 
@@ -540,6 +559,7 @@ export async function addPromptsFromParsed(args: {
   }
 
   let inserted = 0;
+  const newPromptsList: { id: string; query: string }[] = [];
   for (const item of validItems) {
     const topicId = await ensureTopic(item.topic);
     const location = (item.location || "US").toUpperCase().slice(0, 2);
@@ -556,12 +576,13 @@ export async function addPromptsFromParsed(args: {
       const tagIds = await Promise.all(validTags.map(ensureTag));
       await db.insert(promptTags).values(tagIds.map((tagId) => ({ workspaceId, promptId: created.id, tagId })));
     }
+    newPromptsList.push({ id: created.id, query: item.prompt.trim() });
     inserted++;
   }
 
   revalidatePath("/prompts");
   revalidatePath("/");
-  return { ok: true, inserted };
+  return { ok: true, inserted, newPrompts: newPromptsList };
 }
 
 // Minimal CSV parser: comma OR semicolon delimited, double-quoted cells
