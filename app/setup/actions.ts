@@ -8,6 +8,8 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { BrandProfile, COUNTRY_OPTIONS, EMPTY_BRAND_PROFILE } from "../../lib/brand-profile-types";
 import { SetupTopic, SetupPrompt } from "../../lib/setup-types";
+import { runPipelineForAllEngines, type PipelineJob } from "../../lib/run-pipeline";
+import { DEFAULT_ENGINES } from "../../lib/ai-clients";
 
 const ACTIVE_PROJECT_COOKIE = "active_project_id";
 
@@ -364,7 +366,7 @@ export async function finalizeSetup(args: {
   timezone: string;
   profile: BrandProfile;
   topics: SetupTopic[];
-}): Promise<{ ok: boolean; projectId?: string; error?: string }> {
+}): Promise<{ ok: boolean; projectId?: string; error?: string; newPrompts?: { id: string; query: string }[] }> {
   if (!args.brandName.trim()) return { ok: false, error: "Brand name is required" };
   const selectedTopics = args.topics.filter((t) => t.selected);
   if (selectedTopics.length === 0) return { ok: false, error: "Select at least one topic" };
@@ -424,6 +426,8 @@ export async function finalizeSetup(args: {
   });
 
   // 4. Topics + prompts (only selected ones)
+  const createdPrompts: { id: string; query: string }[] = [];
+
   for (const topic of selectedTopics) {
     const [topicRow] = await db
       .insert(topics)
@@ -433,7 +437,7 @@ export async function finalizeSetup(args: {
     const selectedPrompts = topic.prompts.filter((p) => p.selected);
     if (selectedPrompts.length === 0) continue;
 
-    await db.insert(prompts).values(
+    const inserted = await db.insert(prompts).values(
       selectedPrompts.map((p) => ({
         workspaceId,
         projectId: project.id,
@@ -441,7 +445,9 @@ export async function finalizeSetup(args: {
         query: p.text,
         volumeTier: "Medium",
       })),
-    );
+    ).returning({ id: prompts.id, query: prompts.query });
+
+    createdPrompts.push(...inserted.map((p) => ({ id: p.id, query: p.query })));
   }
 
   // 5. Set active project + mark setup as complete
@@ -451,5 +457,22 @@ export async function finalizeSetup(args: {
 
   revalidatePath("/", "layout");
 
-  return { ok: true, projectId: project.id };
+  // 6. Auto-crawl all setup prompts in background (fire-and-forget)
+  if (createdPrompts.length > 0) {
+    const runDate = new Date().toISOString();
+    const jobs: PipelineJob[] = createdPrompts.flatMap((p) =>
+      DEFAULT_ENGINES.map((engine) => ({
+        workspaceId,
+        promptId: p.id,
+        engine,
+        runDate,
+        query: p.query,
+      })),
+    );
+    void runPipelineForAllEngines(jobs).catch((err) =>
+      console.error("[setup-crawl] failed:", err),
+    );
+  }
+
+  return { ok: true, projectId: project.id, newPrompts: createdPrompts };
 }

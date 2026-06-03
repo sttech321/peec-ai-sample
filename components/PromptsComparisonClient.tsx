@@ -899,6 +899,8 @@ export default function PromptsComparisonClient({
   // flips back to false, then clear them via the effect below.
   const awaitingRefreshRef = useRef<Set<string>>(new Set());
   const [refreshTick, setRefreshTick] = useState(0);
+  // Prompts queued for auto-crawl after they appear in the list
+  const pendingAutoCrawlRef = useRef<{ id: string; query: string }[]>([]);
   const [crawlState, setCrawlState] = useState<{
     running: boolean;
     done: number;
@@ -922,6 +924,36 @@ export default function PromptsComparisonClient({
       return next;
     });
   }, [isRefreshPending, refreshTick]);
+
+  // Auto-crawl: fires AFTER new prompts appear in the list (prompts prop changes)
+  // Handles both: manual/bulk add AND setup wizard new project
+  useEffect(() => {
+    // 1. Check sessionStorage for setup wizard auto-crawl (first project setup)
+    const setupCrawlRaw = typeof window !== "undefined"
+      ? sessionStorage.getItem("setup_auto_crawl")
+      : null;
+    if (setupCrawlRaw) {
+      try {
+        const setupPrompts: { id: string; query: string }[] = JSON.parse(setupCrawlRaw);
+        const visible = setupPrompts.filter((p) => prompts.some((pr) => pr.id === p.id));
+        if (visible.length > 0) {
+          sessionStorage.removeItem("setup_auto_crawl");
+          visible.forEach((p) => crawlOne(p.id, p.query));
+          return;
+        }
+      } catch { /* ignore */ }
+    }
+
+    // 2. Check pendingAutoCrawlRef for add-prompt / bulk-upload auto-crawl
+    if (pendingAutoCrawlRef.current.length === 0) return;
+    const toCrawl = pendingAutoCrawlRef.current.filter(
+      (p) => prompts.some((pr) => pr.id === p.id),
+    );
+    if (toCrawl.length === 0) return;
+    pendingAutoCrawlRef.current = [];
+    toCrawl.forEach((p) => crawlOne(p.id, p.query));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompts]);
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -1948,9 +1980,17 @@ export default function PromptsComparisonClient({
           addBulkAction={addPromptsBulkAction}
           fromCsvAction={addPromptsFromCsvAction}
           fromParsedAction={addPromptsFromParsedAction}
-          onDone={() => {
+          onDone={(newPrompts) => {
             setShowAddForm(false);
-            startTransition(() => router.refresh());
+
+            if (newPrompts && newPrompts.length > 0) {
+              // Queue these prompts for auto-crawl AFTER they appear in the list
+              pendingAutoCrawlRef.current = newPrompts;
+            }
+
+            // Refresh page → new prompts appear in list
+            // useEffect watches `prompts` prop change → then starts crawl automatically
+            router.refresh();
           }}
         />
       )}
@@ -2687,14 +2727,14 @@ function AddPromptModal({
     topicId: string | null;
     location: string;
     tagIds: string[];
-  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
+  }) => Promise<{ ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] }>;
   fromCsvAction: (args: {
     csvText: string;
-  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
+  }) => Promise<{ ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] }>;
   fromParsedAction: (args: {
     items: ParsedItem[];
-  }) => Promise<{ ok: boolean; inserted: number; error?: string }>;
-  onDone: () => void;
+  }) => Promise<{ ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] }>;
+  onDone: (newPrompts?: { id: string; query: string }[]) => void;
 }) {
   const [tab, setTab] = useState<"manual" | "csv">("manual");
   const [text, setText] = useState("");
@@ -2900,7 +2940,7 @@ function AddPromptModal({
       setError(result.error ?? "Failed to add prompts");
       return;
     }
-    onDone();
+    onDone(result.newPrompts);
   }
 
   async function submitCsv() {
@@ -2911,7 +2951,7 @@ function AddPromptModal({
     setBusy(true);
     setError(null);
 
-    let result: { ok: boolean; inserted: number; error?: string };
+    let result: { ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] };
 
     if (fileType === "json" || fileType === "xlsx") {
       // JSON + XLSX: use pre-parsed items
@@ -2932,7 +2972,7 @@ function AddPromptModal({
       setError(result.error ?? "Failed to import file");
       return;
     }
-    onDone();
+    onDone(result.newPrompts);
   }
 
   return (

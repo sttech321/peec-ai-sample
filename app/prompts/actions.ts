@@ -290,7 +290,7 @@ export async function addPromptsBulk(args: {
   topicId: string | null;
   location: string;
   tagIds: string[];
-}): Promise<{ ok: boolean; inserted: number; error?: string }> {
+}): Promise<{ ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] }> {
   const workspaceId = await getWorkspaceId();
   const projectId = await getActiveProjectId();
 
@@ -342,7 +342,11 @@ export async function addPromptsBulk(args: {
 
   revalidatePath("/prompts");
   revalidatePath("/");
-  return { ok: true, inserted: inserted.length };
+  return {
+    ok: true,
+    inserted: inserted.length,
+    newPrompts: inserted.map((p, i) => ({ id: p.id, query: cleaned[i] })),
+  };
 }
 
 // ─── CSV bulk upload ────────────────────────────────────────────────────────
@@ -359,7 +363,7 @@ export async function addPromptsBulk(args: {
  */
 export async function addPromptsFromCsv(args: {
   csvText: string;
-}): Promise<{ ok: boolean; inserted: number; error?: string }> {
+}): Promise<{ ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] }> {
   const workspaceId = await getWorkspaceId();
   const projectId = await getActiveProjectId();
 
@@ -437,6 +441,7 @@ export async function addPromptsFromCsv(args: {
   let defaultTopicId: string | null = null;
 
   let inserted = 0;
+  const newPromptsList: { id: string; query: string }[] = [];
   for (const row of dataRows) {
     let promptText: string;
     let location: string;
@@ -501,18 +506,19 @@ export async function addPromptsFromCsv(args: {
         })),
       );
     }
+    newPromptsList.push({ id: createdPrompt.id, query: promptText });
     inserted++;
   }
 
   revalidatePath("/prompts");
   revalidatePath("/");
-  return { ok: true, inserted };
+  return { ok: true, inserted, newPrompts: newPromptsList };
 }
 
 // ─── Import from pre-parsed rows (JSON / XLSX / CSV all use this) ────────────
 export async function addPromptsFromParsed(args: {
   items: { prompt: string; location: string; topic: string; tags: string[] }[];
-}): Promise<{ ok: boolean; inserted: number; error?: string }> {
+}): Promise<{ ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] }> {
   const workspaceId = await getWorkspaceId();
   const projectId = await getActiveProjectId();
 
@@ -553,6 +559,7 @@ export async function addPromptsFromParsed(args: {
   }
 
   let inserted = 0;
+  const newPromptsList: { id: string; query: string }[] = [];
   for (const item of validItems) {
     const topicId = await ensureTopic(item.topic);
     const location = (item.location || "US").toUpperCase().slice(0, 2);
@@ -569,12 +576,13 @@ export async function addPromptsFromParsed(args: {
       const tagIds = await Promise.all(validTags.map(ensureTag));
       await db.insert(promptTags).values(tagIds.map((tagId) => ({ workspaceId, promptId: created.id, tagId })));
     }
+    newPromptsList.push({ id: created.id, query: item.prompt.trim() });
     inserted++;
   }
 
   revalidatePath("/prompts");
   revalidatePath("/");
-  return { ok: true, inserted };
+  return { ok: true, inserted, newPrompts: newPromptsList };
 }
 
 // Minimal CSV parser: comma OR semicolon delimited, double-quoted cells

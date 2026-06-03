@@ -118,7 +118,11 @@ export default function SetupPage() {
         return;
       }
       sessionStorage.removeItem(STORAGE_KEY);
-      window.location.replace("/");
+      // Store new prompts so prompts page can auto-crawl them on first load
+      if (res.newPrompts && res.newPrompts.length > 0) {
+        sessionStorage.setItem("setup_auto_crawl", JSON.stringify(res.newPrompts));
+      }
+      window.location.replace("/prompts");
     });
   };
 
