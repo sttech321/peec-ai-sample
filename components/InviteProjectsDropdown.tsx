@@ -9,6 +9,7 @@ interface InvitedProject {
   name: string;
   workspaceId: string;
   isOwn: boolean;
+  invitedBy?: string | null;
 }
 
 interface Props {
@@ -98,6 +99,11 @@ export default function InviteProjectsDropdown({ invitedProjects, switchAction, 
           <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {p.name}
           </div>
+          {!p.isOwn && p.invitedBy && (
+            <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {p.invitedBy}
+            </div>
+          )}
         </div>
         {isLoading
           ? <Loader2 size={14} style={{ color: "#6366f1", animation: "spin 1s linear infinite", flexShrink: 0 }} />

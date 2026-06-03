@@ -144,6 +144,7 @@ export default async function DashboardLayout({
                 name: String(p.name),
                 workspaceId: String(p.workspaceId),
                 isOwn: p.isOwn === true,
+                invitedBy: typeof p.invitedBy === "string" ? p.invitedBy : null,
               }))}
               switchAction={switchToInvitedWorkspace}
               switchToOwnAction={switchToOwnWorkspace}

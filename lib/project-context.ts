@@ -221,6 +221,7 @@ export type InvitedProject = {
   domain: string | null;
   workspaceId: string;
   isOwn: boolean; // true = user's own workspace project (switch-back option)
+  invitedBy: string | null; // email of the person who sent the invite
 };
 
 /**
@@ -254,13 +255,16 @@ export const getInvitedProjects = cache(async (): Promise<InvitedProject[]> => {
 
   // ── 1. Invited workspace projects ─────────────────────────────────────────
   const memberships = await db
-    .select({ workspaceId: workspaceMembers.workspaceId })
+    .select({ workspaceId: workspaceMembers.workspaceId, invitedBy: workspaceMembers.invitedBy })
     .from(workspaceMembers)
     .where(eq(workspaceMembers.email, currentEmail));
 
   const invitedWorkspaceIds = memberships
     .map((m) => m.workspaceId)
     .filter((wid) => wid !== currentWorkspaceId);
+
+  // Map workspaceId → invitedBy email for display
+  const invitedByMap = new Map(memberships.map((m) => [m.workspaceId, m.invitedBy ?? null]));
 
   if (invitedWorkspaceIds.length > 0) {
     const invitedRows = await db
@@ -275,6 +279,7 @@ export const getInvitedProjects = cache(async (): Promise<InvitedProject[]> => {
       domain: null as null,
       workspaceId: String(p.workspaceId),
       isOwn: false,
+      invitedBy: invitedByMap.get(p.workspaceId) ?? null,
     })));
   }
 
@@ -302,6 +307,7 @@ export const getInvitedProjects = cache(async (): Promise<InvitedProject[]> => {
         domain: null as null,
         workspaceId: String(p.workspaceId),
         isOwn: true,
+        invitedBy: null, // own workspace — no inviter
       })));
     }
   }
