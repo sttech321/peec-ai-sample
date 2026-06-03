@@ -146,6 +146,15 @@ export async function toggleProjectStatus(projectId: string) {
 }
 
 export async function deleteProject(projectId: string) {
+  // Only owners can delete projects
+  const { getCurrentRole } = await import("../../lib/project-context");
+  const { canManageWorkspace } = await import("../../lib/permissions");
+  const role = await getCurrentRole();
+  if (!canManageWorkspace(role)) {
+    console.warn("[deleteProject] Unauthorized attempt by role:", role);
+    return;
+  }
+
   const workspaceId = await getWorkspaceId();
   const cookieStore = await cookies();
 

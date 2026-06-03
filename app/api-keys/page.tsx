@@ -1,10 +1,16 @@
+import { redirect } from "next/navigation";
 import DashboardLayout from "../../components/DashboardLayout";
 import { checkAllKeys, KeyStatus } from "../../lib/api-keys-status";
 import { CheckCircle2, XCircle, AlertCircle, Key as KeyIcon } from "lucide-react";
+import { getCurrentRole } from "../../lib/project-context";
+import { canManageWorkspace } from "../../lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function ApiKeysPage() {
+  const role = await getCurrentRole();
+  if (!canManageWorkspace(role)) redirect("/unauthorized");
+
   const statuses = await checkAllKeys();
   const okCount = statuses.filter((s) => s.ok).length;
   const configuredCount = statuses.filter((s) => s.configured).length;

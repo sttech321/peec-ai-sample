@@ -2,9 +2,10 @@ import DashboardLayout from "../../components/DashboardLayout";
 import { db } from "../../db";
 import { projects, chats, prompts } from "../../db/schema";
 import { eq, sql } from "drizzle-orm";
-import { getAllProjects, getWorkspaceId } from "../../lib/project-context";
+import { getAllProjects, getWorkspaceId, getCurrentRole } from "../../lib/project-context";
 import { updateProject, toggleProjectStatus, deleteProject } from "./actions";
 import ProjectsClient, { ProjectRow, WorkspaceStats } from "../../components/ProjectsClient";
+import { canManageWorkspace } from "../../lib/permissions";
 import "./projects.css";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,8 @@ const MODEL_DAILY_COST = 30;
 
 export default async function ProjectsPage() {
   const workspaceId = await getWorkspaceId();
+  const role = await getCurrentRole();
+  const isOwner = canManageWorkspace(role);
 
   const [allProjects, usedPromptsRows] = await Promise.all([
     getAllProjects(),
@@ -75,6 +78,7 @@ export default async function ProjectsPage() {
         updateProjectAction={updateProject}
         toggleStatusAction={toggleProjectStatus}
         deleteProjectAction={deleteProject}
+        canDelete={isOwner}
       />
     </DashboardLayout>
   );
