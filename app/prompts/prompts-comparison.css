@@ -384,6 +384,7 @@
   border-radius: 3px;
 }
 
+/* ── Brand item base ─────────────────────────────────────────────────── */
 .pp-brand-item {
   display: flex;
   align-items: center;
@@ -408,6 +409,72 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Enhanced brand item row (with hover actions) ────────────────────── */
+.pp-brand-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 0 0;
+  border-radius: 6px;
+  position: relative;
+}
+.pp-brand-item-row:hover { background: #fafafa; }
+
+.pp-brand-item-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 0;
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+}
+
+/* ── Section labels (Tracked brand / All brands) ─────────────────────── */
+.pp-brand-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  padding: 8px 8px 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+/* ── You badge ───────────────────────────────────────────────────────── */
+.pp-brand-you-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: #dcfce7;
+  color: #16a34a;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+/* ── Hover action buttons (Only / Track) ─────────────────────────────── */
+.pp-brand-hover-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.pp-brand-hover-btn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #e4e4e7;
+  background: #fff;
+  cursor: pointer;
+  color: #374151;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+.pp-brand-hover-btn:hover { background: #f4f4f5; }
+.pp-brand-track-btn { color: #6366f1; border-color: #c7d2fe; }
+.pp-brand-track-btn:hover { background: #eef2ff; }
 
 .pp-brand-fav-img {
   width: 18px;

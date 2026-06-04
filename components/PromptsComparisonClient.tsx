@@ -215,6 +215,7 @@ interface Props {
   }) => Promise<{ ok: boolean; deleted: number }>;
   canEdit?: boolean;
   canRunScans?: boolean;
+  markBrandAsOwnAction?: (brandId: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const TOPIC_LOCATIONS: { code: string; name: string; flag: string }[] = [
@@ -429,12 +430,14 @@ function BrandFilterDropdown({
   selectedIds,
   onChange,
   onAddBrand,
+  onMarkAsOwn,
 }: {
   projectName: string;
   brands: AvailableBrand[];
   selectedIds: string[] | null;
   onChange: (ids: string[] | null) => void;
   onAddBrand: (name: string) => Promise<{ ok: boolean; error?: string }>;
+  onMarkAsOwn?: (brandId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -442,6 +445,8 @@ function BrandFilterDropdown({
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [trackingId, setTrackingId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -452,6 +457,7 @@ function BrandFilterDropdown({
         setAdding(false);
         setError(null);
         setQuery("");
+        setHoveredId(null);
       }
     };
     window.addEventListener("mousedown", handler);
@@ -459,12 +465,12 @@ function BrandFilterDropdown({
   }, [open]);
 
   const filtered = useMemo(
-    () =>
-      brands.filter((b) =>
-        b.name.toLowerCase().includes(query.toLowerCase()),
-      ),
+    () => brands.filter((b) => b.name.toLowerCase().includes(query.toLowerCase())),
     [brands, query],
   );
+
+  const ownBrands = filtered.filter((b) => b.isOwn);
+  const otherBrands = filtered.filter((b) => !b.isOwn);
 
   const allSelected = selectedIds === null;
   const triggerLabel = allSelected
@@ -475,8 +481,6 @@ function BrandFilterDropdown({
 
   const toggleBrand = (id: string) => {
     if (selectedIds === null) {
-      // Was "all selected" — keep all except this one OR drop to just this one?
-      // peec.ai pattern: unchecking from "all" keeps the rest selected.
       const next = brands.map((b) => b.id).filter((bid) => bid !== id);
       onChange(next.length === brands.length ? null : next);
       return;
@@ -489,31 +493,81 @@ function BrandFilterDropdown({
     else onChange(Array.from(set));
   };
 
+  const onlyBrand = (id: string) => {
+    onChange([id]);
+    setOpen(false);
+  };
+
+  const handleTrack = async (id: string) => {
+    if (!onMarkAsOwn) return;
+    setTrackingId(id);
+    await onMarkAsOwn(id);
+    setTrackingId(null);
+  };
+
   const handleAdd = async () => {
     setError(null);
     setPending(true);
     const res = await onAddBrand(newName);
     setPending(false);
-    if (!res.ok) {
-      setError(res.error || "Failed to add brand");
-      return;
-    }
+    if (!res.ok) { setError(res.error || "Failed to add brand"); return; }
     setNewName("");
     setAdding(false);
   };
 
+  const renderBrandItem = (b: AvailableBrand) => {
+    const checked = selectedIds === null ? true : selectedIds.includes(b.id);
+    const isHovered = hoveredId === b.id;
+    return (
+      <div
+        key={b.id}
+        className="pp-brand-item pp-brand-item-row"
+        onMouseEnter={() => setHoveredId(b.id)}
+        onMouseLeave={() => setHoveredId(null)}
+      >
+        <label className="pp-brand-item-label">
+          <input type="checkbox" checked={checked} onChange={() => toggleBrand(b.id)} />
+          <SmallBrandFavicon name={b.name} domain={b.domain} />
+          <span className="pp-brand-name">{b.name}</span>
+          {b.isOwn && <span className="pp-brand-you-badge">You</span>}
+        </label>
+
+        {/* Hover actions — Only + Track */}
+        {isHovered && (
+          <div className="pp-brand-hover-actions">
+            <button
+              className="pp-brand-hover-btn"
+              onClick={(e) => { e.preventDefault(); onlyBrand(b.id); }}
+              title="Show only this brand"
+            >
+              Only
+            </button>
+            {!b.isOwn && onMarkAsOwn && (
+              <button
+                className="pp-brand-hover-btn pp-brand-track-btn"
+                onClick={(e) => { e.preventDefault(); handleTrack(b.id); }}
+                disabled={trackingId === b.id}
+                title="Mark as your tracked brand"
+              >
+                {trackingId === b.id ? "..." : "Track"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="pp-dd" ref={ref}>
-      <button
-        className="pp-dd-trigger"
-        onClick={() => setOpen((v) => !v)}
-      >
+      <button className="pp-dd-trigger" onClick={() => setOpen((v) => !v)}>
         <Building2 size={13} />
         <span>{triggerLabel}</span>
         <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
       </button>
       {open && (
-        <div className="pp-dd-menu pp-brand-menu" style={{ left: 0, width: 280 }}>
+        <div className="pp-dd-menu pp-brand-menu" style={{ left: 0, width: 290 }}>
+          {/* Search */}
           <div className="pp-brand-search">
             <Search size={12} className="pp-brand-search-icon" />
             <input
@@ -523,6 +577,8 @@ function BrandFilterDropdown({
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
+
+          {/* All brands toggle */}
           <button
             className={`pp-brand-all ${allSelected ? "pp-brand-all-active" : ""}`}
             onClick={() => onChange(null)}
@@ -530,26 +586,32 @@ function BrandFilterDropdown({
             <span>All brands</span>
             {allSelected && <Check size={14} />}
           </button>
+
           <div className="pp-brand-list">
+            {/* Tracked brand section */}
+            {ownBrands.length > 0 && (
+              <>
+                <div className="pp-brand-section-label">Tracked brand</div>
+                {ownBrands.map(renderBrandItem)}
+              </>
+            )}
+
+            {/* All brands section */}
+            {otherBrands.length > 0 && (
+              <>
+                {ownBrands.length > 0 && (
+                  <div className="pp-brand-section-label" style={{ marginTop: 4 }}>All brands</div>
+                )}
+                {otherBrands.map(renderBrandItem)}
+              </>
+            )}
+
             {filtered.length === 0 && (
               <div className="pp-dd-empty">No brands found</div>
             )}
-            {filtered.map((b) => {
-              const checked =
-                selectedIds === null ? true : selectedIds.includes(b.id);
-              return (
-                <label key={b.id} className="pp-brand-item">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleBrand(b.id)}
-                  />
-                  <SmallBrandFavicon name={b.name} domain={b.domain} />
-                  <span className="pp-brand-name">{b.name}</span>
-                </label>
-              );
-            })}
           </div>
+
+          {/* Add brand form */}
           {adding ? (
             <div className="pp-brand-add-form">
               <input
@@ -559,43 +621,23 @@ function BrandFilterDropdown({
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleAdd();
-                  if (e.key === "Escape") {
-                    setAdding(false);
-                    setNewName("");
-                    setError(null);
-                  }
+                  if (e.key === "Escape") { setAdding(false); setNewName(""); setError(null); }
                 }}
                 disabled={pending}
               />
               {error && <div className="pp-brand-error">{error}</div>}
               <div className="pp-brand-add-actions">
-                <button
-                  type="button"
-                  className="pp-brand-add-cancel"
-                  onClick={() => {
-                    setAdding(false);
-                    setNewName("");
-                    setError(null);
-                  }}
+                <button type="button" className="pp-brand-add-cancel"
+                  onClick={() => { setAdding(false); setNewName(""); setError(null); }}
                   disabled={pending}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="pp-brand-add-submit"
-                  onClick={handleAdd}
-                  disabled={pending || !newName.trim()}
-                >
-                  {pending ? "Adding..." : "Add"}
-                </button>
+                >Cancel</button>
+                <button type="button" className="pp-brand-add-submit"
+                  onClick={handleAdd} disabled={pending || !newName.trim()}
+                >{pending ? "Adding..." : "Add"}</button>
               </div>
             </div>
           ) : (
-            <button
-              className="pp-brand-add-btn"
-              onClick={() => setAdding(true)}
-            >
+            <button className="pp-brand-add-btn" onClick={() => setAdding(true)}>
               <Plus size={13} />
               <span>Add brand</span>
             </button>
@@ -703,6 +745,7 @@ export default function PromptsComparisonClient({
   batchDeleteAction,
   canEdit = true,
   canRunScans = true,
+  markBrandAsOwnAction,
 }: Props) {
   // null = all brands; otherwise filter to selected brand IDs
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
@@ -1220,6 +1263,7 @@ export default function PromptsComparisonClient({
           selectedIds={selectedBrandIds}
           onChange={setSelectedBrandIds}
           onAddBrand={addBrandAction}
+          onMarkAsOwn={markBrandAsOwnAction}
         />
 
         <DateRangePicker value={dateRange} onChange={setDateRange} />

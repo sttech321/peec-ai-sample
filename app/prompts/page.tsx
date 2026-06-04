@@ -37,7 +37,7 @@ import {
   acceptAllSuggestions,
   rejectAllSuggestions,
 } from "./suggestions-actions";
-import { addBrand } from "../actions/brands";
+import { addBrand, markBrandAsOwn } from "../actions/brands";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import "./prompts-comparison.css";
@@ -526,6 +526,7 @@ export default async function PromptsPage() {
         addPromptsFromParsedAction={addPromptsFromParsed}
         runNowAction={runNow}
         addBrandAction={addBrand}
+        markBrandAsOwnAction={markBrandAsOwn}
         createTopicAction={createTopic}
         assignTagAction={assignTagToPromptByName}
         removeTagAction={removeTagFromPrompt}
