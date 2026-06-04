@@ -466,7 +466,7 @@
 
 .pd-brands-table thead th {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.3px;
@@ -474,6 +474,72 @@
   text-align: left;
   border-bottom: 1px solid #f1f5f9;
   white-space: nowrap;
+  position: relative;
+}
+
+/* ── Sortable column header button ──────────────────────────── */
+.pd-brands-th-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+.pd-brands-th-btn:hover { background: #f1f5f9; color: #475569; }
+.pd-brands-th-active { color: #334155; }
+.pd-th-arrow { font-size: 9px; opacity: 0.7; }
+
+/* ── Sort dropdown menu ─────────────────────────────────────── */
+.pd-brands-sort-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  z-index: 200;
+  padding: 6px 0;
+}
+.pd-sort-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 14px 4px;
+}
+.pd-sort-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #374151;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+  transition: background 0.1s;
+}
+.pd-sort-option:hover { background: #f8fafc; }
+.pd-sort-opt-icon { font-size: 12px; color: #64748b; width: 14px; text-align: center; }
+.pd-sort-check { margin-left: auto; color: #6366f1; font-size: 11px; }
+.pd-sort-active { color: #6366f1; font-weight: 500; }
+
+/* ── Sentiment cell ─────────────────────────────────────────── */
+.pd-sentiment-cell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #334155;
 }
 
 .pd-brands-table tbody tr { transition: background 0.12s; }
@@ -633,6 +699,12 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+}
+
+.pd-th-tooltip-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .pd-domains-table thead th {
