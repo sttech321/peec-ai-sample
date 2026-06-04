@@ -901,6 +901,17 @@ export default function PromptsComparisonClient({
   const [refreshTick, setRefreshTick] = useState(0);
   // Prompts queued for auto-crawl after they appear in the list
   const pendingAutoCrawlRef = useRef<{ id: string; query: string }[]>([]);
+  // Table horizontal scroll tracking — shadow shows only when scrolled
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [tableScrolled, setTableScrolled] = useState(false);
+
+  useEffect(() => {
+    const el = tableWrapRef.current;
+    if (!el) return;
+    const handler = () => setTableScrolled(el.scrollLeft > 0);
+    el.addEventListener("scroll", handler, { passive: true });
+    return () => el.removeEventListener("scroll", handler);
+  }, []);
   const [crawlState, setCrawlState] = useState<{
     running: boolean;
     done: number;
@@ -1728,7 +1739,10 @@ export default function PromptsComparisonClient({
           )}
 
           {/* Active/Archived Table */}
-          {activeTab !== "suggested" && <div className="pp-table-wrap">
+          {activeTab !== "suggested" && <div
+            className={`pp-table-wrap${tableScrolled ? " pp-table-scrolled" : ""}`}
+            ref={tableWrapRef}
+          >
             <table className="pp-table">
               <thead>
                 <tr>

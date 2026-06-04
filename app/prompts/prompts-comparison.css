@@ -818,8 +818,25 @@
   white-space: nowrap;
 }
 
-.pp-th-checkbox { width: 36px; }
-.pp-td-checkbox { width: 36px; padding-left: 12px; padding-right: 0; }
+/* ── Sticky checkbox column ───────────────────────────────────────────── */
+.pp-th-checkbox {
+  width: 36px;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #fafafa;
+}
+.pp-td-checkbox {
+  width: 36px;
+  padding-left: 12px;
+  padding-right: 0;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+}
+.pp-table tbody tr:hover .pp-td-checkbox { background: #fafafa; }
+
 .pp-th-checkbox input,
 .pp-td-checkbox input {
   width: 14px;
@@ -859,18 +876,44 @@
   border-bottom: 1px solid #f4f4f5;
 }
 
+/* ── Sticky prompt column ─────────────────────────────────────────────── */
 .pp-td-prompt {
-  max-width: 340px;
+  min-width: 280px;
+  max-width: 380px;
+  position: sticky;
+  left: 36px;           /* checkbox column width */
+  z-index: 2;
+  background: #fff;
+  box-shadow: none;     /* no shadow by default */
+  transition: box-shadow 0.15s;
 }
+.pp-table tbody tr:hover .pp-td-prompt { background: #fafafa; }
+
+/* Prompt column header — sticky both top + left */
+.pp-table thead th:nth-child(2) {
+  position: sticky;
+  left: 36px;
+  z-index: 4;
+  background: #fafafa;
+  box-shadow: none;     /* no shadow by default */
+  transition: box-shadow 0.15s;
+}
+
+/* Shadow appears ONLY when table is scrolled horizontally */
+.pp-table-scrolled .pp-td-prompt {
+  box-shadow: 4px 0 8px -4px rgba(0,0,0,0.12);
+}
+.pp-table-scrolled .pp-table thead th:nth-child(2) {
+  box-shadow: 4px 0 8px -4px rgba(0,0,0,0.08);
+}
+
 .pp-prompt-link {
   color: #18181b;
   text-decoration: none;
   font-weight: 500;
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  line-height: 1.5;
+  display: block;       /* full text — no truncation */
+  word-break: break-word;
 }
 .pp-prompt-link:hover { color: #6366f1; }
 
