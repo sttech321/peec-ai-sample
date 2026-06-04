@@ -26,23 +26,55 @@ export async function sendMagicLinkEmail(email: string, magicUrl: string): Promi
   await transporter.sendMail({
     from: `"Thrive Vision" <${SMTP_FROM}>`,
     to: email,
-    subject: "Your magic link to Thrive Vision",
-    text: `Click the link below to sign in:\n\n${magicUrl}\n\nThis link expires in 15 minutes.`,
+    subject: "Your sign-in link for Thrive Vision",
+    text: `Hey,\n\nYou requested a sign-in link for Thrive Vision.\n\nThrive Vision helps you understand how your brand shows up in AI search.\n\nClick the link below to securely sign in. This link expires in 15 minutes.\n\n${magicUrl}\n\nOr copy and paste this URL into your browser:\n${magicUrl}\n\nIf you didn't request this, you can safely ignore this email.\n\nThanks,\nThe Thrive Vision Team`,
     html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px">
-        <div style="margin-bottom:24px">
-          <div style="display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;background:#1a1a1a;border-radius:10px;color:#fff;font-size:16px;font-weight:700;letter-spacing:-0.5px;font-family:sans-serif">TV</div>
-        </div>
-        <h1 style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 8px">Sign in to Thrive Vision</h1>
-        <p style="font-size:15px;color:#555;margin:0 0 28px;line-height:1.5">
-          Click the button below to sign in. This link expires in <strong>15 minutes</strong>.
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;color:#1a1a1a">
+
+        <p style="font-size:16px;margin:0 0 16px">Hey,</p>
+
+        <p style="font-size:16px;margin:0 0 16px;line-height:1.6">
+          You requested a sign-in link for <strong>Thrive Vision</strong>.
         </p>
-        <a href="${magicUrl}" style="display:inline-block;padding:12px 24px;background:#1a1a1a;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600">
-          ✦ Sign in to Thrive Vision
+
+        <p style="font-size:16px;margin:0 0 16px;line-height:1.6;color:#444">
+          Thrive Vision helps you understand how your brand shows up in AI search.
+        </p>
+
+        <p style="font-size:16px;margin:0 0 28px;line-height:1.6;color:#444">
+          Click the button below to securely sign in. This link expires in 15 minutes.
+        </p>
+
+        <a href="${magicUrl}"
+           style="display:inline-block;padding:13px 28px;background:#1a1a1a;color:#fff;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;letter-spacing:0.01em">
+          Sign in to Thrive Vision
         </a>
-        <p style="font-size:12px;color:#aaa;margin-top:28px">
+
+        <p style="font-size:13px;color:#888;margin:28px 0 6px">
+          Or copy and paste this URL into your browser:
+        </p>
+        <a href="${magicUrl}"
+           style="font-size:13px;color:#2563eb;word-break:break-all;text-decoration:none">
+          ${magicUrl}
+        </a>
+
+        <p style="font-size:15px;color:#444;margin:36px 0 24px;line-height:1.6">
           If you didn't request this, you can safely ignore this email.
         </p>
+
+        <p style="font-size:15px;color:#1a1a1a;margin:0 0 32px">
+          Thanks,<br>
+          The Thrive Vision Team
+        </p>
+
+        <hr style="border:none;border-top:1px solid #e8e8e8;margin:0 0 24px">
+
+        <p style="font-size:12px;color:#999;margin:0;line-height:1.6">
+          Thrive Vision<br>
+          Need help? Contact us at
+          <a href="mailto:${SMTP_FROM}" style="color:#999;text-decoration:underline">${SMTP_FROM}</a>
+        </p>
+
       </div>
     `,
   });
