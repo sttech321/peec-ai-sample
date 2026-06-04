@@ -98,6 +98,9 @@
 }
 
 .urls-types-total {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
   color: #64748b;
 }

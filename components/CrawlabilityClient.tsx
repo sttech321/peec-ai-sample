@@ -376,6 +376,17 @@ export default function CrawlabilityClient({
   const [platformOpen, setPlatformOpen] = useState(false);
   const [typeOpen, setTypeOpen] = useState(false);
   const [botsOpen, setBotsOpen] = useState(false);
+  const [sortCol, setSortCol] = useState<"bot" | "type" | "platform" | "status" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  function toggleSort(col: "bot" | "type" | "platform" | "status") {
+    if (sortCol === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  }
 
   const groups = useMemo(() => (localContent ? parseRobotsTxt(localContent) : []), [localContent]);
 
@@ -410,9 +421,22 @@ export default function CrawlabilityClient({
     return list;
   }, [botsWithStatus, search, statusFilter, platformFilters, typeFilters, botFilters]);
 
+  const sorted = useMemo(() => {
+    if (!sortCol) return filtered;
+    return [...filtered].sort((a, b) => {
+      let av = "", bv = "";
+      if (sortCol === "bot")      { av = a.bot.name;          bv = b.bot.name; }
+      if (sortCol === "type")     { av = a.bot.typeDisplay;   bv = b.bot.typeDisplay; }
+      if (sortCol === "platform") { av = a.bot.platform;      bv = b.bot.platform; }
+      if (sortCol === "status")   { av = a.botStatus.status;  bv = b.botStatus.status; }
+      const cmp = av.localeCompare(bv);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sortCol, sortDir]);
+
   const hasGlobalGroup = groups.some(g => g.agents.includes("*"));
-  const globalBots = filtered.filter(({ botStatus }) => botStatus.source === "global" || botStatus.source === "none");
-  const specificBots = filtered.filter(({ botStatus }) => botStatus.source === "specific");
+  const globalBots = sorted.filter(({ botStatus }) => botStatus.source === "global" || botStatus.source === "none");
+  const specificBots = sorted.filter(({ botStatus }) => botStatus.source === "specific");
 
   const hasFilters = platformFilters.size > 0 || typeFilters.size > 0 || botFilters.size > 0 || statusFilter !== "all";
 
@@ -836,16 +860,29 @@ export default function CrawlabilityClient({
             {/* Column headers */}
             <div className="cw-table-head">
               <span>#</span>
-              <span>Bot ↕</span>
-              <span>Bot type ↕</span>
-              <span>Platform ↕</span>
-              <span>Status ↕</span>
+              <span className="cw-th-sortable" onClick={() => toggleSort("bot")}>
+                Bot {sortCol === "bot" ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+              </span>
+              <span className="cw-th-sortable" onClick={() => toggleSort("type")}>
+                Bot type {sortCol === "type" ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+              </span>
+              <span className="cw-th-sortable" onClick={() => toggleSort("platform")}>
+                Platform {sortCol === "platform" ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+              </span>
+              <span className="cw-th-sortable" onClick={() => toggleSort("status")}>
+                Status {sortCol === "status" ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+              </span>
             </div>
 
-            {filtered.length === 0 ? (
+            {sorted.length === 0 ? (
               <div style={{ padding: "24px 16px", color: "#a1a1aa", fontSize: 13, textAlign: "center" }}>
                 No bots match your filters.
               </div>
+            ) : sortCol ? (
+              /* Flat sorted list — no section grouping when sorting */
+              sorted.map(({ bot, botStatus }, idx) => (
+                <BotRow key={bot.name} bot={bot} botStatus={botStatus} idx={idx} />
+              ))
             ) : (
               <>
                 {/* Bots following global rules */}

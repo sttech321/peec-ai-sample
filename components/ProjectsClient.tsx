@@ -108,6 +108,36 @@ function getModelColor(name: string): string {
   return ENGINE_COLORS[name] ?? "#a1a1aa";
 }
 
+const ENGINE_DOMAINS: Record<string, string> = {
+  "ChatGPT":       "chatgpt.com",
+  "Claude":        "claude.ai",
+  "Perplexity":    "perplexity.ai",
+  "Gemini":        "gemini.google.com",
+  "AI Overview":   "google.com",
+  "AI Mode":       "google.com",
+  "Grok":          "grok.com",
+  "Groq":          "groq.com",
+  "Claude Sonnet": "claude.ai",
+};
+
+function EngineIconSmall({ name }: { name: string }) {
+  const domain = ENGINE_DOMAINS[name] ?? "google.com";
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`https://www.google.com/s2/favicons?sz=32&domain=${domain}`}
+      alt={name}
+      width={16}
+      height={16}
+      style={{ borderRadius: 3, flexShrink: 0 }}
+      onError={(e) => {
+        const el = e.currentTarget as HTMLImageElement;
+        el.style.display = "none";
+      }}
+    />
+  );
+}
+
 function getModelCredits(name: string): number {
   return MODEL_LIST.find((m) => m.name === name)?.credits ?? 30;
 }
@@ -861,8 +891,8 @@ function ModelsCostCard() {
             <tr key={r.name}>
               <td style={{ color: "#a1a1aa" }}>{i + 1}</td>
               <td>
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 16, height: 16, borderRadius: "50%", background: getModelColor(r.name), display: "inline-block" }} />
+                <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <EngineIconSmall name={r.name} />
                   {r.name}
                 </span>
               </td>

@@ -13,6 +13,7 @@ import EngineIcon from "./EngineIcon";
 import DomainFavicon from "./DomainFavicon";
 import { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
 import PromptSettingsModal from "./PromptSettingsModal";
+import InfoTooltip from "./InfoTooltip";
 import PageFilterBar, {
   PageFilterBrand,
   PageFilterDateRange,
@@ -663,7 +664,7 @@ export default function PromptDetailClient({
 
           <div className="pd-brands-card">
             <div className="pd-brands-header">
-              <span className="pd-brands-title">Top 7 Brands <span className="pd-info-icon">ⓘ</span></span>
+              <span className="pd-brands-title">Top 7 Brands <InfoTooltip text="Top brands across LLMs for your prompts" /></span>
             </div>
             <table className="pd-brands-table">
               <thead>

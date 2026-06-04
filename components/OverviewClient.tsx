@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -20,6 +21,7 @@ import {
 } from "../lib/chat-aggregations";
 import { classifyDomain, DOMAIN_TYPE_COLORS } from "../lib/domain-aggregations";
 import TypeDropdown from "./TypeDropdown";
+import InfoTooltip from "./InfoTooltip";
 
 interface ProjectBrand {
   name: string;
@@ -49,6 +51,13 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
   const [selectedDomainType, setSelectedDomainType] = useState<string | null>(null);
   const [typeOverrides, setTypeOverrides] = useState<Map<string, string>>(new Map());
   const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
+
+  // ── Top 7 Brands sort state ───────────────────────────────────────────────
+  type BrandSortCol  = "visibility" | "sov" | "sentiment" | "position";
+  type BrandSortMode = "high-low" | "low-high" | "positive-trend" | "negative-trend";
+  const [brandSortCol,  setBrandSortCol]  = useState<BrandSortCol>("visibility");
+  const [brandSortMode, setBrandSortMode] = useState<BrandSortMode>("high-low");
+  const [openBrandMenu, setOpenBrandMenu] = useState<BrandSortCol | null>(null);
 
   const ownBrandNames = useMemo(
     () => new Set(projectBrands.filter((b) => b.isOwn).map((b) => b.name)),
@@ -153,6 +162,18 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
   const totalMentions = brands.reduce((s, b) => s + b.count, 0);
   const maxDomainCount = domains.length > 0 ? domains[0].count : 1;
 
+  const sortedBrands = useMemo(() => {
+    const list = [...brands];
+    const dir = (brandSortMode === "high-low" || brandSortMode === "negative-trend") ? -1 : 1;
+    list.sort((a, b) => {
+      if (brandSortCol === "visibility" || brandSortCol === "sov") return dir * (b.count - a.count);
+      if (brandSortCol === "sentiment") return dir * ((b.sentiment ?? 0) - (a.sentiment ?? 0));
+      if (brandSortCol === "position")  return dir * ((b.position  ?? 0) - (a.position  ?? 0));
+      return 0;
+    });
+    return list;
+  }, [brands, brandSortCol, brandSortMode]);
+
   const ownDomainSet = useMemo(() => {
     const set = new Set<string>();
     for (const b of projectBrands) {
@@ -225,21 +246,68 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
             <div className="pd-chart-footer">Showing data for 30 days</div>
           </div>
 
-          <div className="pd-brands-card">
+          <div className="pd-brands-card" onClick={() => setOpenBrandMenu(null)}>
             <div className="pd-brands-header">
-              <span className="pd-brands-title">Top 7 Brands <span className="pd-info-icon">ⓘ</span></span>
+              <span className="pd-brands-title">Top 7 Brands <InfoTooltip text="Top brands across LLMs for your prompts" /></span>
             </div>
             <table className="pd-brands-table">
               <thead>
                 <tr>
-                  <th></th><th>Brand</th>
-                  <th>Visibility <ChevronDown size={9} style={{ display: "inline" }} /></th>
-                  <th>SOV</th><th>Brand count</th><th>Position</th>
+                  <th style={{ width: 28 }}>#</th>
+                  <th>Brand</th>
+                  {(["visibility", "sov", "sentiment", "position"] as BrandSortCol[]).map((col) => {
+                    const labels: Record<BrandSortCol, string> = { visibility: "Visibility", sov: "SOV", sentiment: "Sentiment", position: "Position" };
+                    const tooltips: Record<BrandSortCol, string> = {
+                      visibility: "The percentage of chats mentioning the brand in the last 30 days.",
+                      sov: "The brand's mentions divided by the total number of brand mentions across all chats in the last 30 days.",
+                      sentiment: "The brand's sentiment score when mentioned in the last 30 days.",
+                      position: "The brand's average position when mentioned in the last 30 days.",
+                    };
+                    const isActive = brandSortCol === col;
+                    const icon = isActive
+                      ? (brandSortMode === "high-low" || brandSortMode === "negative-trend" ? "↓" : "↑")
+                      : "↕";
+                    return (
+                      <th key={col} style={{ position: "relative" }}>
+                        <span
+                          className={`pd-brands-th-btn ${isActive ? "pd-brands-th-active" : ""}`}
+                          onClick={(e) => { e.stopPropagation(); setOpenBrandMenu(openBrandMenu === col ? null : col); }}
+                        >
+                          {labels[col]} <span className="pd-th-arrow">{icon}</span>
+                          <InfoTooltip text={tooltips[col]} />
+                        </span>
+                        {openBrandMenu === col && (
+                          <div className="pd-brands-sort-menu" onClick={e => e.stopPropagation()}>
+                            <div className="pd-sort-label">Sort by</div>
+                            {([
+                              { mode: "high-low",       icon: "↓", label: "Value  High - low" },
+                              { mode: "low-high",       icon: "↑", label: "Value  Low - high" },
+                              { mode: "positive-trend", icon: "↗", label: "Positive trend" },
+                              { mode: "negative-trend", icon: "↘", label: "Negative trend" },
+                            ] as { mode: BrandSortMode; icon: string; label: string }[]).map(opt => (
+                              <div
+                                key={opt.mode}
+                                className={`pd-sort-option ${brandSortCol === col && brandSortMode === opt.mode ? "pd-sort-active" : ""}`}
+                                onClick={() => { setBrandSortCol(col); setBrandSortMode(opt.mode); setOpenBrandMenu(null); }}
+                              >
+                                <span className="pd-sort-opt-icon">{opt.icon}</span>
+                                {opt.label}
+                                {brandSortCol === col && brandSortMode === opt.mode && <span className="pd-sort-check">✓</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {brands.map((b, i) => {
+                {sortedBrands.map((b, i) => {
                   const vis = totalMentions > 0 ? Math.round((b.count / totalMentions) * 100) : 0;
+                  const sov = vis;
+                  const sent = b.sentiment ? Math.round(b.sentiment) : 0;
+                  const dotColor = sentimentDotColor(sent);
                   return (
                     <tr key={b.name}>
                       <td className="pd-rank">{i + 1}</td>
@@ -248,13 +316,18 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                         {b.name}
                       </td>
                       <td><span className="pd-vis-value">{vis}%</span></td>
-                      <td>{vis}%</td>
-                      <td><span className="pd-brand-count-badge">{b.count}</span></td>
-                      <td>#{b.position ? b.position.toFixed(1) : "—"}</td>
+                      <td><span className="pd-vis-value">{sov}%</span></td>
+                      <td>
+                        <span className="pd-sentiment-cell">
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
+                          {sent > 0 ? sent : "—"}
+                        </span>
+                      </td>
+                      <td>{b.position ? `#${b.position.toFixed(1)}` : "—"}</td>
                     </tr>
                   );
                 })}
-                {brands.length === 0 && (
+                {sortedBrands.length === 0 && (
                   <tr><td colSpan={6} className="pd-empty">No brands extracted yet</td></tr>
                 )}
               </tbody>
@@ -270,15 +343,26 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
             <p className="pd-section-subtitle">Top domains retrieved by AI models in their answers.</p>
           </div>
           <div className="pd-domains-links">
-            <span className="pd-link-tab pd-link-active">All URLs</span>
-            <span className="pd-link-tab">All domains</span>
+            <Link href="/domains" className="pd-all-domains-btn">
+              All domains
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 17L17 7"/><path d="M7 7h10v10"/>
+              </svg>
+            </Link>
           </div>
         </div>
 
         <div className="pd-domains-grid">
           <div className="pd-domains-table-card">
             <table className="pd-domains-table">
-              <thead><tr><th>Domain</th><th>Retrieved</th><th>Citation rate</th><th>Type</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th><span className="pd-th-tooltip-wrap">Retrieved <InfoTooltip text="Share of chats where at least one URL from this domain appeared as a source." /></span></th>
+                  <th><span className="pd-th-tooltip-wrap">Citation rate <InfoTooltip text="Average number of inline citations when a URL from this domain is retrieved as a source." /></span></th>
+                  <th><span className="pd-th-tooltip-wrap">Type <InfoTooltip text="The type of website for this domain." /></span></th>
+                </tr>
+              </thead>
               <tbody>
                 {(selectedDomainType
                   ? domains.filter(d => (typeOverrides.get(d.domain) ?? classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet)) === selectedDomainType)
@@ -329,7 +413,10 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
           <div className="pd-domain-types-card urls-types-card">
             <div className="urls-types-header">
               <div className="urls-chart-title">Domain types</div>
-              <div className="urls-types-total">Total retrievals: {totalDomainCitations.toLocaleString()}</div>
+              <div className="urls-types-total">
+                <InfoTooltip text="Distribution of domain types in AI retrievals." />
+                Total retrievals: {totalDomainCitations.toLocaleString()}
+              </div>
             </div>
             <div className="urls-types-list">
               {(["Corporate", "UGC", "Other", "Reference", "You", "Competitor", "Editorial", "Institutional", "Related"] as const).map((type) => {

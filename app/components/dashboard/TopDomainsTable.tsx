@@ -1,4 +1,5 @@
 import { LuArrowUpRight } from "react-icons/lu";
+import Link from "next/link";
 
 type Type = "You" | "Corporate" | "UGC";
 type Row = { domain: string; favicon: string; faviconBg: string; retrieved: number; citation: number; type: Type };
@@ -28,10 +29,10 @@ export function TopDomainsTable() {
           <div className="text-sm font-medium text-zinc-900">Top Domains</div>
           <div className="text-xs text-zinc-500">Top domains retrieved by AI models in their answers</div>
         </div>
-        <button className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50">
+        <Link href="/domains" className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50">
           All domains
           <LuArrowUpRight className="h-3 w-3 text-zinc-400" />
-        </button>
+        </Link>
       </header>
 
       <div className="overflow-x-auto">
