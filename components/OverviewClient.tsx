@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -270,8 +271,12 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
             <p className="pd-section-subtitle">Top domains retrieved by AI models in their answers.</p>
           </div>
           <div className="pd-domains-links">
-            <span className="pd-link-tab pd-link-active">All URLs</span>
-            <span className="pd-link-tab">All domains</span>
+            <Link href="/domains" className="pd-all-domains-btn">
+              All domains
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 17L17 7"/><path d="M7 7h10v10"/>
+              </svg>
+            </Link>
           </div>
         </div>
 

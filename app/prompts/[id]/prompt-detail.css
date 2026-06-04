@@ -562,8 +562,27 @@
 
 .pd-domains-links {
   display: flex;
-  gap: 14px;
+  align-items: center;
+  gap: 8px;
 }
+
+.pd-all-domains-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.pd-all-domains-btn:hover { background: #f9fafb; border-color: #d1d5db; color: #111827; }
 
 .pd-link-tab {
   font-size: 12px;
