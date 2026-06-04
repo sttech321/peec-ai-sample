@@ -21,6 +21,7 @@ import {
 } from "../lib/chat-aggregations";
 import { classifyDomain, DOMAIN_TYPE_COLORS } from "../lib/domain-aggregations";
 import TypeDropdown from "./TypeDropdown";
+import InfoTooltip from "./InfoTooltip";
 
 interface ProjectBrand {
   name: string;
@@ -228,7 +229,7 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
 
           <div className="pd-brands-card">
             <div className="pd-brands-header">
-              <span className="pd-brands-title">Top 7 Brands <span className="pd-info-icon">ⓘ</span></span>
+              <span className="pd-brands-title">Top 7 Brands <InfoTooltip text="Top brands across LLMs for your prompts" /></span>
             </div>
             <table className="pd-brands-table">
               <thead>
