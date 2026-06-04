@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Search, Settings, Bell,
+  LayoutDashboard, Search, Settings,
   Activity, MessageSquare, BarChart3, Globe, Command, Sparkles,
   Eye, Link2, TrendingUp, Crosshair, Bug, Users, Tag,
   FolderOpen, Key, UserCircle, Gift
@@ -123,15 +123,8 @@ export default async function DashboardLayout({
         {/* Header */}
         <header className="h-14 flex items-center justify-between px-6 border-b border-zinc-200 shrink-0 bg-white" style={{ position: "relative", zIndex: 50, overflow: "visible" }}>
           <div className="flex items-center space-x-3">
-            <button className="text-zinc-500 hover:text-zinc-900 transition-colors relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-0 right-0 w-2 h-2 bg-indigo-500 rounded-full"></span>
-            </button>
-            <button className="text-zinc-500 hover:text-zinc-900 transition-colors">
-              <Settings className="w-5 h-5" />
-            </button>
             {headerAction && (
-              <div className="pl-2 border-l border-zinc-200">
+              <div>
                 {headerAction}
               </div>
             )}

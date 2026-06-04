@@ -611,37 +611,15 @@ function BrandFilterDropdown({
             )}
           </div>
 
-          {/* Add brand form */}
-          {adding ? (
-            <div className="pp-brand-add-form">
-              <input
-                autoFocus
-                placeholder="Brand name"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAdd();
-                  if (e.key === "Escape") { setAdding(false); setNewName(""); setError(null); }
-                }}
-                disabled={pending}
-              />
-              {error && <div className="pp-brand-error">{error}</div>}
-              <div className="pp-brand-add-actions">
-                <button type="button" className="pp-brand-add-cancel"
-                  onClick={() => { setAdding(false); setNewName(""); setError(null); }}
-                  disabled={pending}
-                >Cancel</button>
-                <button type="button" className="pp-brand-add-submit"
-                  onClick={handleAdd} disabled={pending || !newName.trim()}
-                >{pending ? "Adding..." : "Add"}</button>
-              </div>
-            </div>
-          ) : (
-            <button className="pp-brand-add-btn" onClick={() => setAdding(true)}>
-              <Plus size={13} />
-              <span>Add brand</span>
-            </button>
-          )}
+          {/* Add brand → navigate to Brands page */}
+          <a
+            href="/brands"
+            className="pp-brand-add-btn"
+            style={{ textDecoration: "none" }}
+          >
+            <Plus size={13} />
+            <span>Add brand</span>
+          </a>
         </div>
       )}
     </div>
