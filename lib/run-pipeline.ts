@@ -185,7 +185,7 @@ export async function runPipelineForAllEngines(jobs: PipelineJob[]): Promise<voi
     // Run batch in parallel — one failure doesn't block others
     await Promise.allSettled(
       batch.map((job) =>
-        runPipelineForOneEngine(job).catch((err) => {
+        runPipelineForOneEngine(job).catch((err) => { 
           console.error(
             `[pipeline] job FAILED engine=${job.engine} prompt=${job.promptId}:`,
             err,
