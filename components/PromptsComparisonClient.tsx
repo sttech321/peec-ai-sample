@@ -910,6 +910,13 @@ export default function PromptsComparisonClient({
   // show a spinner on the specific row without re-rendering the whole table.
   const [rowCrawling, setRowCrawling] = useState<Set<string>>(new Set());
 
+  // Crawl confirmation modal
+  const [crawlConfirm, setCrawlConfirm] = useState<{
+    promptCount: number;
+    engineCount: number;
+    onConfirm: () => void;
+  } | null>(null);
+
   // Once the refresh transition for a finished crawl completes, drop those
   // ids from rowCrawling so the spinner turns off and the button returns
   // to its idle state.
@@ -1131,26 +1138,30 @@ export default function PromptsComparisonClient({
 
     const targetPrompts = paginated.filter((p) => selectedRows.has(p.id));
     const engines = selectedModels.length > 0 ? selectedModels : [...ALL_ENGINES];
-    const confirmed = window.confirm(
-      `Run a fresh crawl for ${targetPrompts.length} selected prompt${targetPrompts.length === 1 ? "" : "s"} × ${engines.length} engine${engines.length === 1 ? "" : "s"}?\n\nThis hits paid AI APIs.`,
-    );
-    if (!confirmed) return;
 
-    setCrawlState({ running: true, done: 0, total: targetPrompts.length });
+    // Show confirmation modal instead of window.confirm
+    setCrawlConfirm({
+      promptCount: targetPrompts.length,
+      engineCount: engines.length,
+      onConfirm: async () => {
+        setCrawlConfirm(null);
+        setCrawlState({ running: true, done: 0, total: targetPrompts.length });
 
-    const BATCH = 4;
-    let done = 0;
-    for (let i = 0; i < targetPrompts.length; i += BATCH) {
-      const batch = targetPrompts.slice(i, i + BATCH);
-      await Promise.allSettled(
-        batch.map((p) => runNowAction(p.id, p.query, engines)),
-      );
-      done += batch.length;
-      setCrawlState({ running: true, done, total: targetPrompts.length });
-    }
+        const BATCH = 4;
+        let done = 0;
+        for (let i = 0; i < targetPrompts.length; i += BATCH) {
+          const batch = targetPrompts.slice(i, i + BATCH);
+          await Promise.allSettled(
+            batch.map((p) => runNowAction(p.id, p.query, engines)),
+          );
+          done += batch.length;
+          setCrawlState({ running: true, done, total: targetPrompts.length });
+        }
 
-    setCrawlState({ running: false, done: 0, total: 0 });
-    startTransition(() => router.refresh());
+        setCrawlState({ running: false, done: 0, total: 0 });
+        startTransition(() => router.refresh());
+      },
+    });
   }
 
   // Crawl one prompt across the currently-selected engines. Used by the
@@ -1993,6 +2004,73 @@ export default function PromptsComparisonClient({
             router.refresh();
           }}
         />
+      )}
+
+      {/* Crawl Confirmation Modal */}
+      {crawlConfirm && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 9999,
+          }}
+          onClick={() => setCrawlConfirm(null)}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 14, padding: "28px 28px 24px",
+              maxWidth: 420, width: "100%", margin: "0 16px",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Icon */}
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: "#f0fdf4", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+              <Play size={20} style={{ color: "#10b981" }} />
+            </div>
+
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>
+              Run fresh crawl?
+            </h2>
+            <p style={{ fontSize: 14, color: "#6b7280", margin: "0 0 6px", lineHeight: 1.6 }}>
+              This will crawl{" "}
+              <strong style={{ color: "#111827" }}>
+                {crawlConfirm.promptCount} prompt{crawlConfirm.promptCount !== 1 ? "s" : ""}
+              </strong>{" "}
+              across{" "}
+              <strong style={{ color: "#111827" }}>
+                {crawlConfirm.engineCount} engine{crawlConfirm.engineCount !== 1 ? "s" : ""}
+              </strong>.
+            </p>
+            <p style={{ fontSize: 13, color: "#f59e0b", margin: "0 0 24px", display: "flex", alignItems: "center", gap: 6 }}>
+              <span>⚠️</span> This will hit paid AI APIs.
+            </p>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setCrawlConfirm(null)}
+                style={{
+                  padding: "8px 18px", borderRadius: 8, border: "1px solid #e5e7eb",
+                  background: "#fff", cursor: "pointer", fontSize: 14, fontWeight: 500,
+                  color: "#374151",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={crawlConfirm.onConfirm}
+                style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: "#10b981", cursor: "pointer", fontSize: 14,
+                  fontWeight: 600, color: "#fff",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}
+              >
+                <Play size={13} /> Start crawl
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -3288,6 +3366,7 @@ function BatchActionsBar({
   const [showTagPicker, setShowTagPicker] = useState(false);
   const [showTopicPicker, setShowTopicPicker] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -3317,12 +3396,11 @@ function BatchActionsBar({
   }
 
   async function deleteSelected() {
-    if (
-      !window.confirm(
-        `Delete ${selectedCount} prompt${selectedCount === 1 ? "" : "s"} and all associated chats / mentions? This cannot be undone.`,
-      )
-    )
-      return;
+    setShowDeleteConfirm(true);
+  }
+
+  async function confirmDelete() {
+    setShowDeleteConfirm(false);
     setBusy(true);
     await deleteAction({ promptIds: selectedIds });
     setBusy(false);
@@ -3448,6 +3526,71 @@ function BatchActionsBar({
           Clear
         </button>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 9999,
+          }}
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 14, padding: "28px 28px 24px",
+              maxWidth: 420, width: "100%", margin: "0 16px",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Icon */}
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+              <span style={{ fontSize: 20 }}>🗑️</span>
+            </div>
+
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>
+              Delete {selectedCount} prompt{selectedCount !== 1 ? "s" : ""}?
+            </h2>
+            <p style={{ fontSize: 14, color: "#6b7280", margin: "0 0 6px", lineHeight: 1.6 }}>
+              This will permanently delete{" "}
+              <strong style={{ color: "#111827" }}>
+                {selectedCount} prompt{selectedCount !== 1 ? "s" : ""}
+              </strong>{" "}
+              and all associated chats / mentions.
+            </p>
+            <p style={{ fontSize: 13, color: "#ef4444", margin: "0 0 24px", fontWeight: 600 }}>
+              ⚠️ This cannot be undone.
+            </p>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                style={{
+                  padding: "8px 18px", borderRadius: 8, border: "1px solid #e5e7eb",
+                  background: "#fff", cursor: "pointer", fontSize: 14,
+                  fontWeight: 500, color: "#374151",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={busy}
+                style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: "#ef4444", cursor: busy ? "not-allowed" : "pointer",
+                  fontSize: 14, fontWeight: 600, color: "#fff",
+                  opacity: busy ? 0.7 : 1,
+                }}
+              >
+                {busy ? "Deleting…" : "Yes, delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
