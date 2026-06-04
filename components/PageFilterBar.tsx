@@ -67,6 +67,7 @@ interface Props {
    *  the defaults (e.g. 30-day range on the prompt detail page). */
   initialDateRange?: PageFilterDateRange;
   initialModels?: string[];
+  initialBrands?: string[] | null;
 }
 
 const ALL_ENGINES = ["ChatGPT", "Claude", "Perplexity", "Gemini", "AI Overviews"];
@@ -593,8 +594,11 @@ export default function PageFilterBar({
   hideTags,
   initialDateRange,
   initialModels,
+  initialBrands,
 }: Props) {
-  const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
+  const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(
+    initialBrands !== undefined ? initialBrands : null,
+  );
   const [selectedTagIds, setSelectedTagIds] = useState<string[] | null>(null);
   const [selectedModels, setSelectedModels] = useState<string[]>(
     initialModels ?? ALL_ENGINES,

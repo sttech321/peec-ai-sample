@@ -57,6 +57,8 @@ interface Props {
   projectBrands: ProjectBrand[];
   availableTags: ProjectTag[];
   selectedTagIds: string[];
+  initialHiddenBrandIds?: string[];
+  updateBrandFilterAction?: (hiddenBrandIds: string[] | null) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const VOLUME_TIER_LEVEL: Record<string, number> = {
@@ -85,7 +87,11 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 
-export default function PromptDetailClient({ prompt, chatFacts, projectBrands, availableTags, selectedTagIds }: Props) {
+export default function PromptDetailClient({
+  prompt, chatFacts, projectBrands, availableTags, selectedTagIds,
+  initialHiddenBrandIds = [],
+  updateBrandFilterAction,
+}: Props) {
   const router = useRouter();
   const [resolution, setResolution] = useState<Resolution>("W");
   const [selectedChat, setSelectedChat] = useState<ChatRecordView | null>(null);
@@ -136,7 +142,31 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
 
   const [selectedModels, setSelectedModels] = useState<string[]>(allAvailableModels);
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
-  const [selectedBrands, setSelectedBrands] = useState<string[] | null>(null);
+
+  // Brand filter state — initialized from DB (hiddenBrandIds → visible brand names)
+  const [selectedBrands, setSelectedBrands] = useState<string[] | null>(() => {
+    if (initialHiddenBrandIds.length === 0) return null; // all visible
+    const hiddenSet = new Set(initialHiddenBrandIds);
+    const allNames = projectBrands.map((b) => b.name);
+    const visibleNames = allNames.filter((name) => !hiddenSet.has(name));
+    return visibleNames.length === allNames.length ? null : visibleNames;
+  });
+
+  // When user changes brand filter → update DB (project-wide, persists on refresh)
+  const handleBrandsChange = async (names: string[] | null) => {
+    setSelectedBrands(names); // optimistic update
+    if (!updateBrandFilterAction) return;
+    if (names === null) {
+      // all selected = nothing hidden
+      void updateBrandFilterAction([]);
+    } else {
+      // hidden = brands NOT in selected list
+      const allNames = projectBrands.map((b) => b.name);
+      const hiddenNames = allNames.filter((name) => !names.includes(name));
+      void updateBrandFilterAction(hiddenNames);
+    }
+  };
+
   const [mentionedOnly, setMentionedOnly] = useState(false);
 
   const runScan = async () => {
@@ -203,21 +233,18 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
     return names;
   }, [projectBrands, selectedBrands]);
 
-  const top7 = useMemo(() => fullRanking.slice(0, 7), [fullRanking]);
+  // top7 respects selectedBrands filter — unchecked brands are hidden from the table.
+  // Own brand (isOwn=true) always appears regardless of filter.
+  const top7 = useMemo(() => {
+    const ownBrandNames = new Set(projectBrands.filter((b) => b.isOwn).map((b) => b.name));
+    const visible = selectedBrands === null
+      ? fullRanking
+      : fullRanking.filter((b) => selectedBrands.includes(b.name) || ownBrandNames.has(b.name));
+    return visible.slice(0, 7);
+  }, [fullRanking, selectedBrands, projectBrands]);
 
-  // Brands that we want on the chart/table but aren't in the top 7. Renders as
-  // overflow rows at the bottom of the table with their real rank.
-  const overflowBrands = useMemo(() => {
-    const top7Names = new Set(top7.map((b) => b.name));
-    return fullRanking.filter(
-      (b) => pinnedNames.has(b.name) && !top7Names.has(b.name),
-    );
-  }, [top7, fullRanking, pinnedNames]);
-
-  const brands = useMemo(
-    () => [...top7, ...overflowBrands],
-    [top7, overflowBrands],
-  );
+  // Show exactly top 7 — no overflow/pinned section beyond 7 brands.
+  const brands = useMemo(() => top7, [top7]);
 
   const domains = useMemo(() => aggregateDomains(filteredChats, 10), [filteredChats]);
   const totalDomainCitations = useMemo(() => totalCitations(filteredChats), [filteredChats]);
@@ -526,8 +553,9 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
           hideTags
           initialDateRange={dateRange as unknown as PageFilterDateRange}
           initialModels={selectedModels}
+          initialBrands={selectedBrands}
           addBrandAction={addBrand}
-          onBrandsChange={(ids) => setSelectedBrands(ids)}
+          onBrandsChange={handleBrandsChange}
           onDateChange={(r) => setDateRange(r as unknown as DateRangeValue)}
           onModelsChange={(engines) => setSelectedModels(engines)}
         />
@@ -658,17 +686,10 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
                   const sovDelta = formatDelta(sov - prevSov);
                   const sentDelta = formatDelta(b.sentiment - (prevData?.sentiment ?? b.sentiment));
                   const posDelta = formatDelta((prevData?.position ?? b.position) - b.position, "");
-                  const isOverflow = i >= top7.length;
                   const realRank = rankByName.get(b.name) ?? i + 1;
-                  const isFirstOverflow = isOverflow && i === top7.length;
                   return (
                     <React.Fragment key={b.name}>
-                      {isFirstOverflow && (
-                        <tr className="pd-brands-overflow-sep">
-                          <td colSpan={6}>Pinned (outside top 7)</td>
-                        </tr>
-                      )}
-                      <tr className={isOverflow ? "pd-brands-overflow-row" : undefined}>
+                      <tr>
                         <td className="pd-rank">#{realRank}</td>
                         <td className="pd-brand-cell">
                           <DomainFavicon
@@ -940,15 +961,20 @@ export default function PromptDetailClient({ prompt, chatFacts, projectBrands, a
                       </td>
                       <td>
                         <div className="pd-chat-mentions-row">
-                          {chat.brandsFound.slice(0, 3).map((name, idx) => (
-                            <DomainFavicon
-                              key={idx}
-                              domain={brandDomainByName.get(name) ?? guessBrandDomain(name)}
-                              size={16}
-                            />
-                          ))}
-                          {chat.brandsFound.length > 3 && (
-                            <span className="pd-mention-more">+{chat.brandsFound.length - 3}</span>
+                          {chat.brandsFound
+                            .filter((name) => selectedBrands === null || selectedBrands.includes(name))
+                            .slice(0, 3)
+                            .map((name, idx) => (
+                              <DomainFavicon
+                                key={idx}
+                                domain={brandDomainByName.get(name) ?? guessBrandDomain(name)}
+                                size={16}
+                              />
+                            ))}
+                          {chat.brandsFound.filter((n) => selectedBrands === null || selectedBrands.includes(n)).length > 3 && (
+                            <span className="pd-mention-more">
+                              +{chat.brandsFound.filter((n) => selectedBrands === null || selectedBrands.includes(n)).length - 3}
+                            </span>
                           )}
                         </div>
                       </td>

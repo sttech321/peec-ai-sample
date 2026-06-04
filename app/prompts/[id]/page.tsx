@@ -4,6 +4,7 @@ import { db } from "../../../db";
 import { prompts, topics, projects, tags, promptTags } from "../../../db/schema";
 import { eq } from "drizzle-orm";
 import { fetchChatFacts, fetchProjectBrands } from "../../../lib/chat-facts-server";
+import { updateBrandFilter } from "../../actions/brands";
 import "./prompt-detail.css";
 import "../prompts-comparison.css";
 import "../../urls/urls.css";
@@ -37,7 +38,7 @@ export default async function PromptDetail({ params }: { params: Promise<{ id: s
   }
   const prompt = promptRecord[0];
 
-  const [chatFacts, projectBrands, availableTagsRaw, selectedTagsRaw] = await Promise.all([
+  const [chatFacts, projectBrands, availableTagsRaw, selectedTagsRaw, projectRow] = await Promise.all([
     fetchChatFacts({ projectId: prompt.projectId, promptId }),
     fetchProjectBrands(prompt.projectId),
     db
@@ -49,7 +50,15 @@ export default async function PromptDetail({ params }: { params: Promise<{ id: s
       .select({ tagId: promptTags.tagId })
       .from(promptTags)
       .where(eq(promptTags.promptId, promptId)),
+    db
+      .select({ hiddenBrandIds: projects.hiddenBrandIds })
+      .from(projects)
+      .where(eq(projects.id, prompt.projectId))
+      .limit(1),
   ]);
+
+  // hiddenBrandIds: brands unchecked by user, saved in DB
+  const hiddenBrandIds: string[] = projectRow[0]?.hiddenBrandIds ?? [];
 
   const availableTags = availableTagsRaw.map((t) => ({
     id: t.id,
@@ -77,6 +86,8 @@ export default async function PromptDetail({ params }: { params: Promise<{ id: s
         projectBrands={projectBrands}
         availableTags={availableTags}
         selectedTagIds={selectedTagIds}
+        initialHiddenBrandIds={hiddenBrandIds}
+        updateBrandFilterAction={updateBrandFilter}
       />
     </DashboardLayout>
   );

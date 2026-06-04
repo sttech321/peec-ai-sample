@@ -215,6 +215,7 @@ interface Props {
   }) => Promise<{ ok: boolean; deleted: number }>;
   canEdit?: boolean;
   canRunScans?: boolean;
+  markBrandAsOwnAction?: (brandId: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const TOPIC_LOCATIONS: { code: string; name: string; flag: string }[] = [
@@ -429,12 +430,14 @@ function BrandFilterDropdown({
   selectedIds,
   onChange,
   onAddBrand,
+  onMarkAsOwn,
 }: {
   projectName: string;
   brands: AvailableBrand[];
   selectedIds: string[] | null;
   onChange: (ids: string[] | null) => void;
   onAddBrand: (name: string) => Promise<{ ok: boolean; error?: string }>;
+  onMarkAsOwn?: (brandId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -442,6 +445,8 @@ function BrandFilterDropdown({
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [trackingId, setTrackingId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -452,6 +457,7 @@ function BrandFilterDropdown({
         setAdding(false);
         setError(null);
         setQuery("");
+        setHoveredId(null);
       }
     };
     window.addEventListener("mousedown", handler);
@@ -459,12 +465,12 @@ function BrandFilterDropdown({
   }, [open]);
 
   const filtered = useMemo(
-    () =>
-      brands.filter((b) =>
-        b.name.toLowerCase().includes(query.toLowerCase()),
-      ),
+    () => brands.filter((b) => b.name.toLowerCase().includes(query.toLowerCase())),
     [brands, query],
   );
+
+  const ownBrands = filtered.filter((b) => b.isOwn);
+  const otherBrands = filtered.filter((b) => !b.isOwn);
 
   const allSelected = selectedIds === null;
   const triggerLabel = allSelected
@@ -475,8 +481,6 @@ function BrandFilterDropdown({
 
   const toggleBrand = (id: string) => {
     if (selectedIds === null) {
-      // Was "all selected" — keep all except this one OR drop to just this one?
-      // peec.ai pattern: unchecking from "all" keeps the rest selected.
       const next = brands.map((b) => b.id).filter((bid) => bid !== id);
       onChange(next.length === brands.length ? null : next);
       return;
@@ -489,31 +493,81 @@ function BrandFilterDropdown({
     else onChange(Array.from(set));
   };
 
+  const onlyBrand = (id: string) => {
+    onChange([id]);
+    setOpen(false);
+  };
+
+  const handleTrack = async (id: string) => {
+    if (!onMarkAsOwn) return;
+    setTrackingId(id);
+    await onMarkAsOwn(id);
+    setTrackingId(null);
+  };
+
   const handleAdd = async () => {
     setError(null);
     setPending(true);
     const res = await onAddBrand(newName);
     setPending(false);
-    if (!res.ok) {
-      setError(res.error || "Failed to add brand");
-      return;
-    }
+    if (!res.ok) { setError(res.error || "Failed to add brand"); return; }
     setNewName("");
     setAdding(false);
   };
 
+  const renderBrandItem = (b: AvailableBrand) => {
+    const checked = selectedIds === null ? true : selectedIds.includes(b.id);
+    const isHovered = hoveredId === b.id;
+    return (
+      <div
+        key={b.id}
+        className="pp-brand-item pp-brand-item-row"
+        onMouseEnter={() => setHoveredId(b.id)}
+        onMouseLeave={() => setHoveredId(null)}
+      >
+        <label className="pp-brand-item-label">
+          <input type="checkbox" checked={checked} onChange={() => toggleBrand(b.id)} />
+          <SmallBrandFavicon name={b.name} domain={b.domain} />
+          <span className="pp-brand-name">{b.name}</span>
+          {b.isOwn && <span className="pp-brand-you-badge">You</span>}
+        </label>
+
+        {/* Hover actions — Only + Track */}
+        {isHovered && (
+          <div className="pp-brand-hover-actions">
+            <button
+              className="pp-brand-hover-btn"
+              onClick={(e) => { e.preventDefault(); onlyBrand(b.id); }}
+              title="Show only this brand"
+            >
+              Only
+            </button>
+            {!b.isOwn && onMarkAsOwn && (
+              <button
+                className="pp-brand-hover-btn pp-brand-track-btn"
+                onClick={(e) => { e.preventDefault(); handleTrack(b.id); }}
+                disabled={trackingId === b.id}
+                title="Mark as your tracked brand"
+              >
+                {trackingId === b.id ? "..." : "Track"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="pp-dd" ref={ref}>
-      <button
-        className="pp-dd-trigger"
-        onClick={() => setOpen((v) => !v)}
-      >
+      <button className="pp-dd-trigger" onClick={() => setOpen((v) => !v)}>
         <Building2 size={13} />
         <span>{triggerLabel}</span>
         <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
       </button>
       {open && (
-        <div className="pp-dd-menu pp-brand-menu" style={{ left: 0, width: 280 }}>
+        <div className="pp-dd-menu pp-brand-menu" style={{ left: 0, width: 290 }}>
+          {/* Search */}
           <div className="pp-brand-search">
             <Search size={12} className="pp-brand-search-icon" />
             <input
@@ -523,6 +577,8 @@ function BrandFilterDropdown({
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
+
+          {/* All brands toggle */}
           <button
             className={`pp-brand-all ${allSelected ? "pp-brand-all-active" : ""}`}
             onClick={() => onChange(null)}
@@ -530,26 +586,32 @@ function BrandFilterDropdown({
             <span>All brands</span>
             {allSelected && <Check size={14} />}
           </button>
+
           <div className="pp-brand-list">
+            {/* Tracked brand section */}
+            {ownBrands.length > 0 && (
+              <>
+                <div className="pp-brand-section-label">Tracked brand</div>
+                {ownBrands.map(renderBrandItem)}
+              </>
+            )}
+
+            {/* All brands section */}
+            {otherBrands.length > 0 && (
+              <>
+                {ownBrands.length > 0 && (
+                  <div className="pp-brand-section-label" style={{ marginTop: 4 }}>All brands</div>
+                )}
+                {otherBrands.map(renderBrandItem)}
+              </>
+            )}
+
             {filtered.length === 0 && (
               <div className="pp-dd-empty">No brands found</div>
             )}
-            {filtered.map((b) => {
-              const checked =
-                selectedIds === null ? true : selectedIds.includes(b.id);
-              return (
-                <label key={b.id} className="pp-brand-item">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleBrand(b.id)}
-                  />
-                  <SmallBrandFavicon name={b.name} domain={b.domain} />
-                  <span className="pp-brand-name">{b.name}</span>
-                </label>
-              );
-            })}
           </div>
+
+          {/* Add brand form */}
           {adding ? (
             <div className="pp-brand-add-form">
               <input
@@ -559,43 +621,23 @@ function BrandFilterDropdown({
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleAdd();
-                  if (e.key === "Escape") {
-                    setAdding(false);
-                    setNewName("");
-                    setError(null);
-                  }
+                  if (e.key === "Escape") { setAdding(false); setNewName(""); setError(null); }
                 }}
                 disabled={pending}
               />
               {error && <div className="pp-brand-error">{error}</div>}
               <div className="pp-brand-add-actions">
-                <button
-                  type="button"
-                  className="pp-brand-add-cancel"
-                  onClick={() => {
-                    setAdding(false);
-                    setNewName("");
-                    setError(null);
-                  }}
+                <button type="button" className="pp-brand-add-cancel"
+                  onClick={() => { setAdding(false); setNewName(""); setError(null); }}
                   disabled={pending}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="pp-brand-add-submit"
-                  onClick={handleAdd}
-                  disabled={pending || !newName.trim()}
-                >
-                  {pending ? "Adding..." : "Add"}
-                </button>
+                >Cancel</button>
+                <button type="button" className="pp-brand-add-submit"
+                  onClick={handleAdd} disabled={pending || !newName.trim()}
+                >{pending ? "Adding..." : "Add"}</button>
               </div>
             </div>
           ) : (
-            <button
-              className="pp-brand-add-btn"
-              onClick={() => setAdding(true)}
-            >
+            <button className="pp-brand-add-btn" onClick={() => setAdding(true)}>
               <Plus size={13} />
               <span>Add brand</span>
             </button>
@@ -703,6 +745,7 @@ export default function PromptsComparisonClient({
   batchDeleteAction,
   canEdit = true,
   canRunScans = true,
+  markBrandAsOwnAction,
 }: Props) {
   // null = all brands; otherwise filter to selected brand IDs
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
@@ -901,6 +944,17 @@ export default function PromptsComparisonClient({
   const [refreshTick, setRefreshTick] = useState(0);
   // Prompts queued for auto-crawl after they appear in the list
   const pendingAutoCrawlRef = useRef<{ id: string; query: string }[]>([]);
+  // Table horizontal scroll tracking — shadow shows only when scrolled
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [tableScrolled, setTableScrolled] = useState(false);
+
+  useEffect(() => {
+    const el = tableWrapRef.current;
+    if (!el) return;
+    const handler = () => setTableScrolled(el.scrollLeft > 0);
+    el.addEventListener("scroll", handler, { passive: true });
+    return () => el.removeEventListener("scroll", handler);
+  }, []);
   const [crawlState, setCrawlState] = useState<{
     running: boolean;
     done: number;
@@ -909,6 +963,13 @@ export default function PromptsComparisonClient({
   // Set of prompt IDs currently being crawled by the per-row button — lets us
   // show a spinner on the specific row without re-rendering the whole table.
   const [rowCrawling, setRowCrawling] = useState<Set<string>>(new Set());
+
+  // Crawl confirmation modal
+  const [crawlConfirm, setCrawlConfirm] = useState<{
+    promptCount: number;
+    engineCount: number;
+    onConfirm: () => void;
+  } | null>(null);
 
   // Once the refresh transition for a finished crawl completes, drop those
   // ids from rowCrawling so the spinner turns off and the button returns
@@ -1131,26 +1192,30 @@ export default function PromptsComparisonClient({
 
     const targetPrompts = paginated.filter((p) => selectedRows.has(p.id));
     const engines = selectedModels.length > 0 ? selectedModels : [...ALL_ENGINES];
-    const confirmed = window.confirm(
-      `Run a fresh crawl for ${targetPrompts.length} selected prompt${targetPrompts.length === 1 ? "" : "s"} × ${engines.length} engine${engines.length === 1 ? "" : "s"}?\n\nThis hits paid AI APIs.`,
-    );
-    if (!confirmed) return;
 
-    setCrawlState({ running: true, done: 0, total: targetPrompts.length });
+    // Show confirmation modal instead of window.confirm
+    setCrawlConfirm({
+      promptCount: targetPrompts.length,
+      engineCount: engines.length,
+      onConfirm: async () => {
+        setCrawlConfirm(null);
+        setCrawlState({ running: true, done: 0, total: targetPrompts.length });
 
-    const BATCH = 4;
-    let done = 0;
-    for (let i = 0; i < targetPrompts.length; i += BATCH) {
-      const batch = targetPrompts.slice(i, i + BATCH);
-      await Promise.allSettled(
-        batch.map((p) => runNowAction(p.id, p.query, engines)),
-      );
-      done += batch.length;
-      setCrawlState({ running: true, done, total: targetPrompts.length });
-    }
+        const BATCH = 4;
+        let done = 0;
+        for (let i = 0; i < targetPrompts.length; i += BATCH) {
+          const batch = targetPrompts.slice(i, i + BATCH);
+          await Promise.allSettled(
+            batch.map((p) => runNowAction(p.id, p.query, engines)),
+          );
+          done += batch.length;
+          setCrawlState({ running: true, done, total: targetPrompts.length });
+        }
 
-    setCrawlState({ running: false, done: 0, total: 0 });
-    startTransition(() => router.refresh());
+        setCrawlState({ running: false, done: 0, total: 0 });
+        startTransition(() => router.refresh());
+      },
+    });
   }
 
   // Crawl one prompt across the currently-selected engines. Used by the
@@ -1198,6 +1263,7 @@ export default function PromptsComparisonClient({
           selectedIds={selectedBrandIds}
           onChange={setSelectedBrandIds}
           onAddBrand={addBrandAction}
+          onMarkAsOwn={markBrandAsOwnAction}
         />
 
         <DateRangePicker value={dateRange} onChange={setDateRange} />
@@ -1717,7 +1783,10 @@ export default function PromptsComparisonClient({
           )}
 
           {/* Active/Archived Table */}
-          {activeTab !== "suggested" && <div className="pp-table-wrap">
+          {activeTab !== "suggested" && <div
+            className={`pp-table-wrap${tableScrolled ? " pp-table-scrolled" : ""}`}
+            ref={tableWrapRef}
+          >
             <table className="pp-table">
               <thead>
                 <tr>
@@ -1993,6 +2062,73 @@ export default function PromptsComparisonClient({
             router.refresh();
           }}
         />
+      )}
+
+      {/* Crawl Confirmation Modal */}
+      {crawlConfirm && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 9999,
+          }}
+          onClick={() => setCrawlConfirm(null)}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 14, padding: "28px 28px 24px",
+              maxWidth: 420, width: "100%", margin: "0 16px",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Icon */}
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: "#f0fdf4", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+              <Play size={20} style={{ color: "#10b981" }} />
+            </div>
+
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>
+              Run fresh crawl?
+            </h2>
+            <p style={{ fontSize: 14, color: "#6b7280", margin: "0 0 6px", lineHeight: 1.6 }}>
+              This will crawl{" "}
+              <strong style={{ color: "#111827" }}>
+                {crawlConfirm.promptCount} prompt{crawlConfirm.promptCount !== 1 ? "s" : ""}
+              </strong>{" "}
+              across{" "}
+              <strong style={{ color: "#111827" }}>
+                {crawlConfirm.engineCount} engine{crawlConfirm.engineCount !== 1 ? "s" : ""}
+              </strong>.
+            </p>
+            <p style={{ fontSize: 13, color: "#f59e0b", margin: "0 0 24px", display: "flex", alignItems: "center", gap: 6 }}>
+              <span>⚠️</span> This will hit paid AI APIs.
+            </p>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setCrawlConfirm(null)}
+                style={{
+                  padding: "8px 18px", borderRadius: 8, border: "1px solid #e5e7eb",
+                  background: "#fff", cursor: "pointer", fontSize: 14, fontWeight: 500,
+                  color: "#374151",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={crawlConfirm.onConfirm}
+                style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: "#10b981", cursor: "pointer", fontSize: 14,
+                  fontWeight: 600, color: "#fff",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}
+              >
+                <Play size={13} /> Start crawl
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -3288,6 +3424,7 @@ function BatchActionsBar({
   const [showTagPicker, setShowTagPicker] = useState(false);
   const [showTopicPicker, setShowTopicPicker] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -3317,12 +3454,11 @@ function BatchActionsBar({
   }
 
   async function deleteSelected() {
-    if (
-      !window.confirm(
-        `Delete ${selectedCount} prompt${selectedCount === 1 ? "" : "s"} and all associated chats / mentions? This cannot be undone.`,
-      )
-    )
-      return;
+    setShowDeleteConfirm(true);
+  }
+
+  async function confirmDelete() {
+    setShowDeleteConfirm(false);
     setBusy(true);
     await deleteAction({ promptIds: selectedIds });
     setBusy(false);
@@ -3448,6 +3584,71 @@ function BatchActionsBar({
           Clear
         </button>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 9999,
+          }}
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 14, padding: "28px 28px 24px",
+              maxWidth: 420, width: "100%", margin: "0 16px",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Icon */}
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+              <span style={{ fontSize: 20 }}>🗑️</span>
+            </div>
+
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>
+              Delete {selectedCount} prompt{selectedCount !== 1 ? "s" : ""}?
+            </h2>
+            <p style={{ fontSize: 14, color: "#6b7280", margin: "0 0 6px", lineHeight: 1.6 }}>
+              This will permanently delete{" "}
+              <strong style={{ color: "#111827" }}>
+                {selectedCount} prompt{selectedCount !== 1 ? "s" : ""}
+              </strong>{" "}
+              and all associated chats / mentions.
+            </p>
+            <p style={{ fontSize: 13, color: "#ef4444", margin: "0 0 24px", fontWeight: 600 }}>
+              ⚠️ This cannot be undone.
+            </p>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                style={{
+                  padding: "8px 18px", borderRadius: 8, border: "1px solid #e5e7eb",
+                  background: "#fff", cursor: "pointer", fontSize: 14,
+                  fontWeight: 500, color: "#374151",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={busy}
+                style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: "#ef4444", cursor: busy ? "not-allowed" : "pointer",
+                  fontSize: 14, fontWeight: 600, color: "#fff",
+                  opacity: busy ? 0.7 : 1,
+                }}
+              >
+                {busy ? "Deleting…" : "Yes, delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
