@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { RefreshCw, FileText, X, ChevronRight, ChevronDown, Check } from "lucide-react";
+import { RefreshCw, FileText, X, ChevronRight, ChevronDown, Check, Search } from "lucide-react";
 import { fetchRobotsTxt } from "../app/crawlability/actions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -449,7 +449,7 @@ export default function CrawlabilityClient({
             <span className="cw-bot-name">{bot.displayName}</span>
           </div>
           <div>
-            <span className="cw-type-badge">{bot.typeDisplay}</span>
+            <span className="cw-type-badge">{bot.typeDisplay.toLowerCase()}</span>
           </div>
           <div className="cw-platform-cell">
             {bot.platform !== bot.company ? `${bot.platform} · ${bot.company}` : bot.company}
@@ -788,16 +788,19 @@ export default function CrawlabilityClient({
         <UrlTester domain={domain ?? "example.com"} robotsContent={localContent} />
       ) : (
         <>
-          <p className="cw-heading">
-            {projectName} — {restricted} bots with restrictions, {fullyOpen} fully open
-          </p>
-          <p className="cw-subheading">
-            Review which AI crawlers can access your site and how your robots.txt policies compare to competitors.
-            {" "}
-            <span style={{ color: "#a1a1aa" }}>
-              Last fetched {formatFetchedAt(lastFetchedAt)}.
-            </span>
-          </p>
+          {/* Summary card */}
+          <div className="cw-summary-card">
+            <p className="cw-heading">
+              {projectName} — {restricted} bots with restrictions, {fullyOpen} fully open
+            </p>
+            <p className="cw-subheading">
+              Review which AI crawlers can access your site and how your robots.txt policies compare to competitors.
+              {" "}
+              <span style={{ color: "#a1a1aa" }}>
+                Last fetched {formatFetchedAt(lastFetchedAt)}.
+              </span>
+            </p>
+          </div>
 
           {localError && (
             <div className="cw-tester-error">
@@ -805,29 +808,31 @@ export default function CrawlabilityClient({
             </div>
           )}
 
-          <div className="cw-table">
-            {/* Search row */}
-            <div className="cw-toolbar">
-              <div className="cw-table-search">
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Search"
-                />
-              </div>
-              <select
-                className="cw-status-select"
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-              >
-                <option value="all">All Statuses</option>
-                <option value="allowed">Allowed</option>
-                <option value="blocked">Blocked</option>
-                <option value="partial">Partial</option>
-                <option value="unknown">Unknown</option>
-              </select>
+          {/* Standalone search row */}
+          <div className="cw-search-row">
+            <div className="cw-search-row-inner">
+              <Search size={14} className="cw-search-row-icon" />
+              <input
+                className="cw-search-row-input"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search"
+              />
             </div>
+            <select
+              className="cw-status-select"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All Statuses</option>
+              <option value="allowed">Allowed</option>
+              <option value="blocked">Blocked</option>
+              <option value="partial">Partial</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </div>
 
+          <div className="cw-table">
             {/* Column headers */}
             <div className="cw-table-head">
               <span>#</span>

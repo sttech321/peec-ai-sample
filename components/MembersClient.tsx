@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 
 interface Member {
   id: string;
@@ -41,30 +42,33 @@ interface Props {
 }
 
 const ROLE_OPTIONS = [
-  { value: "company_member", label: "Company Member",  desc: "Manage members + edit everything" },
-  { value: "project_member", label: "Project Member",  desc: "Edit projects & brands, no member mgmt" },
-  { value: "project_viewer", label: "Project Viewer",  desc: "View-only, no editing" },
+  { value: "company_member", label: "Company Member", desc: "Manage members + edit everything" },
+  { value: "project_member", label: "Project Member", desc: "Edit projects & brands, no member mgmt" },
+  { value: "project_viewer", label: "Project Viewer", desc: "View-only, no editing" },
 ];
 
-function getInitial(email: string) {
-  return email.charAt(0).toUpperCase();
+function formatTimeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min  = Math.floor(diff / 60000);
+  const hr   = Math.floor(diff / 3600000);
+  const day  = Math.floor(diff / 86400000);
+  const mo   = Math.floor(day / 30);
+  if (min < 2)   return "just now";
+  if (min < 60)  return `${min} min ago`;
+  if (hr  < 24)  return `${hr} hr ago`;
+  if (day < 30)  return `${day} day${day !== 1 ? "s" : ""} ago`;
+  return `${mo} mo ago`;
 }
 
-function RoleBadge({ role, roleLabels, roleColors }: { role: string; roleLabels: Record<string, string>; roleColors: Record<string, string> }) {
-  const label = role === "owner" ? "Owner" : (roleLabels[role] ?? role);
-  const colorClass = role === "owner" ? "member-badge--amber" : (roleColors[role] ?? "member-badge--gray");
-  return <span className={`member-badge ${colorClass}`}>{label}</span>;
-}
-
-const CHECK = "✓";
-const CROSS = "✗";
-
-function PermIcon({ ok }: { ok: boolean }) {
-  return (
-    <span style={{ color: ok ? "#16a34a" : "#dc2626", fontWeight: 700, fontSize: 13 }}>
-      {ok ? CHECK : CROSS}
-    </span>
-  );
+function RoleBadge({ role }: { role: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    owner:          { label: "Owner",          cls: "mbr-badge--amber" },
+    company_member: { label: "Company Member", cls: "mbr-badge--blue"  },
+    project_member: { label: "Project Member", cls: "mbr-badge--green" },
+    project_viewer: { label: "Project Viewer", cls: "mbr-badge--gray"  },
+  };
+  const { label, cls } = map[role] ?? { label: role, cls: "mbr-badge--gray" };
+  return <span className={`mbr-badge ${cls}`}>{label}</span>;
 }
 
 export default function MembersClient({
@@ -80,22 +84,18 @@ export default function MembersClient({
   rolePermissions,
 }: Props) {
   const router = useRouter();
-  const [members, setMembers] = useState(initialMembers);
-  const [pendingInvites] = useState(initialInvites);
-
-  // Invite form state
+  const [members, setMembers]         = useState(initialMembers);
+  const [pendingInvites]              = useState(initialInvites);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("company_member");
-  const [inviting, setInviting] = useState(false);
+  const [inviteRole, setInviteRole]   = useState("company_member");
+  const [inviting, setInviting]       = useState(false);
   const [inviteError, setInviteError] = useState("");
   const [inviteSuccess, setInviteSuccess] = useState("");
-  const [devLink, setDevLink] = useState("");
+  const [devLink, setDevLink]         = useState("");
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    setInviteError("");
-    setInviteSuccess("");
-    setDevLink("");
+    setInviteError(""); setInviteSuccess(""); setDevLink("");
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
@@ -127,55 +127,39 @@ export default function MembersClient({
       body: JSON.stringify({ role: newRole }),
     });
     if (res.ok) {
-      setMembers((prev) =>
-        prev.map((m) => (m.id === memberId ? { ...m, role: newRole } : m))
-      );
+      setMembers((prev) => prev.map((m) => (m.id === memberId ? { ...m, role: newRole } : m)));
     }
   }
 
   async function handleRemove(memberId: string, email: string) {
     if (!confirm(`Remove ${email} from the workspace?`)) return;
     const res = await fetch(`/api/members/${memberId}`, { method: "DELETE" });
-    if (res.ok) {
-      setMembers((prev) => prev.filter((m) => m.id !== memberId));
-    }
+    if (res.ok) setMembers((prev) => prev.filter((m) => m.id !== memberId));
   }
 
   return (
-    <div className="members-page">
-      <div className="members-header">
-        <h1 className="members-title">Team Members</h1>
-        <p className="members-subtitle">
-          Manage who has access to your workspace and their roles.
-        </p>
-      </div>
+    <div className="mbr-page">
 
-      {!canManage && (
-        <p className="members-readonly-notice">
-          You have view-only access to this page. Contact your workspace owner to change member settings.
-        </p>
-      )}
-
-      {/* Invite form — admin only */}
-      {canManage && (
-        <div className="invite-section">
-          <p className="invite-section-title">Invite a team member</p>
-          <form className="invite-form" onSubmit={handleInvite}>
-            <div className="invite-field invite-field-email">
-              <label>Email address</label>
+      {/* ── Invite form ─────────────────────────────────────────────── */}
+      {canManage ? (
+        <div className="mbr-invite-card">
+          <p className="mbr-invite-title">Invite Members</p>
+          <form className="mbr-invite-form" onSubmit={handleInvite}>
+            <div className="mbr-invite-email-wrap">
+              <label className="mbr-label">Email</label>
               <input
-                className="invite-input"
+                className="mbr-invite-input"
                 type="email"
-                placeholder="colleague@company.com"
+                placeholder="friend@provider.com"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 required
               />
             </div>
-            <div className="invite-field">
-              <label>Role</label>
+            <div className="mbr-invite-role-wrap">
+              <label className="mbr-label">Invite to</label>
               <select
-                className="invite-select"
+                className="mbr-invite-select"
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value)}
               >
@@ -183,100 +167,88 @@ export default function MembersClient({
                   <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
-              {inviteRole && (
-                <p className="invite-role-desc">
-                  {ROLE_OPTIONS.find(r => r.value === inviteRole)?.desc}
-                </p>
-              )}
             </div>
-            <button className="invite-btn" type="submit" disabled={inviting}>
-              {inviting ? "Sending…" : "Send invite"}
+            <button className="mbr-invite-btn" type="submit" disabled={inviting}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
+              </svg>
+              {inviting ? "Sending…" : "Invite"}
             </button>
           </form>
-          {inviteError && <p className="invite-error">{inviteError}</p>}
-          {inviteSuccess && <p className="invite-success">{inviteSuccess}</p>}
+          {inviteError   && <p className="mbr-error">{inviteError}</p>}
+          {inviteSuccess && <p className="mbr-success">{inviteSuccess}</p>}
           {devLink && (
-            <div className="invite-dev-link">
-              <strong>Dev mode</strong> — no SMTP configured. Share this link manually:{" "}
+            <div className="mbr-devlink">
+              <strong>Dev mode</strong> — Share this link:{" "}
               <a href={devLink} target="_blank" rel="noreferrer">{devLink}</a>
             </div>
           )}
         </div>
+      ) : (
+        <p className="mbr-readonly">
+          You have view-only access. Contact your workspace owner to manage members.
+        </p>
       )}
 
-      {/* Members table */}
-      <div className="members-table-section">
-        <div className="members-table-header">
-          <span className="members-table-title">Workspace members</span>
-          <span className="members-count-badge">{members.length + 1}</span>
-        </div>
-        <table className="members-table">
+      {/* ── Members table ───────────────────────────────────────────── */}
+      <div className="mbr-list-card">
+        <table className="mbr-table">
           <thead>
             <tr>
-              <th>Member</th>
-              <th>Role</th>
-              <th>Invited by</th>
-              {canManage && <th>Actions</th>}
+              <th>Email</th>
+              <th>Created</th>
+              {canManage && <th style={{ width: 44 }}></th>}
             </tr>
           </thead>
           <tbody>
-            {/* Owner row */}
+            {/* Current user row */}
             <tr>
               <td>
-                <div className="member-info">
-                  <div className="member-avatar">{getInitial(currentEmail || workspaceId)}</div>
-                  <span className="member-email">
+                <div className="mbr-row-email">
+                  <RoleBadge role={currentRole} />
+                  <span className="mbr-email-text">
                     {currentEmail || workspaceId}
-                    <span className="member-you-tag" style={{ marginLeft: 6 }}>You</span>
+                    <span className="mbr-you">You</span>
                   </span>
                 </div>
               </td>
-              <td>
-                <RoleBadge role="owner" roleLabels={roleLabels} roleColors={roleColors} />
-              </td>
-              <td style={{ color: "#aaa", fontSize: 13 }}>—</td>
+              <td className="mbr-date">—</td>
               {canManage && <td />}
             </tr>
 
             {members.map((m) => (
               <tr key={m.id}>
                 <td>
-                  <div className="member-info">
-                    <div className="member-avatar">{getInitial(m.email)}</div>
-                    <span className="member-email">
+                  <div className="mbr-row-email">
+                    {canManage && m.email !== currentEmail ? (
+                      <select
+                        className={`mbr-role-select mbr-role-select--${m.role}`}
+                        value={m.role}
+                        onChange={(e) => handleRoleChange(m.id, e.target.value)}
+                      >
+                        {ROLE_OPTIONS.map((r) => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <RoleBadge role={m.role} />
+                    )}
+                    <span className="mbr-email-text">
                       {m.email}
-                      {m.email === currentEmail && (
-                        <span className="member-you-tag" style={{ marginLeft: 6 }}>You</span>
-                      )}
+                      {m.email === currentEmail && <span className="mbr-you">You</span>}
                     </span>
                   </div>
                 </td>
-                <td>
-                  {canManage ? (
-                    <select
-                      className="role-select-inline"
-                      value={m.role}
-                      onChange={(e) => handleRoleChange(m.id, e.target.value)}
-                    >
-                      {ROLE_OPTIONS.map((r) => (
-                        <option key={r.value} value={r.value}>{r.label}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <RoleBadge role={m.role} roleLabels={roleLabels} roleColors={roleColors} />
-                  )}
-                </td>
-                <td style={{ fontSize: 13, color: "#666" }}>{m.invitedBy}</td>
+                <td className="mbr-date">{formatTimeAgo(m.createdAt)}</td>
                 {canManage && (
                   <td>
-                    <div className="member-actions">
-                      <button
-                        className="member-remove-btn"
-                        onClick={() => handleRemove(m.id, m.email)}
-                      >
-                        Remove
-                      </button>
-                    </div>
+                    <button
+                      className="mbr-delete-btn"
+                      onClick={() => handleRemove(m.id, m.email)}
+                      title={`Remove ${m.email}`}
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </td>
                 )}
               </tr>
@@ -285,88 +257,42 @@ export default function MembersClient({
         </table>
       </div>
 
-      {/* Role permissions summary */}
-      <div className="role-permissions-section">
-        <p className="members-table-title" style={{ marginBottom: 12 }}>Role permissions</p>
-        <table className="members-table">
-          <thead>
-            <tr>
-              <th>Permission</th>
-              <th>Company Member</th>
-              <th>Project Member</th>
-              <th>Project Viewer</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              { key: "view",              label: "View dashboards & reports" },
-              { key: "edit",              label: "Edit projects, prompts & brands" },
-              { key: "runScans",          label: "Run AI scans" },
-              { key: "manageMembers",     label: "Invite / remove members" },
-              { key: "workspaceSettings", label: "Workspace settings" },
-            ].map(({ key, label }) => (
-              <tr key={key}>
-                <td style={{ fontSize: 13, color: "#374151" }}>{label}</td>
-                <td style={{ textAlign: "center" }}>
-                  <PermIcon ok={rolePermissions.company_member?.[key as keyof RolePermission] ?? false} />
-                </td>
-                <td style={{ textAlign: "center" }}>
-                  <PermIcon ok={rolePermissions.project_member?.[key as keyof RolePermission] ?? false} />
-                </td>
-                <td style={{ textAlign: "center" }}>
-                  <PermIcon ok={rolePermissions.project_viewer?.[key as keyof RolePermission] ?? false} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pending invitations */}
+      {/* ── Pending invitations ─────────────────────────────────────── */}
       {canManage && pendingInvites.length > 0 && (
-        <div className="pending-section">
-          <div className="members-table-header">
-            <span className="members-table-title">Pending invitations</span>
-            <span className="members-count-badge">{pendingInvites.length}</span>
+        <div className="mbr-list-card" style={{ marginTop: 16 }}>
+          <div className="mbr-section-header">
+            <span className="mbr-section-title">Pending invitations</span>
+            <span className="mbr-count">{pendingInvites.length}</span>
           </div>
-          <table className="members-table pending-table">
+          <table className="mbr-table">
             <thead>
               <tr>
                 <th>Email</th>
-                <th>Role</th>
-                <th>Invited by</th>
                 <th>Expires</th>
-                <th>Status</th>
+                <th style={{ width: 44 }}></th>
               </tr>
             </thead>
             <tbody>
               {pendingInvites.map((inv) => (
                 <tr key={inv.id}>
                   <td>
-                    <div className="member-info">
-                      <div className="member-avatar">{getInitial(inv.email)}</div>
-                      <span className="member-email">{inv.email}</span>
+                    <div className="mbr-row-email">
+                      <RoleBadge role={inv.role} />
+                      <span className="mbr-email-text">{inv.email}</span>
+                      <span className="mbr-pending-tag">Pending</span>
                     </div>
                   </td>
-                  <td>
-                    <RoleBadge role={inv.role} roleLabels={roleLabels} roleColors={roleColors} />
-                  </td>
-                  <td style={{ fontSize: 13, color: "#666" }}>{inv.invitedBy}</td>
-                  <td style={{ fontSize: 13, color: "#888" }}>
+                  <td className="mbr-date">
                     {new Date(inv.expiresAt).toLocaleDateString()}
                   </td>
-                  <td>
-                    <span className="pending-badge">
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#d97706", display: "inline-block" }} />
-                      Pending
-                    </span>
-                  </td>
+                  <td />
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
     </div>
   );
 }
