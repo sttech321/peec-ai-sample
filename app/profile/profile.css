@@ -26,17 +26,19 @@
 }
 
 /* ── Hero ─────────────────────────────────────────────────────────── */
-.bp-hero {
-  position: relative;
+
+/* Card: banner + logo + name + domain all inside */
+.bp-hero-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
   margin-bottom: 32px;
-  border-radius: 14px;
-  overflow: visible;
 }
 
 .bp-hero-banner {
   position: relative;
-  height: 160px;
-  border-radius: 14px;
+  height: 150px;
   background: #a16f3f;
 }
 
@@ -105,36 +107,32 @@
   background: transparent;
 }
 
-.bp-hero-info {
-  display: flex;
-  align-items: flex-end;
-  gap: 16px;
-  padding: 0 4px;
-  margin-top: -36px;
-}
-
-.bp-hero-logo-wrapper {
-  position: relative;
+/* Footer: block layout — logo uses negative margin to overlap banner */
+.bp-hero-footer {
+  padding: 0 20px 24px;
 }
 
 .bp-hero-logo {
-  width: 72px;
-  height: 72px;
+  width: 68px;
+  height: 68px;
   border-radius: 14px;
   background: #fff;
-  border: 4px solid #fff;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 0;
-  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  /* pull up into banner */
+  margin-top: -34px;
+  margin-bottom: 12px;
 }
 
 .bp-hero-logo img {
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   object-fit: contain;
   border-radius: 8px;
 }
@@ -194,55 +192,50 @@
   gap: 4px;
 }
 
-.bp-hero-meta {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-bottom: 12px;
-}
-
+/* Company name — inside the card body */
 .bp-hero-name {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
   cursor: text;
-  line-height: 1.2;
+  line-height: 1.3;
 }
+.bp-hero-name:hover { opacity: 0.85; }
 
-.bp-hero-name-input {
-  font-size: 22px;
+.bp-hero-name-edit {
+  font-size: 18px;
   font-weight: 700;
+  color: #0f172a;
   border: none;
+  border-bottom: 2px solid #6366f1;
   outline: none;
-  padding: 0;
+  padding: 0 0 2px;
   background: transparent;
   width: 100%;
   font-family: inherit;
 }
 
+/* Domain — inside the card body */
 .bp-hero-domain {
   font-size: 13px;
-  color: #64748b;
+  color: #94a3b8;
   cursor: text;
 }
+.bp-hero-domain:hover { color: #64748b; }
 
-.bp-hero-domain-input {
+.bp-hero-domain-edit {
   font-size: 13px;
   color: #64748b;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 4px 8px;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
   outline: none;
+  padding: 0 0 1px;
+  background: transparent;
   width: 220px;
   font-family: inherit;
 }
-
-.bp-hero-domain-input:focus {
-  border-color: #6366f1;
-  color: #0f172a;
-}
+.bp-hero-domain-edit:focus { border-bottom-color: #6366f1; }
 
 .bp-hero-industry-badge {
   display: inline-block;
@@ -251,7 +244,8 @@
   font-weight: 600;
   color: #475569;
   background: #f1f5f9;
-  padding: 3px 9px;
+  border: 1px solid #e2e8f0;
+  padding: 3px 10px;
   border-radius: 999px;
   width: fit-content;
 }
