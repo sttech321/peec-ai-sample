@@ -1259,6 +1259,110 @@
 
 .cfd-empty { font-size: 12px; color: #9ca3af; text-align: center; padding: 12px; }
 
+/* ── Column Settings Button + Panel ─────────────────── */
+.ac-col-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  background: #fff;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+.ac-col-btn:hover { border-color: #d1d5db; background: #f9fafb; color: #374151; }
+.ac-col-btn--active { background: #111827; color: #fff; border-color: #111827; }
+
+.ac-col-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 500;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  min-width: 200px;
+  padding: 8px 0;
+}
+
+.ac-col-group-label {
+  padding: 6px 14px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+
+.ac-col-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #111827;
+  transition: background 0.1s;
+  user-select: none;
+}
+.ac-col-row:hover { background: #f9fafb; }
+
+.ac-col-row--fixed {
+  cursor: default;
+  color: #6b7280;
+}
+.ac-col-row--fixed:hover { background: transparent; }
+
+.ac-col-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: #f3f4f6;
+  flex-shrink: 0;
+}
+
+.ac-col-name { flex: 1; }
+
+.ac-col-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s;
+}
+.ac-col-checkbox--on { background: #2563eb; border-color: #2563eb; }
+
+.ac-col-separator {
+  height: 1px;
+  background: #f3f4f6;
+  margin: 6px 0;
+}
+
+.ac-col-reset {
+  width: 100%;
+  padding: 7px 14px;
+  text-align: left;
+  font-size: 13px;
+  color: #6b7280;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s, color 0.1s;
+}
+.ac-col-reset:hover { background: #fef2f2; color: #ef4444; }
+
 /* Count row */
 .ac-count-row { margin-bottom: 10px; }
 .ac-count { font-size: 13px; color: #6b7280; }

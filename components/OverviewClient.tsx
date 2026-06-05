@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -59,9 +59,27 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
   // ── All Chats section state ───────────────────────────────────────────────
   const CHAT_PAGE_SIZE = 10;
   const [chatPage, setChatPage]                   = useState(1);
-  const [chatBrandFilters, setChatBrandFilters]   = useState<Set<string>>(new Set()); // empty = all
-  const [chatSourceFilters, setChatSourceFilters] = useState<Set<string>>(new Set()); // empty = all
-  const [chatFeatureFilters, setChatFeatureFilters] = useState<Set<string>>(new Set()); // empty = all
+  const [chatBrandFilters, setChatBrandFilters]   = useState<Set<string>>(new Set());
+  const [chatSourceFilters, setChatSourceFilters] = useState<Set<string>>(new Set());
+  const [chatFeatureFilters, setChatFeatureFilters] = useState<Set<string>>(new Set());
+  const [colSettingsOpen, setColSettingsOpen]     = useState(false);
+  const colSettingsRef                            = useRef<HTMLDivElement>(null);
+
+  const DEFAULT_COLS = { mentions: true, sources: true, features: true, position: true, created: true, citations: false };
+  const [visibleCols, setVisibleCols] = useState({ ...DEFAULT_COLS });
+
+  function toggleCol(col: keyof typeof visibleCols) {
+    setVisibleCols(prev => ({ ...prev, [col]: !prev[col] }));
+  }
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (colSettingsRef.current && !colSettingsRef.current.contains(e.target as Node))
+        setColSettingsOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
 
   async function handleTypeOverride(domain: string, type: string) {
     setTypeOverrides(prev => new Map(prev).set(domain, type));
@@ -514,6 +532,57 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
               onChange={(v) => { setChatSourceFilters(v); setChatPage(1); }}
               searchable
             />
+
+            {/* Column settings icon */}
+            <div ref={colSettingsRef} style={{ position: "relative" }}>
+              <button
+                className={`ac-col-btn ${colSettingsOpen ? "ac-col-btn--active" : ""}`}
+                onClick={() => setColSettingsOpen(v => !v)}
+                title="Column settings"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                  <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                </svg>
+              </button>
+
+              {colSettingsOpen && (
+                <div className="ac-col-panel">
+                  {/* Fixed columns */}
+                  <div className="ac-col-group-label">Fixed columns</div>
+                  <div className="ac-col-row ac-col-row--fixed">
+                    <span className="ac-col-dot" />
+                    <span className="ac-col-name">Chat</span>
+                  </div>
+
+                  {/* Active columns */}
+                  <div className="ac-col-group-label">Active columns</div>
+                  {(["mentions","sources","features","position","created"] as const).map(col => (
+                    <div key={col} className="ac-col-row" onClick={() => toggleCol(col)}>
+                      <span className={`ac-col-checkbox ${visibleCols[col] ? "ac-col-checkbox--on" : ""}`}>
+                        {visibleCols[col] && <svg width="10" height="10" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>}
+                      </span>
+                      <span className="ac-col-name" style={{ textTransform: "capitalize" }}>{col}</span>
+                    </div>
+                  ))}
+
+                  {/* Available columns */}
+                  <div className="ac-col-group-label">Available columns</div>
+                  <div className="ac-col-row" onClick={() => toggleCol("citations")}>
+                    <span className={`ac-col-checkbox ${visibleCols.citations ? "ac-col-checkbox--on" : ""}`}>
+                      {visibleCols.citations && <svg width="10" height="10" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>}
+                    </span>
+                    <span className="ac-col-name">Citations</span>
+                  </div>
+
+                  {/* Reset */}
+                  <div className="ac-col-separator" />
+                  <button className="ac-col-reset" onClick={() => setVisibleCols({ ...DEFAULT_COLS })}>
+                    Reset to default
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -542,10 +611,12 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
               <thead>
                 <tr>
                   <th className="ac-th-chat">Chat</th>
-                  <th className="ac-th-mentions">Mentions</th>
-                  <th className="ac-th-sources">Sources</th>
-                  <th className="ac-th-position">Position</th>
-                  <th className="ac-th-created">Created</th>
+                  {visibleCols.mentions   && <th className="ac-th-mentions">Mentions</th>}
+                  {visibleCols.sources    && <th className="ac-th-sources">Sources</th>}
+                  {visibleCols.features   && <th className="ac-th-sources">Features</th>}
+                  {visibleCols.citations  && <th className="ac-th-mentions">Citations</th>}
+                  {visibleCols.position   && <th className="ac-th-position">Position</th>}
+                  {visibleCols.created    && <th className="ac-th-created">Created</th>}
                 </tr>
               </thead>
               <tbody>
@@ -556,7 +627,7 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                   return (
                     <tr key={chat.id} className="ac-row" onClick={() => setSelectedChat(chat)}>
 
-                      {/* Chat: engine icon + query + snippet */}
+                      {/* Chat — always visible */}
                       <td className="ac-td-chat">
                         <div className="ac-chat-engine">
                           <EngineIcon engine={chat.engine} />
@@ -567,35 +638,57 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                         </div>
                       </td>
 
-                      {/* Mentions: brand favicons + overflow */}
-                      <td className="ac-td-mentions">
-                        <div className="ac-icons-row">
-                          {chat.brandsFound.slice(0, 4).map((b) => (
-                            <DomainFavicon key={b} domain={guessBrandDomain(b)} size={18} />
-                          ))}
-                          {extra > 0 && <span className="ac-more">+{extra}</span>}
-                        </div>
-                      </td>
+                      {/* Mentions */}
+                      {visibleCols.mentions && (
+                        <td className="ac-td-mentions">
+                          <div className="ac-icons-row">
+                            {chat.brandsFound.slice(0, 4).map((b) => (
+                              <DomainFavicon key={b} domain={guessBrandDomain(b)} size={18} />
+                            ))}
+                            {extra > 0 && <span className="ac-more">+{extra}</span>}
+                          </div>
+                        </td>
+                      )}
 
-                      {/* Sources: domain favicons */}
-                      <td className="ac-td-sources">
-                        <div className="ac-icons-row">
-                          {chat.sourcesFound.slice(0, 4).map((s, i) => (
-                            <DomainFavicon key={i} domain={s.domain} size={18} />
-                          ))}
-                          {chat.sourcesFound.length > 4 && (
-                            <span className="ac-more">+{chat.sourcesFound.length - 4}</span>
-                          )}
-                        </div>
-                      </td>
+                      {/* Sources */}
+                      {visibleCols.sources && (
+                        <td className="ac-td-sources">
+                          <div className="ac-icons-row">
+                            {chat.sourcesFound.slice(0, 4).map((s, i) => (
+                              <DomainFavicon key={i} domain={s.domain} size={18} />
+                            ))}
+                            {chat.sourcesFound.length > 4 && (
+                              <span className="ac-more">+{chat.sourcesFound.length - 4}</span>
+                            )}
+                          </div>
+                        </td>
+                      )}
+
+                      {/* Features (placeholder) */}
+                      {visibleCols.features && (
+                        <td className="ac-td-sources">
+                          <span className="ac-more" style={{ color: "#9ca3af" }}>—</span>
+                        </td>
+                      )}
+
+                      {/* Citations (placeholder) */}
+                      {visibleCols.citations && (
+                        <td className="ac-td-mentions">
+                          <span className="ac-more" style={{ color: "#9ca3af" }}>—</span>
+                        </td>
+                      )}
 
                       {/* Position */}
-                      <td className="ac-td-position">
-                        {chat.avgPosition > 0 ? chat.avgPosition.toFixed(1) : "—"}
-                      </td>
+                      {visibleCols.position && (
+                        <td className="ac-td-position">
+                          {chat.avgPosition > 0 ? chat.avgPosition.toFixed(1) : "—"}
+                        </td>
+                      )}
 
                       {/* Created */}
-                      <td className="ac-td-created">{timeAgo}</td>
+                      {visibleCols.created && (
+                        <td className="ac-td-created">{timeAgo}</td>
+                      )}
                     </tr>
                   );
                 })}
