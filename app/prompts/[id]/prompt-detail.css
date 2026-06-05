@@ -680,6 +680,17 @@
   color: #374151;
 }
 
+/* ── Pinned own brand row ───────────────────────────────────── */
+.pd-pinned-separator td {
+  padding: 0 !important;
+  border-bottom: 2px dashed #e5e7eb !important;
+}
+.pd-pinned-row {
+  background: #fafaf9;
+}
+.pd-pinned-row:hover { background: #f3f4f6 !important; }
+.pd-pinned-row td { color: #374151; }
+
 /* ── Brand cell ─────────────────────────────────────────────── */
 .pd-brand-cell {
   display: flex;

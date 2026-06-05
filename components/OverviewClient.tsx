@@ -177,13 +177,22 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
     [chatFacts, effectiveModels, effectiveDateRange],
   );
 
+  // All brands (no slice) — needed for correct SOV denominator
+  const allBrands = useMemo(
+    () => aggregateBrands(filteredChats, 9999, undefined, stableBrandColors),
+    [filteredChats, stableBrandColors]
+  );
+  const totalAllBrandCount = useMemo(
+    () => allBrands.reduce((s, b) => s + b.count, 0),
+    [allBrands]
+  );
+
   const brands = useMemo(() => {
-    const all = aggregateBrands(filteredChats, 50, undefined, stableBrandColors);
     const filtered = effectiveBrandIds === null
-      ? all
-      : all.filter((b) => effectiveBrandIds.includes(b.name));
+      ? allBrands
+      : allBrands.filter((b) => effectiveBrandIds.includes(b.name));
     return filtered.slice(0, 7);
-  }, [filteredChats, stableBrandColors, effectiveBrandIds]);
+  }, [allBrands, effectiveBrandIds]);
 
   const domains = useMemo(() => aggregateDomains(filteredChats, 10), [filteredChats]);
   const totalDomainCitations = useMemo(() => totalCitations(filteredChats), [filteredChats]);
@@ -242,7 +251,7 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
     [prevFilteredChats, stableBrandColors]
   );
 
-  const prevTotalMentions = prevBrands.reduce((s, b) => s + b.count, 0);
+  // prevTotalMentions removed — prev period delta now calculated inline per row
 
   const recentChats = useMemo(() => {
     const records = toChatRecords(filteredChats);
@@ -271,7 +280,6 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
   const allChatBrands  = useMemo(() => [...new Set(recentChats.flatMap(c => c.brandsFound))].sort(), [recentChats]);
   const allChatSources = useMemo(() => [...new Set(recentChats.flatMap(c => c.sourcesFound.map(s => s.domain)))].sort(), [recentChats]);
 
-  const totalMentions = brands.reduce((s, b) => s + b.count, 0);
   const maxDomainCount = domains.length > 0 ? domains[0].count : 1;
 
   const sortedBrands = useMemo(() => {
@@ -285,6 +293,21 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
     });
     return list;
   }, [brands, brandSortCol, brandSortMode]);
+
+  // ── Pinned own brand (Peec AI behavior) ──────────────────────────────────
+  // If no own brand is in the top-7 list, find it in allBrands and pin it at bottom
+  // with its REAL rank from allBrands (sorted by count descending).
+  const pinnedOwnBrand = useMemo(() => {
+    const ownBrandInTop7 = sortedBrands.some(b => ownBrandNames.has(b.name));
+    if (ownBrandInTop7) return null; // already visible, no need to pin
+
+    // allBrands sorted by count desc (same as aggregateBrands output)
+    const allSorted = [...allBrands].sort((a, b) => b.count - a.count);
+    const ownIdx    = allSorted.findIndex(b => ownBrandNames.has(b.name));
+    if (ownIdx === -1) return null; // no own brand in data at all
+
+    return { brand: allSorted[ownIdx], rank: ownIdx + 1 };
+  }, [sortedBrands, allBrands, ownBrandNames]);
 
   const ownDomainSet = useMemo(() => {
     const set = new Set<string>();
@@ -649,18 +672,26 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                 </tr>
               </thead>
               <tbody>
-                {sortedBrands.map((b, i) => {
-                  const vis  = totalMentions > 0 ? Math.round((b.count / totalMentions) * 100) : 0;
-                  const sov  = vis;
+                {/* Show max 6 when own brand is pinned at bottom, otherwise 7 */}
+                {(pinnedOwnBrand ? sortedBrands.slice(0, 6) : sortedBrands).map((b, i) => {
+                  // Visibility = chats mentioning brand / total chats × 100
+                  const totalChats = filteredChats.length;
+                  const vis = totalChats > 0 ? Math.round((b.count / totalChats) * 100) : 0;
+
+                  // SOV = brand mentions / ALL brands total mentions × 100
+                  const sov = totalAllBrandCount > 0 ? Math.round((b.count / totalAllBrandCount) * 100) : 0;
+
                   const sent = b.sentiment ? Math.round(b.sentiment) : 0;
                   const dotColor = sentimentDotColor(sent);
 
-                  // Previous period deltas
-                  const pb   = prevBrands.find(p => p.name === b.name);
-                  const pVis = prevTotalMentions > 0 && pb
-                    ? Math.round((pb.count / prevTotalMentions) * 100) : 0;
-                  const visDelta  = vis - pVis;
-                  const sovDelta  = visDelta; // SOV same as vis in this model
+                  // Previous period deltas — same correct formulas
+                  const prevAllBrandCount = prevBrands.reduce((s, p) => s + p.count, 0);
+                  const prevTotalChats    = prevFilteredChats.length;
+                  const pb      = prevBrands.find(p => p.name === b.name);
+                  const pVis    = prevTotalChats > 0 && pb ? Math.round((pb.count / prevTotalChats) * 100) : 0;
+                  const pSov    = prevAllBrandCount > 0 && pb ? Math.round((pb.count / prevAllBrandCount) * 100) : 0;
+                  const visDelta = vis - pVis;
+                  const sovDelta = sov - pSov;
                   const sentDelta = pb && pb.sentiment ? Math.round(b.sentiment - pb.sentiment) : 0;
                   const posDelta  = pb && pb.position && b.position
                     ? parseFloat((b.position - pb.position).toFixed(1)) : 0;
@@ -718,6 +749,66 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                 {sortedBrands.length === 0 && (
                   <tr><td colSpan={6} className="pd-empty">No brands extracted yet</td></tr>
                 )}
+
+                {/* ── Pinned own brand (shows even if outside top 7) ── */}
+                {pinnedOwnBrand && (() => {
+                  const b   = pinnedOwnBrand.brand;
+                  const totalChats     = filteredChats.length;
+                  const vis  = totalChats > 0 ? Math.round((b.count / totalChats) * 100) : 0;
+                  const sov  = totalAllBrandCount > 0 ? Math.round((b.count / totalAllBrandCount) * 100) : 0;
+                  const sent = b.sentiment ? Math.round(b.sentiment) : 0;
+                  const dotColor = sentimentDotColor(sent);
+                  const prevAllBrandCount = prevBrands.reduce((s, p) => s + p.count, 0);
+                  const prevTotalChats    = prevFilteredChats.length;
+                  const pb       = prevBrands.find(p => p.name === b.name);
+                  const pVis     = prevTotalChats > 0 && pb ? Math.round((pb.count / prevTotalChats) * 100) : 0;
+                  const pSov     = prevAllBrandCount > 0 && pb ? Math.round((pb.count / prevAllBrandCount) * 100) : 0;
+                  const visDelta = vis - pVis;
+                  const sovDelta = sov - pSov;
+                  const sentDelta = pb && pb.sentiment ? Math.round(b.sentiment - pb.sentiment) : 0;
+                  const posDelta  = pb && pb.position && b.position ? parseFloat((b.position - pb.position).toFixed(1)) : 0;
+                  const showValue = indicatorMode !== "indicators-only";
+                  const showDelta = indicatorMode !== "none";
+                  const deltaEl = (v: number, fmt: (n: number) => string) =>
+                    showDelta && v !== 0 ? (
+                      <span className={v > 0 ? "pd-delta-pos" : "pd-delta-neg"}>
+                        {v > 0 ? "+" : ""}{fmt(v)}
+                      </span>
+                    ) : null;
+                  return (
+                    <>
+                      {/* Separator line */}
+                      <tr className="pd-pinned-separator">
+                        <td colSpan={6} />
+                      </tr>
+                      {/* Pinned row with real rank */}
+                      <tr className="pd-pinned-row">
+                        <td className="pd-rank">{pinnedOwnBrand.rank}</td>
+                        <td className="pd-brand-cell">
+                          <DomainFavicon domain={guessBrandDomain(b.name)} size={16} />
+                          {b.name}
+                        </td>
+                        <td><span className="pd-metric-with-delta">
+                          {showValue && <span className="pd-vis-value">{vis}%</span>}
+                          {deltaEl(visDelta, n => `${n}%`)}
+                        </span></td>
+                        <td><span className="pd-metric-with-delta">
+                          {showValue && <span className="pd-vis-value">{sov}%</span>}
+                          {deltaEl(sovDelta, n => `${n}%`)}
+                        </span></td>
+                        <td><span className="pd-sentiment-cell">
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
+                          {showValue && <span className="pd-vis-value">{sent > 0 ? sent : "—"}</span>}
+                          {deltaEl(sentDelta, n => `${n > 0 ? "+" : ""}${n}`)}
+                        </span></td>
+                        <td><span className="pd-metric-with-delta">
+                          {showValue && <span>{b.position ? `#${b.position.toFixed(1)}` : "—"}</span>}
+                          {deltaEl(posDelta, (n: number) => `${n > 0 ? "+" : ""}${n}`)}
+                        </span></td>
+                      </tr>
+                    </>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
