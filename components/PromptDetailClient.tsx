@@ -60,6 +60,8 @@ interface Props {
   selectedTagIds: string[];
   initialHiddenBrandIds?: string[];
   updateBrandFilterAction?: (hiddenBrandIds: string[] | null) => Promise<{ ok: boolean; error?: string }>;
+  initialDomainTypeOverrides?: Record<string, string>;
+  updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const VOLUME_TIER_LEVEL: Record<string, number> = {
@@ -92,6 +94,8 @@ export default function PromptDetailClient({
   prompt, chatFacts, projectBrands, availableTags, selectedTagIds,
   initialHiddenBrandIds = [],
   updateBrandFilterAction,
+  initialDomainTypeOverrides,
+  updateDomainTypeOverrideAction,
 }: Props) {
   const router = useRouter();
   const [resolution, setResolution] = useState<Resolution>("W");
@@ -100,8 +104,20 @@ export default function PromptDetailClient({
   const [isScanning, setIsScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<string | null>(null);
   const [selectedDomainType, setSelectedDomainType] = useState<string | null>(null);
-  const [typeOverrides, setTypeOverrides] = useState<Map<string, string>>(new Map());
+  const [typeOverrides, setTypeOverrides] = useState<Map<string, string>>(() =>
+    new Map(Object.entries(initialDomainTypeOverrides ?? {}))
+  );
   const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
+
+  async function handleTypeOverride(domain: string, type: string) {
+    setTypeOverrides(prev => new Map(prev).set(domain, type));
+    await updateDomainTypeOverrideAction?.(domain, type);
+  }
+
+  async function handleTypeReset(domain: string) {
+    setTypeOverrides(prev => { const m = new Map(prev); m.delete(domain); return m; });
+    await updateDomainTypeOverrideAction?.(domain, null);
+  }
 
   const allAvailableModels = useMemo(() => {
     const set = new Set<string>();
@@ -786,8 +802,8 @@ export default function PromptDetailClient({
                             domain={d.domain}
                             currentType={typeLabel}
                             defaultType={defaultType}
-                            onSelect={(type) => setTypeOverrides((prev) => new Map(prev).set(d.domain, type))}
-                            onReset={() => setTypeOverrides((prev) => { const m = new Map(prev); m.delete(d.domain); return m; })}
+                            onSelect={(type) => handleTypeOverride(d.domain, type)}
+                            onReset={() => handleTypeReset(d.domain)}
                             onClose={() => setOpenTypeDropdown(null)}
                           />
                         )}

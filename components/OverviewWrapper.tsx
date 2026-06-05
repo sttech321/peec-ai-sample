@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import PageFilterBar, {
   PageFilterBrand,
   PageFilterDateRange,
@@ -24,6 +24,8 @@ interface Props {
   addBrandAction: (name: string) => Promise<{ ok: boolean; error?: string }>;
   initialHiddenBrandIds: string[];
   updateBrandFilterAction: (hiddenBrandIds: string[] | null) => Promise<{ ok: boolean; error?: string }>;
+  initialDomainTypeOverrides: Record<string, string>;
+  updateDomainTypeOverrideAction: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
 }
 
 function makeDefaultDateRange(): PageFilterDateRange {
@@ -46,6 +48,8 @@ export default function OverviewWrapper({
   addBrandAction,
   initialHiddenBrandIds,
   updateBrandFilterAction,
+  initialDomainTypeOverrides,
+  updateDomainTypeOverrideAction,
 }: Props) {
   const [dateRange, setDateRange] = useState<PageFilterDateRange>(makeDefaultDateRange);
   const [selectedModels, setSelectedModels] = useState<string[]>(ALL_ENGINES);
@@ -109,6 +113,8 @@ export default function OverviewWrapper({
           models: selectedModels,
           brandIds: selectedBrandNames,
         }}
+        initialDomainTypeOverrides={initialDomainTypeOverrides}
+        updateDomainTypeOverrideAction={updateDomainTypeOverrideAction}
       />
     </>
   );

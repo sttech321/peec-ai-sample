@@ -27,15 +27,12 @@ body {
 
 /* ── TypeDropdown ──────────────────────────────────────────────────────── */
 .tdrop-wrap {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 999;
+  /* position + top/left/z-index set inline (portal mode) */
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
-  width: 220px;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
+  width: 240px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -45,8 +42,8 @@ body {
 .tdrop-search {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px 12px;
+  gap: 8px;
+  padding: 10px 14px;
   border-bottom: 1px solid #f1f5f9;
   flex-shrink: 0;
   background: #fff;
@@ -61,7 +58,7 @@ body {
   flex: 1;
   min-width: 0;
   padding: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   border: none;
   outline: none;
   background: transparent;
@@ -70,7 +67,7 @@ body {
 }
 
 .tdrop-input::placeholder {
-  color: #94a3b8;
+  color: #9ca3af;
   font-weight: 400;
 }
 
@@ -78,15 +75,15 @@ body {
 .tdrop-list {
   display: flex;
   flex-direction: column;
-  max-height: 272px;
+  max-height: 280px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 0;
+  padding: 6px 0;
 }
 
 .tdrop-list::-webkit-scrollbar { width: 4px; }
 .tdrop-list::-webkit-scrollbar-track { background: transparent; }
-.tdrop-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.tdrop-list::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
 
 /* Each row */
 .tdrop-row {
@@ -95,49 +92,45 @@ body {
   justify-content: space-between;
   width: 100%;
   box-sizing: border-box;
-  padding: 7px 14px;
+  padding: 9px 16px;
   border: none;
   background: transparent;
   cursor: pointer;
   font-family: inherit;
   flex-shrink: 0;
   transition: background 0.1s;
+  text-align: left;
 }
 
-.tdrop-row:hover {
-  background: #f8fafc;
-}
-
-.tdrop-row--active {
-  background: #f0f9ff;
-}
+.tdrop-row:hover { background: #f8fafc; }
+.tdrop-row--active { background: transparent; }
 
 /* Dot + label inside each row */
 .tdrop-item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   min-width: 0;
 }
 
 .tdrop-dot {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .tdrop-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #0f172a;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: #111827;
   white-space: nowrap;
 }
 
 .tdrop-check {
-  font-size: 13px;
-  color: #475569;
-  font-weight: 600;
+  font-size: 14px;
+  color: #374151;
+  font-weight: 500;
   flex-shrink: 0;
 }
 
@@ -145,32 +138,13 @@ body {
   font-size: 12px;
   color: #94a3b8;
   text-align: center;
-  padding: 14px;
-}
-
-/* Custom types footer */
-.tdrop-custom-section {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #64748b;
-  cursor: pointer;
-  border-top: 1px solid #f1f5f9;
-  flex-shrink: 0;
-  transition: background 0.1s;
-}
-
-.tdrop-custom-section:hover {
-  background: #f8fafc;
+  padding: 16px;
 }
 
 /* Reset to default */
 .tdrop-footer {
   border-top: 1px solid #f1f5f9;
-  padding: 5px 8px;
+  padding: 6px 8px;
   flex-shrink: 0;
 }
 
@@ -185,7 +159,7 @@ body {
   background: transparent;
   font-size: 12px;
   font-weight: 500;
-  color: #64748b;
+  color: #6b7280;
   cursor: pointer;
   border-radius: 6px;
   font-family: inherit;
