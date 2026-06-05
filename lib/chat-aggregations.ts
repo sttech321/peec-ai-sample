@@ -66,7 +66,7 @@ const DEFAULT_PALETTE = [
 ];
 
 export function filterByEngines(chats: ChatFact[], selected: string[]): ChatFact[] {
-  if (selected.length === 0) return [];
+  if (selected.length === 0) return chats; // empty = all engines selected (show all)
   const set = new Set(selected);
   return chats.filter((c) => set.has(c.engine));
 }

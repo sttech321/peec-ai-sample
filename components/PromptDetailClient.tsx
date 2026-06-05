@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, BarChart, Bar, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
-  Settings, ChevronDown, MessageSquare, Play, Loader2,
+  Settings, MessageSquare, Play, Loader2,
 } from "lucide-react";
+import BrandColorPicker from "./BrandColorPicker";
 import ChatModal from "./ChatModal";
 import EngineIcon from "./EngineIcon";
 import DomainFavicon from "./DomainFavicon";
@@ -62,6 +64,8 @@ interface Props {
   updateBrandFilterAction?: (hiddenBrandIds: string[] | null) => Promise<{ ok: boolean; error?: string }>;
   initialDomainTypeOverrides?: Record<string, string>;
   updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
+  initialBrandColors?: Record<string, string>;
+  updateBrandColorByNameAction?: (brandName: string, color: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const VOLUME_TIER_LEVEL: Record<string, number> = {
@@ -96,6 +100,8 @@ export default function PromptDetailClient({
   updateBrandFilterAction,
   initialDomainTypeOverrides,
   updateDomainTypeOverrideAction,
+  initialBrandColors = {},
+  updateBrandColorByNameAction,
 }: Props) {
   const router = useRouter();
   const [resolution, setResolution] = useState<Resolution>("W");
@@ -108,6 +114,38 @@ export default function PromptDetailClient({
     new Map(Object.entries(initialDomainTypeOverrides ?? {}))
   );
   const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
+
+  // ── Overview chart + Top 7 Brands state (matching Overview page design) ──
+  const [chartView, setChartView]       = useState<"line" | "bar">("line");
+  type BrandSortCol  = "visibility" | "sov" | "sentiment" | "position";
+  type BrandSortMode = "high-low" | "low-high" | "positive-trend" | "negative-trend";
+  const [brandSortCol,  setBrandSortCol]  = useState<BrandSortCol>("visibility");
+  const [brandSortMode, setBrandSortMode] = useState<BrandSortMode>("high-low");
+  const [openBrandMenu, setOpenBrandMenu] = useState<BrandSortCol | null>(null);
+  type IndicatorMode = "default" | "indicators-only" | "none";
+  const [indicatorMode, setIndicatorMode]         = useState<IndicatorMode>("default");
+  const [indicatorPanelOpen, setIndicatorPanelOpen] = useState(false);
+  const indicatorPanelRef                           = useRef<HTMLDivElement>(null);
+  const [hoveredBrand, setHoveredBrand]   = useState<string | null>(null);
+  const [pickerInfo, setPickerInfo]       = useState<{ name: string; pos: { top: number; left: number } } | null>(null);
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (indicatorPanelRef.current && !indicatorPanelRef.current.contains(e.target as Node))
+        setIndicatorPanelOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
+  function openPickerAt(name: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (pickerInfo?.name === name) { setPickerInfo(null); return; }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const top  = window.innerHeight - rect.bottom > 300 ? rect.bottom + 8 : rect.top - 300;
+    const left = Math.max(8, Math.min(rect.left - 90, window.innerWidth - 230));
+    setPickerInfo({ name, pos: { top, left } });
+  }
 
   async function handleTypeOverride(domain: string, type: string) {
     setTypeOverrides(prev => new Map(prev).set(domain, type));
@@ -214,12 +252,15 @@ export default function PromptDetailClient({
     }
   };
 
+  // Local color overrides — initialized from DB, updated instantly on color pick
+  const [localColorOverrides, setLocalColorOverrides] = useState<Record<string, string>>(initialBrandColors);
+
   const stableBrandColors = useMemo(() => {
     const all = aggregateBrands(chatFacts, 20);
     const map: Record<string, string> = {};
     for (const b of all) map[b.name] = b.color;
-    return map;
-  }, [chatFacts]);
+    return { ...map, ...localColorOverrides }; // local overrides take priority
+  }, [chatFacts, localColorOverrides]);
 
   const filteredChats = useMemo(
     () => filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange),
@@ -270,6 +311,26 @@ export default function PromptDetailClient({
     () => buildVisibilitySeries(filteredChats, brands.map((b) => b.name), resolution, dateRange),
     [filteredChats, brands, resolution, dateRange],
   );
+
+  // Bar chart + tooltips + dynamic label (matching Overview design)
+  const barData = useMemo(() => {
+    const total = filteredChats.length;
+    return brands.map(b => ({
+      name: b.name, value: total > 0 ? Math.round((b.count / total) * 100) : 0,
+      color: b.color, domain: guessBrandDomain(b.name),
+    }));
+  }, [brands, filteredChats]);
+
+  const promptsPerDate = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of filteredChats) { const d = c.runDate.slice(0, 10); map.set(d, (map.get(d) ?? 0) + 1); }
+    return map;
+  }, [filteredChats]);
+
+  const daysLabel = useMemo(() => {
+    const diff = Math.round((dateRange.end.getTime() - dateRange.start.getTime()) / 86400000);
+    return `Showing data for ${diff} day${diff !== 1 ? "s" : ""}`;
+  }, [dateRange]);
 
   // ── Previous period (for delta indicators) ──────────────────────────────────
   const filteredPrevious = useMemo(() => {
@@ -328,6 +389,20 @@ export default function PromptDetailClient({
     for (const [name, h] of hits) m.set(name, totalMentions > 0 ? (h / totalMentions) * 100 : 0);
     return m;
   }, [filteredPrevious]);
+
+  // Sorted brands (respects user-selected sort column)
+  const sortedBrands = useMemo(() => {
+    const list = [...brands];
+    const dir = (brandSortMode === "high-low" || brandSortMode === "negative-trend") ? -1 : 1;
+    list.sort((a, b) => {
+      if (brandSortCol === "visibility") return dir * (b.count - a.count);
+      if (brandSortCol === "sov")        return dir * ((sowMap.get(b.name) ?? 0) - (sowMap.get(a.name) ?? 0));
+      if (brandSortCol === "sentiment")  return dir * ((b.sentiment ?? 0) - (a.sentiment ?? 0));
+      if (brandSortCol === "position")   return dir * ((b.position ?? 0) - (a.position ?? 0));
+      return 0;
+    });
+    return list;
+  }, [brands, brandSortCol, brandSortMode, sowMap]);
 
   // ── Common Terms from rawResponse (bigrams, for Fanout Queries section) ──────
   const commonTerms = useMemo(() => {
@@ -652,48 +727,192 @@ export default function PromptDetailClient({
         <p className="pd-section-subtitle">How often each brand appears in AI generated discussions</p>
 
         <div className="pd-overview-grid">
+          {/* ── Visibility Chart ───────────────────────────── */}
           <div className="pd-chart-card">
             <div className="pd-chart-header">
               <div className="pd-chart-label">
-                Visibility <span className="pd-info-icon" title="Brand visibility over time">ⓘ</span>
+                Visibility <InfoTooltip text="% of chats mentioning each brand over time." />
               </div>
-              <div className="pd-resolution-toggle">
-                {(["D", "W", "M"] as const).map((r) => (
-                  <button key={r} className={`pd-res-btn ${resolution === r ? "pd-res-active" : ""}`}
-                    onClick={() => setResolution(r)}>{r}</button>
-                ))}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {chartView === "line" && (
+                  <div className="pd-resolution-toggle">
+                    {(["D", "W", "M"] as const).map((r) => (
+                      <button key={r} className={`pd-res-btn ${resolution === r ? "pd-res-active" : ""}`}
+                        onClick={() => setResolution(r)}>{r}</button>
+                    ))}
+                  </div>
+                )}
+                <button className="ch-dots-btn" title="Chart options">···</button>
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={{ stroke: "#e2e8f0" }} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: "8px", color: "#f1f5f9", fontSize: 11 }} />
-                {brands.map((b) => (
-                  <Line key={b.name} type="monotone" dataKey={b.name} stroke={b.color} strokeWidth={2} dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
-                ))}
-              </LineChart>
+
+            <ResponsiveContainer width="100%" height={248}>
+              {chartView === "line" ? (
+                <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(0,0,0,0.05)" horizontal vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={{ stroke: "#e5e7eb" }} tickLine={false} dy={6} />
+                  <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} domain={[0, "auto"]} tickFormatter={(v) => `${v}%`} width={36} />
+                  <Tooltip
+                    wrapperStyle={{ zIndex: 100, pointerEvents: "none" }}
+                    position={{ y: 8 }}
+                    cursor={{ stroke: "#94a3b8", strokeWidth: 1, strokeDasharray: "4 4" }}
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      const sorted = [...payload].filter(p => (p.value as number) > 0).sort((a, b) => ((b.value as number) ?? 0) - ((a.value as number) ?? 0));
+                      const pc = promptsPerDate.get(label as string) ?? 0;
+                      return (
+                        <div className="ch-tooltip">
+                          <div className="ch-tooltip-date">{label}</div>
+                          {sorted.map(p => (
+                            <div key={p.dataKey as string} className="ch-tooltip-row">
+                              <span className="ch-tooltip-dot" style={{ background: p.color as string }} />
+                              <DomainFavicon domain={guessBrandDomain(p.dataKey as string)} size={13} />
+                              <span className="ch-tooltip-name">{p.dataKey as string}</span>
+                              <span className="ch-tooltip-val">{((p.value as number) ?? 0).toFixed(1)}%</span>
+                            </div>
+                          ))}
+                          {pc > 0 && <div className="ch-tooltip-footer">{pc} new prompts created</div>}
+                        </div>
+                      );
+                    }}
+                  />
+                  {brands.map((b) => (
+                    <Line key={b.name} type="monotone" dataKey={b.name} stroke={b.color} strokeWidth={1.8}
+                      dot={{ r: 2.5, fill: b.color, strokeWidth: 0 }} activeDot={{ r: 4, strokeWidth: 0 }} isAnimationActive={false} />
+                  ))}
+                </LineChart>
+              ) : (
+                <BarChart data={barData} barCategoryGap="28%" margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(0,0,0,0.05)" horizontal vertical={false} />
+                  <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: "#e5e7eb" }}
+                    tick={(props) => {
+                      const { x, y, payload } = props;
+                      return (
+                        <g transform={`translate(${Number(x)},${Number(y) + 4})`}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <image href={`https://www.google.com/s2/favicons?domain=${guessBrandDomain(payload.value as string)}&sz=32`} x={-10} y={0} width={20} height={20} />
+                        </g>
+                      );
+                    }} height={32} />
+                  <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} width={36} />
+                  <Tooltip wrapperStyle={{ zIndex: 100, pointerEvents: "none" }} cursor={{ fill: "rgba(0,0,0,0.04)" }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload as { name: string; value: number; domain: string };
+                      const diff = Math.round((dateRange.end.getTime() - dateRange.start.getTime()) / 86400000);
+                      return (
+                        <div className="ch-tooltip">
+                          <div className="ch-tooltip-bar-header"><span>Visibility</span><span className="ch-tooltip-days">{diff} days</span></div>
+                          <div className="ch-tooltip-row"><DomainFavicon domain={d.domain} size={14} /><span className="ch-tooltip-name">{d.name}</span><span className="ch-tooltip-val">{d.value}%</span></div>
+                        </div>
+                      );
+                    }} />
+                  <Bar dataKey="value" radius={[5, 5, 0, 0]} isAnimationActive={false}>
+                    {barData.map((e) => <Cell key={e.name} fill={e.color} />)}
+                  </Bar>
+                </BarChart>
+              )}
             </ResponsiveContainer>
-            <div className="pd-chart-footer">Showing data for 30 days</div>
+
+            <div className="pd-chart-footer">
+              <span>{daysLabel}</span>
+              <div className="ch-view-toggle">
+                <button className={`ch-view-btn ${chartView === "line" ? "ch-view-btn--active" : ""}`} onClick={() => setChartView("line")} title="Line chart">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="22 12 18 8 13 13 8 8 2 14" /></svg>
+                </button>
+                <button className={`ch-view-btn ${chartView === "bar" ? "ch-view-btn--active" : ""}`} onClick={() => setChartView("bar")} title="Bar chart">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="10" width="4" height="12" rx="1"/><rect x="9" y="6" width="4" height="16" rx="1"/><rect x="16" y="2" width="4" height="20" rx="1"/></svg>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="pd-brands-card">
+          {/* ── Top 7 Brands ───────────────────────────────── */}
+          <div className="pd-brands-card" onClick={() => setOpenBrandMenu(null)}>
             <div className="pd-brands-header">
               <span className="pd-brands-title">Top 7 Brands <InfoTooltip text="Top brands across LLMs for your prompts" /></span>
+              <div className="pd-brands-actions">
+                {/* Indicator settings */}
+                <div ref={indicatorPanelRef} style={{ position: "relative" }}>
+                  <button className={`pd-brands-action-btn ${indicatorPanelOpen ? "pd-brands-action-btn--active" : ""}`} title="Change indicators" onClick={() => setIndicatorPanelOpen(v => !v)}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  </button>
+                  {indicatorPanelOpen && (
+                    <div className="pd-indicator-panel">
+                      <div className="pd-indicator-title">Change indicators</div>
+                      {([
+                        { value: "default", icon: "⊙", label: "Default" },
+                        { value: "indicators-only", icon: "↕", label: "Indicators only" },
+                        { value: "none", icon: "T", label: "None" },
+                      ] as { value: IndicatorMode; icon: string; label: string }[]).map(opt => (
+                        <div key={opt.value} className={`pd-indicator-option ${indicatorMode === opt.value ? "pd-indicator-option--active" : ""}`}
+                          onClick={() => { setIndicatorMode(opt.value); setIndicatorPanelOpen(false); }}>
+                          <span className="pd-indicator-icon">{opt.icon}</span>
+                          <span className="pd-indicator-label">{opt.label}</span>
+                          {indicatorMode === opt.value && <span className="pd-indicator-check">✓</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button className="pd-brands-action-btn" title="Export"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
+                <button className="pd-brands-action-btn" title="Refresh"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+              </div>
             </div>
+
             <table className="pd-brands-table">
               <thead>
                 <tr>
-                  <th></th><th>Brand</th>
-                  <th className="pd-th-num">Visibility <ChevronDown size={9} style={{ display: "inline" }} /></th>
-                  <th className="pd-th-num">SOV</th>
-                  <th className="pd-th-num">Sentiment</th>
-                  <th className="pd-th-num">Position</th>
+                  <th style={{ width: 28 }}>#</th>
+                  <th>Brand</th>
+                  {(["visibility", "sov", "sentiment", "position"] as BrandSortCol[]).map((col, colIdx) => {
+                    const days = Math.round((dateRange.end.getTime() - dateRange.start.getTime()) / 86400000);
+                    const lbls: Record<BrandSortCol, string> = { visibility: "Visibility", sov: "SOV", sentiment: "Sentiment", position: "Position" };
+                    const tips: Record<BrandSortCol, string> = {
+                      visibility: `% of chats mentioning the brand in the last ${days} days.`,
+                      sov: `Brand mentions / total brand mentions in the last ${days} days.`,
+                      sentiment: `Brand sentiment score in the last ${days} days.`,
+                      position: `Brand average position in the last ${days} days.`,
+                    };
+                    const isActive = brandSortCol === col;
+                    const menuOpen = openBrandMenu === col;
+                    const icon = col === "sov" ? "↗" : isActive ? (brandSortMode === "high-low" || brandSortMode === "negative-trend" ? "↓" : "↑") : "↕";
+                    const menuRight = colIdx >= 2;
+                    return (
+                      <th key={col} style={{ position: "relative" }}>
+                        <span className={`pd-brands-th-btn ${isActive || menuOpen ? "pd-brands-th-active" : ""}`}
+                          onClick={e => { e.stopPropagation(); setOpenBrandMenu(menuOpen ? null : col); }}>
+                          {lbls[col]} <span className={`pd-th-arrow ${col === "sov" ? "pd-th-arrow--trend" : ""}`}>{icon}</span>
+                          <InfoTooltip text={tips[col]} />
+                        </span>
+                        {menuOpen && (
+                          <div className="pd-brands-sort-menu" style={{ right: menuRight ? 0 : "auto", left: menuRight ? "auto" : 0 }} onClick={e => e.stopPropagation()}>
+                            <div className="pd-sort-label">Sort by</div>
+                            {([
+                              { mode: "high-low", icon: "↓", label: "Value  High - low" },
+                              { mode: "low-high", icon: "↑", label: "Value  Low - high" },
+                              { mode: "positive-trend", icon: "↗", label: "Positive trend" },
+                              { mode: "negative-trend", icon: "↘", label: "Negative trend" },
+                            ] as { mode: BrandSortMode; icon: string; label: string }[]).map(opt => {
+                              const checked = brandSortCol === col && brandSortMode === opt.mode;
+                              return (
+                                <div key={opt.mode} className={`pd-sort-option ${checked ? "pd-sort-active" : ""}`}
+                                  onClick={() => { setBrandSortCol(col); setBrandSortMode(opt.mode); setOpenBrandMenu(null); }}>
+                                  <span className="pd-sort-opt-icon">{opt.icon}</span>
+                                  <span style={{ flex: 1 }}>{opt.label}</span>
+                                  {checked && <span className="pd-sort-check">✓</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {brands.map((b, i) => {
+                {sortedBrands.map((b, i) => {
                   const vis = filteredChats.length > 0 ? Math.round((b.count / filteredChats.length) * 100) : 0;
                   const sov = Math.round(sowMap.get(b.name) ?? 0);
                   const prevData = prevByName.map.get(b.name);
@@ -704,48 +923,56 @@ export default function PromptDetailClient({
                   const sentDelta = formatDelta(b.sentiment - (prevData?.sentiment ?? b.sentiment));
                   const posDelta = formatDelta((prevData?.position ?? b.position) - b.position, "");
                   const realRank = rankByName.get(b.name) ?? i + 1;
+                  const showValue = indicatorMode !== "indicators-only";
+                  const showDelta = indicatorMode !== "none";
+                  const dotColor = b.sentiment >= 65 ? "#10b981" : b.sentiment >= 50 ? "#eab308" : b.sentiment > 0 ? "#ef4444" : "#cbd5e1";
                   return (
-                    <React.Fragment key={b.name}>
-                      <tr>
-                        <td className="pd-rank">#{realRank}</td>
-                        <td className="pd-brand-cell">
-                          <DomainFavicon
-                            domain={brandDomainByName.get(b.name) ?? guessBrandDomain(b.name)}
-                            size={16}
-                          />
-                          {b.name}
-                          {pinnedNames.has(b.name) && projectBrands.find((pb) => pb.name === b.name)?.isOwn && (
-                            <span className="pd-brand-you-badge">You</span>
-                          )}
-                        </td>
-                        <td className="pd-td-num">
-                          <span className="pd-vis-value">{vis}%</span>
-                          {dateRange.preset !== "all" && <span className={`pd-delta pd-delta-${visDelta.cls}`}>{visDelta.text}</span>}
-                        </td>
-                        <td className="pd-td-num">
-                          <span className="pd-vis-value">{sov}%</span>
-                          {dateRange.preset !== "all" && <span className={`pd-delta pd-delta-${sovDelta.cls}`}>{sovDelta.text}</span>}
-                        </td>
-                        <td className="pd-td-num">
-                          <span className="pd-vis-value">{b.sentiment ? b.sentiment.toFixed(0) : "—"}</span>
-                          {dateRange.preset !== "all" && b.sentiment > 0 && <span className={`pd-delta pd-delta-${sentDelta.cls}`}>{sentDelta.text}</span>}
-                        </td>
-                        <td className="pd-td-num">
-                          <span className="pd-vis-value">#{b.position ? b.position.toFixed(1) : "—"}</span>
-                          {dateRange.preset !== "all" && b.position > 0 && <span className={`pd-delta pd-delta-${posDelta.cls}`}>{posDelta.text}</span>}
-                        </td>
-                      </tr>
-                    </React.Fragment>
+                    <tr key={b.name} onMouseEnter={() => setHoveredBrand(b.name)} onMouseLeave={() => setHoveredBrand(null)}>
+                      <td className="pd-rank">
+                        {hoveredBrand === b.name ? (
+                          <span className="pd-rank-dot pd-rank-dot--clickable" style={{ background: b.color }} title="Change brand color"
+                            onClick={e => openPickerAt(b.name, e)} />
+                        ) : realRank}
+                        {pickerInfo?.name === b.name && (
+                          <BrandColorPicker color={b.color} position={pickerInfo.pos}
+                            onChange={color => {
+                              setLocalColorOverrides(prev => ({ ...prev, [b.name]: color }));
+                              updateBrandColorByNameAction?.(b.name, color);
+                            }}
+                            onClose={() => setPickerInfo(null)} />
+                        )}
+                      </td>
+                      <td className="pd-brand-cell">
+                        <DomainFavicon domain={brandDomainByName.get(b.name) ?? guessBrandDomain(b.name)} size={16} />
+                        {b.name}
+                        {pinnedNames.has(b.name) && projectBrands.find((pb) => pb.name === b.name)?.isOwn && (
+                          <span className="pd-brand-you-badge">You</span>
+                        )}
+                      </td>
+                      <td className="pd-td-num">
+                        {showValue && <span className="pd-vis-value">{vis}%</span>}
+                        {showDelta && dateRange.preset !== "all" && <span className={`pd-delta pd-delta-${visDelta.cls}`}>{visDelta.text}</span>}
+                      </td>
+                      <td className="pd-td-num">
+                        {showValue && <span className="pd-vis-value">{sov}%</span>}
+                        {showDelta && dateRange.preset !== "all" && <span className={`pd-delta pd-delta-${sovDelta.cls}`}>{sovDelta.text}</span>}
+                      </td>
+                      <td className="pd-td-num">
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", marginRight: 4 }} />
+                        {showValue && <span className="pd-vis-value">{b.sentiment ? b.sentiment.toFixed(0) : "—"}</span>}
+                        {showDelta && dateRange.preset !== "all" && b.sentiment > 0 && <span className={`pd-delta pd-delta-${sentDelta.cls}`}>{sentDelta.text}</span>}
+                      </td>
+                      <td className="pd-td-num">
+                        {showValue && <span className="pd-vis-value">#{b.position ? b.position.toFixed(1) : "—"}</span>}
+                        {showDelta && dateRange.preset !== "all" && b.position > 0 && <span className={`pd-delta pd-delta-${posDelta.cls}`}>{posDelta.text}</span>}
+                      </td>
+                    </tr>
                   );
                 })}
-                {brands.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="pd-empty">
-                      {isScanning
-                        ? 'Querying engines — brands will appear once responses are parsed…'
-                        : 'No brands extracted yet. Click "Run scan" above to query the selected AI engines.'}
-                    </td>
-                  </tr>
+                {sortedBrands.length === 0 && (
+                  <tr><td colSpan={6} className="pd-empty">
+                    {isScanning ? "Querying engines — brands will appear once responses are parsed…" : "No brands extracted yet."}
+                  </td></tr>
                 )}
               </tbody>
             </table>

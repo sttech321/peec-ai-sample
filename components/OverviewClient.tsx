@@ -24,6 +24,7 @@ import { classifyDomain, DOMAIN_TYPE_COLORS } from "../lib/domain-aggregations";
 import TypeDropdown from "./TypeDropdown";
 import InfoTooltip from "./InfoTooltip";
 import ChatFilterDropdown from "./ChatFilterDropdown";
+import BrandColorPicker from "./BrandColorPicker";
 
 interface ProjectBrand {
   name: string;
@@ -44,9 +45,15 @@ interface Props {
   externalFilters?: OverviewExternalFilters;
   initialDomainTypeOverrides?: Record<string, string>;
   updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
+  brandColorOverrides?: Record<string, string>;
+  onBrandColorChange?: (brandName: string, color: string) => void;
 }
 
-export default function OverviewClient({ chatFacts, projectName, projectBrands, externalFilters, initialDomainTypeOverrides, updateDomainTypeOverrideAction }: Props) {
+export default function OverviewClient({
+  chatFacts, projectName, projectBrands, externalFilters,
+  initialDomainTypeOverrides, updateDomainTypeOverrideAction,
+  brandColorOverrides = {}, onBrandColorChange,
+}: Props) {
   const [resolution, setResolution]   = useState<Resolution>("W");
   const [chartView, setChartView]     = useState<"line" | "bar">("line");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
@@ -99,6 +106,19 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
   async function handleTypeReset(domain: string) {
     setTypeOverrides(prev => { const m = new Map(prev); m.delete(domain); return m; });
     await updateDomainTypeOverrideAction?.(domain, null);
+  }
+
+  // ── Brand color picker + hover state ─────────────────────────────────────
+  const [pickerInfo, setPickerInfo] = useState<{ name: string; pos: { top: number; left: number } } | null>(null);
+  const [hoveredBrand, setHoveredBrand] = useState<string | null>(null);
+
+  function openPickerAt(name: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (pickerInfo?.name === name) { setPickerInfo(null); return; }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const top  = window.innerHeight - rect.bottom > 300 ? rect.bottom + 8 : rect.top - 300;
+    const left = Math.max(8, Math.min(rect.left - 90, window.innerWidth - 230));
+    setPickerInfo({ name, pos: { top, left } });
   }
 
   // ── Top 7 Brands sort state ───────────────────────────────────────────────
@@ -161,14 +181,13 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
     ? (externalFilters.brandIds ?? null)
     : selectedBrands;
 
-  // Stable color map: assign once based on full unfiltered top brands so colors
-  // don't reshuffle when the user toggles engines.
+  // Stable color map: palette colors merged with DB-saved colors (DB takes priority)
   const stableBrandColors = useMemo(() => {
     const all = aggregateBrands(chatFacts, 20);
     const map: Record<string, string> = {};
     for (const b of all) map[b.name] = b.color;
-    return map;
-  }, [chatFacts]);
+    return { ...map, ...brandColorOverrides }; // saved colors override palette
+  }, [chatFacts, brandColorOverrides]);
 
   // ── Filtered derivations ──────────────────────────────────────────────
   const filteredChats = useMemo(
@@ -708,8 +727,32 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                     ) : null;
 
                   return (
-                    <tr key={b.name}>
-                      <td className="pd-rank">{i + 1}</td>
+                    <tr
+                      key={b.name}
+                      onMouseEnter={() => setHoveredBrand(b.name)}
+                      onMouseLeave={() => setHoveredBrand(null)}
+                    >
+                      {/* Rank cell — hover shows colored dot, click opens color picker */}
+                      <td className="pd-rank">
+                        {hoveredBrand === b.name ? (
+                          <span
+                            className="pd-rank-dot pd-rank-dot--clickable"
+                            style={{ background: b.color }}
+                            title="Change brand color"
+                            onClick={e => openPickerAt(b.name, e)}
+                          />
+                        ) : (
+                          i + 1
+                        )}
+                        {pickerInfo?.name === b.name && (
+                          <BrandColorPicker
+                            color={b.color}
+                            position={pickerInfo.pos}
+                            onChange={color => onBrandColorChange?.(b.name, color)}
+                            onClose={() => setPickerInfo(null)}
+                          />
+                        )}
+                      </td>
                       <td className="pd-brand-cell">
                         <DomainFavicon domain={guessBrandDomain(b.name)} size={16} />
                         {b.name}
@@ -782,8 +825,31 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                         <td colSpan={6} />
                       </tr>
                       {/* Pinned row with real rank */}
-                      <tr className="pd-pinned-row">
-                        <td className="pd-rank">{pinnedOwnBrand.rank}</td>
+                      <tr
+                        className="pd-pinned-row"
+                        onMouseEnter={() => setHoveredBrand("__pinned__")}
+                        onMouseLeave={() => setHoveredBrand(null)}
+                      >
+                        <td className="pd-rank">
+                          {hoveredBrand === "__pinned__" ? (
+                            <span
+                              className="pd-rank-dot pd-rank-dot--clickable"
+                              style={{ background: b.color }}
+                              title="Change brand color"
+                              onClick={e => openPickerAt("__pinned__", e)}
+                            />
+                          ) : (
+                            pinnedOwnBrand.rank
+                          )}
+                          {pickerInfo?.name === "__pinned__" && (
+                            <BrandColorPicker
+                              color={b.color}
+                              position={pickerInfo.pos}
+                              onChange={color => onBrandColorChange?.(b.name, color)}
+                              onClose={() => setPickerInfo(null)}
+                            />
+                          )}
+                        </td>
                         <td className="pd-brand-cell">
                           <DomainFavicon domain={guessBrandDomain(b.name)} size={16} />
                           {b.name}

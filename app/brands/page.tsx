@@ -6,6 +6,7 @@ import { db } from "../../db";
 import { brands, brandSuggestions, brandMentions, projects } from "../../db/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
+import { updateBrandColor } from "../actions/brands";
 import "./brands.css";
 
 export default async function BrandsPage() {
@@ -24,6 +25,7 @@ export default async function BrandsPage() {
       projectId: brands.projectId,
       name: brands.name,
       isOwn: brands.isOwn,
+      color: brands.color,
       aliases: brands.aliases,
       domains: brands.domains,
       mentions: drizzleSql<number>`cast(count(${brandMentions.id}) as int)`,
@@ -37,6 +39,7 @@ export default async function BrandsPage() {
       brands.projectId,
       brands.name,
       brands.isOwn,
+      brands.color,
       brands.aliases,
       brands.domains,
     )
@@ -59,6 +62,7 @@ export default async function BrandsPage() {
           initialSuggestions={suggestions}
           projectId={activeProjectId}
           workspaceId={project?.workspaceId || "00000000-0000-0000-0000-000000000000"}
+          updateBrandColorAction={updateBrandColor}
         />
       </DashboardLayout>
     </BrandsModalProvider>

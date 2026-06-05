@@ -122,3 +122,67 @@ export async function getDomainTypeOverrides(): Promise<Record<string, string>> 
 
   return (row?.overrides ?? {}) as Record<string, string>;
 }
+
+/**
+ * Update a brand's color in DB.
+ * brandId = the brand's UUID
+ * color   = hex string e.g. "#f97316"
+ */
+export async function updateBrandColor(
+  brandId: string,
+  color: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const projectId = await getActiveProjectId();
+  await db
+    .update(brands)
+    .set({ color })
+    .where(and(eq(brands.id, brandId), eq(brands.projectId, projectId)));
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/**
+ * Update brand color by name (used on Prompt page where only name is available).
+ */
+export async function updateBrandColorByName(
+  brandName: string,
+  color: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const projectId = await getActiveProjectId();
+  const workspaceId = await getWorkspaceId();
+
+  const [found] = await db
+    .select({ id: brands.id })
+    .from(brands)
+    .where(and(eq(brands.projectId, projectId), eq(brands.name, brandName)))
+    .limit(1);
+
+  if (!found) return { ok: false, error: "Brand not found" };
+
+  await db
+    .update(brands)
+    .set({ color })
+    .where(and(eq(brands.id, found.id), eq(brands.workspaceId, workspaceId)));
+
+  revalidatePath("/");
+  revalidatePath("/prompts");
+  return { ok: true };
+}
+
+/**
+ * Load all saved brand colors for the active project.
+ * Returns { [brandName]: hexColor }
+ */
+export async function getBrandColors(): Promise<Record<string, string>> {
+  const projectId = await getActiveProjectId();
+  const rows = await db
+    .select({ name: brands.name, color: brands.color })
+    .from(brands)
+    .where(eq(brands.projectId, projectId));
+
+  const map: Record<string, string> = {};
+  for (const r of rows) {
+    if (r.name && r.color) map[r.name] = r.color;
+  }
+  return map;
+}

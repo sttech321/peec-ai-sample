@@ -155,6 +155,7 @@ export const brands = pgTable("brands", {
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   isOwn: boolean("is_own").default(false).notNull(),
+  color: varchar("color", { length: 20 }),
   aliases: text("aliases").array().notNull(),
   domains: text("domains").array().notNull(),
 }, (t) => ({
