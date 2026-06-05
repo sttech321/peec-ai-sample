@@ -22,6 +22,7 @@ import {
 import { classifyDomain, DOMAIN_TYPE_COLORS } from "../lib/domain-aggregations";
 import TypeDropdown from "./TypeDropdown";
 import InfoTooltip from "./InfoTooltip";
+import ChatFilterDropdown from "./ChatFilterDropdown";
 
 interface ProjectBrand {
   name: string;
@@ -54,6 +55,13 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
     new Map(Object.entries(initialDomainTypeOverrides ?? {}))
   );
   const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
+
+  // ── All Chats section state ───────────────────────────────────────────────
+  const CHAT_PAGE_SIZE = 10;
+  const [chatPage, setChatPage]                   = useState(1);
+  const [chatBrandFilters, setChatBrandFilters]   = useState<Set<string>>(new Set()); // empty = all
+  const [chatSourceFilters, setChatSourceFilters] = useState<Set<string>>(new Set()); // empty = all
+  const [chatFeatureFilters, setChatFeatureFilters] = useState<Set<string>>(new Set()); // empty = all
 
   async function handleTypeOverride(domain: string, type: string) {
     setTypeOverrides(prev => new Map(prev).set(domain, type));
@@ -161,16 +169,29 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
   const recentChats = useMemo(() => {
     const records = toChatRecords(filteredChats);
     records.sort((a, b) => new Date(b.runDate).getTime() - new Date(a.runDate).getTime());
-    return records.slice(0, 50);
+    return records; // no hard cap — pagination handles display
   }, [filteredChats]);
 
+  const filteredChatRows = useMemo(() => {
+    let list = recentChats;
+    if (onlyOwnMentions && ownBrandNames.size > 0)
+      list = list.filter((c) => c.brandsFound.some((n) => ownBrandNames.has(n)));
+    if (chatBrandFilters.size > 0)
+      list = list.filter((c) => c.brandsFound.some(b => chatBrandFilters.has(b)));
+    if (chatSourceFilters.size > 0)
+      list = list.filter((c) => c.sourcesFound.some(s => chatSourceFilters.has(s.domain)));
+    return list;
+  }, [recentChats, onlyOwnMentions, ownBrandNames, chatBrandFilters, chatSourceFilters]);
+
+  const chatTotalPages   = Math.max(1, Math.ceil(filteredChatRows.length / CHAT_PAGE_SIZE));
   const visibleRecentChats = useMemo(() => {
-    if (!onlyOwnMentions) return recentChats;
-    if (ownBrandNames.size === 0) return recentChats;
-    return recentChats.filter((c) =>
-      c.brandsFound.some((name) => ownBrandNames.has(name)),
-    );
-  }, [recentChats, onlyOwnMentions, ownBrandNames]);
+    const start = (chatPage - 1) * CHAT_PAGE_SIZE;
+    return filteredChatRows.slice(start, start + CHAT_PAGE_SIZE);
+  }, [filteredChatRows, chatPage, CHAT_PAGE_SIZE]);
+
+  // Unique brands + sources for section filter dropdowns
+  const allChatBrands  = useMemo(() => [...new Set(recentChats.flatMap(c => c.brandsFound))].sort(), [recentChats]);
+  const allChatSources = useMemo(() => [...new Set(recentChats.flatMap(c => c.sourcesFound.map(s => s.domain)))].sort(), [recentChats]);
 
   const totalMentions = brands.reduce((s, b) => s + b.count, 0);
   const maxDomainCount = domains.length > 0 ? domains[0].count : 1;
@@ -458,89 +479,169 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
         </div>
       </div>
 
-      <div className="pd-section">
-        <div className="pd-domains-header-row">
+      {/* ── All Chats ────────────────────────────────────────────────── */}
+      <div className="pd-section ac-section">
+        {/* Header row */}
+        <div className="ac-header">
           <div>
-            <h2 className="pd-section-title">Recent Chats</h2>
-            <p className="pd-section-subtitle">Your latest AI responses across all prompts.</p>
+            <h2 className="pd-section-title">All Chats</h2>
+            <p className="pd-section-subtitle">All chats for your prompts</p>
           </div>
-          <button
-            type="button"
-            className={`pd-recent-toggle ${onlyOwnMentions ? "pd-recent-toggle-on" : ""}`}
-            onClick={() => setOnlyOwnMentions((v) => !v)}
-            disabled={ownBrandNames.size === 0}
-            title={
-              ownBrandNames.size === 0
-                ? "Mark a brand as 'own' on the Brands page to enable this filter"
-                : `Show only chats mentioning ${projectName}`
-            }
-          >
-            <span className="pd-recent-toggle-label">
-              {projectName} mentioned
-            </span>
-            <span className="pd-recent-toggle-track">
-              <span className="pd-recent-toggle-thumb" />
-            </span>
-          </button>
+          <div className="ac-filters">
+            {/* All Brands — multi-select searchable */}
+            <ChatFilterDropdown
+              label="All Brands"
+              items={allChatBrands}
+              selected={chatBrandFilters}
+              onChange={(v) => { setChatBrandFilters(v); setChatPage(1); }}
+              searchable
+            />
+
+            {/* All Features — multi-select with Or/And toggle */}
+            <ChatFilterDropdown
+              label="All Features"
+              items={["Shopping", "Product Comparison", "Ads", "Map", "Web Search", "No features"]}
+              selected={chatFeatureFilters}
+              onChange={(v) => { setChatFeatureFilters(v); setChatPage(1); }}
+              featuresMode
+            />
+
+            {/* All Sources — multi-select searchable */}
+            <ChatFilterDropdown
+              label="All Sources"
+              items={allChatSources}
+              selected={chatSourceFilters}
+              onChange={(v) => { setChatSourceFilters(v); setChatPage(1); }}
+              searchable
+            />
+          </div>
         </div>
 
-        {visibleRecentChats.length === 0 ? (
-          <div className="pd-empty-chats">
-            {onlyOwnMentions
-              ? `🔍 No recent chats mention ${projectName} yet.`
-              : "🔍 No recent chats recorded yet."}
-          </div>
-        ) : (
-          <div className="pd-recent-chats-scroll custom-scrollbar">
-            {visibleRecentChats.map((chat) => {
-              const timeAgo = formatTimeAgo(chat.runDate);
-              const snippet = chat.rawResponse ? chat.rawResponse.slice(0, 150) + "..." : "No response content...";
-              const ownMentioned = chat.brandsFound.some((n) => ownBrandNames.has(n));
+        {/* Count row */}
+        <div className="ac-count-row">
+          <span className="ac-count">
+            {filteredChatRows.length === 0 ? "0 chats" : (
+              <>
+                <strong>{(chatPage - 1) * CHAT_PAGE_SIZE + 1}</strong>
+                {" to "}
+                <strong>{Math.min(chatPage * CHAT_PAGE_SIZE, filteredChatRows.length)}</strong>
+                {" of "}
+                <strong>{filteredChatRows.length.toLocaleString()}</strong>
+                {" chats"}
+              </>
+            )}
+          </span>
+        </div>
 
-              return (
-                <div
-                  key={chat.id}
-                  className="pd-chat-card"
-                  onClick={() => setSelectedChat(chat)}
+        {/* Table */}
+        {filteredChatRows.length === 0 ? (
+          <div className="pd-empty-chats">🔍 No chats match your filters.</div>
+        ) : (
+          <div className="ac-table-wrap">
+            <table className="ac-table">
+              <thead>
+                <tr>
+                  <th className="ac-th-chat">Chat</th>
+                  <th className="ac-th-mentions">Mentions</th>
+                  <th className="ac-th-sources">Sources</th>
+                  <th className="ac-th-position">Position</th>
+                  <th className="ac-th-created">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRecentChats.map((chat) => {
+                  const snippet = chat.rawResponse ? chat.rawResponse.slice(0, 180) : "No response content.";
+                  const timeAgo = formatTimeAgo(chat.runDate);
+                  const extra   = chat.brandsFound.length - 4;
+                  return (
+                    <tr key={chat.id} className="ac-row" onClick={() => setSelectedChat(chat)}>
+
+                      {/* Chat: engine icon + query + snippet */}
+                      <td className="ac-td-chat">
+                        <div className="ac-chat-engine">
+                          <EngineIcon engine={chat.engine} />
+                        </div>
+                        <div className="ac-chat-text">
+                          <div className="ac-chat-query">{chat.query || "—"}</div>
+                          <div className="ac-chat-snippet">{snippet}</div>
+                        </div>
+                      </td>
+
+                      {/* Mentions: brand favicons + overflow */}
+                      <td className="ac-td-mentions">
+                        <div className="ac-icons-row">
+                          {chat.brandsFound.slice(0, 4).map((b) => (
+                            <DomainFavicon key={b} domain={guessBrandDomain(b)} size={18} />
+                          ))}
+                          {extra > 0 && <span className="ac-more">+{extra}</span>}
+                        </div>
+                      </td>
+
+                      {/* Sources: domain favicons */}
+                      <td className="ac-td-sources">
+                        <div className="ac-icons-row">
+                          {chat.sourcesFound.slice(0, 4).map((s, i) => (
+                            <DomainFavicon key={i} domain={s.domain} size={18} />
+                          ))}
+                          {chat.sourcesFound.length > 4 && (
+                            <span className="ac-more">+{chat.sourcesFound.length - 4}</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Position */}
+                      <td className="ac-td-position">
+                        {chat.avgPosition > 0 ? chat.avgPosition.toFixed(1) : "—"}
+                      </td>
+
+                      {/* Created */}
+                      <td className="ac-td-created">{timeAgo}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {chatTotalPages > 1 && (
+          <div className="ac-pagination">
+            <span className="ac-page-count">
+              {(chatPage - 1) * CHAT_PAGE_SIZE + 1}–{Math.min(chatPage * CHAT_PAGE_SIZE, filteredChatRows.length)} of {filteredChatRows.length.toLocaleString()}
+            </span>
+            <div className="ac-page-buttons">
+              <button className="ac-page-btn" disabled={chatPage === 1} onClick={() => setChatPage(1)}>«</button>
+              <button className="ac-page-btn" disabled={chatPage === 1} onClick={() => setChatPage(p => p - 1)}>‹</button>
+              {Array.from({ length: Math.min(5, chatTotalPages) }, (_, i) => {
+                let p = i + 1;
+                if (chatTotalPages > 5) {
+                  if (chatPage <= 3) p = i + 1;
+                  else if (chatPage >= chatTotalPages - 2) p = chatTotalPages - 4 + i;
+                  else p = chatPage - 2 + i;
+                }
+                return (
+                  <button
+                    key={p}
+                    className={`ac-page-btn ${chatPage === p ? "ac-page-btn--active" : ""}`}
+                    onClick={() => setChatPage(p)}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+              {chatTotalPages > 5 && chatPage < chatTotalPages - 2 && <span className="ac-page-ellipsis">…</span>}
+              {chatTotalPages > 5 && (
+                <button
+                  className={`ac-page-btn ${chatPage === chatTotalPages ? "ac-page-btn--active" : ""}`}
+                  onClick={() => setChatPage(chatTotalPages)}
                 >
-                  <div className="pd-chat-card-header">
-                    <EngineIcon engine={chat.engine} />
-                    <span className="pd-chat-engine-name">{chat.engine}</span>
-                    {ownMentioned && chat.avgPosition > 0 && (
-                      <span className="pd-chat-position">
-                        #{chat.avgPosition.toFixed(1)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="pd-chat-query">{chat.query}</div>
-                  <div className="pd-chat-snippet">{snippet}</div>
-                  <div className="pd-chat-footer">
-                    <div className="pd-chat-mentions">
-                      {chat.brandsFound.slice(0, 3).map((b) => (
-                        <DomainFavicon
-                          key={b}
-                          domain={guessBrandDomain(b)}
-                          size={18}
-                        />
-                      ))}
-                      {chat.brandsFound.length > 3 && (
-                        <span className="pd-mention-more">+{chat.brandsFound.length - 3}</span>
-                      )}
-                      {chat.avgSentiment > 0 && (
-                        <span
-                          className="pd-chat-sentiment"
-                          style={{ background: sentimentDotColor(chat.avgSentiment) }}
-                          title={`Sentiment ${chat.avgSentiment.toFixed(0)}`}
-                        >
-                          {chat.avgSentiment.toFixed(0)}
-                        </span>
-                      )}
-                    </div>
-                    <span className="pd-chat-time">{timeAgo}</span>
-                  </div>
-                </div>
-              );
-            })}
+                  {chatTotalPages}
+                </button>
+              )}
+              <button className="ac-page-btn" disabled={chatPage === chatTotalPages} onClick={() => setChatPage(p => p + 1)}>›</button>
+              <button className="ac-page-btn" disabled={chatPage === chatTotalPages} onClick={() => setChatPage(chatTotalPages)}>»</button>
+            </div>
           </div>
         )}
       </div>
