@@ -74,9 +74,14 @@ function startOfDay(d: Date): Date {
 
 export default function DateRangeDropdown({ value, onChange }: Props) {
   const [open, setOpen] = useState(false);
-  const [calMonth, setCalMonth] = useState(() => startOfMonth(value.end));
+  const [calMonth, setCalMonth] = useState(() => startOfMonth(new Date()));
   const [pickStart, setPickStart] = useState<Date | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Reset calendar to current month every time dropdown opens
+  useEffect(() => {
+    if (open) setCalMonth(startOfMonth(new Date()));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -92,6 +97,7 @@ export default function DateRangeDropdown({ value, onChange }: Props) {
 
   const applyPreset = (preset: DatePreset) => {
     onChange(makePresetRange(preset));
+    setCalMonth(startOfMonth(new Date())); // always snap back to current month
     setOpen(false);
     setPickStart(null);
   };
@@ -170,7 +176,7 @@ export default function DateRangeDropdown({ value, onChange }: Props) {
               {value.preset === "all" && <Check size={13} />}
             </button>
             <div className="pd-daterange-divider" />
-            <button className="pd-daterange-preset" onClick={() => applyPreset("30")}>
+            <button className="pd-daterange-preset" onClick={() => applyPreset("7")}>
               Reset
             </button>
             <div className="pd-daterange-footer">

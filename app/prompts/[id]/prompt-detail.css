@@ -382,14 +382,14 @@
 
 /* ── Chart Card ──────────────────────────────────────────────────────────── */
 .pd-chart-card {
-  padding: 18px 20px;
-  border-right: 1px solid #e2e8f0;
+  padding: 16px 20px 12px;
+  border-right: 1px solid #e5e7eb;
 }
 
 @media (max-width: 1024px) {
   .pd-chart-card {
     border-right: none;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e5e7eb;
   }
 }
 
@@ -397,67 +397,143 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .pd-chart-label {
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 600;
-  color: #334155;
+  color: #374151;
 }
 
+/* D / W / M resolution buttons */
 .pd-resolution-toggle {
   display: flex;
   align-items: center;
   gap: 2px;
-  background: #f1f5f9;
-  border-radius: 8px;
-  padding: 3px;
+  background: #f3f4f6;
+  border-radius: 7px;
+  padding: 2px;
 }
 
 .pd-res-btn {
-  padding: 4px 12px;
+  padding: 3px 11px;
   border: none;
   background: transparent;
   font-size: 12px;
   font-weight: 600;
-  color: #64748b;
-  border-radius: 6px;
+  color: #9ca3af;
+  border-radius: 5px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
+  font-family: inherit;
 }
-
-.pd-res-btn:hover { color: #334155; }
-
+.pd-res-btn:hover { color: #374151; }
 .pd-res-active {
   background: #fff;
-  color: #0f172a;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  color: #111827;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
 }
 
 .pd-chart-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 11px;
-  color: #94a3b8;
-  margin-top: 8px;
-  text-align: center;
+  color: #9ca3af;
+  margin-top: 6px;
+  padding: 0 2px;
 }
 
-/* ── Brands Card ─────────────────────────────────────────────────────────── */
-.pd-brands-card { padding: 18px 20px; }
+/* ═══════════════════════════════════════════════════════════
+   Top 7 Brands Card — Peec AI design
+   ═══════════════════════════════════════════════════════════ */
+.pd-brands-card { padding: 16px 20px 0; }
 
 .pd-brands-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 2px;
 }
 
 .pd-brands-title {
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 600;
-  color: #334155;
+  color: #111827;
 }
 
+/* ⚙ ↑ ↺ action icons */
+.pd-brands-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pd-brands-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.pd-brands-action-btn:hover { border-color: #d1d5db; color: #374151; background: #f9fafb; }
+.pd-brands-action-btn--active { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
+
+/* ── Change indicators panel ────────────────────────────────── */
+.pd-indicator-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 190px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
+  z-index: 400;
+  padding: 6px 0;
+  overflow: hidden;
+}
+.pd-indicator-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  padding: 6px 14px 4px;
+}
+.pd-indicator-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.pd-indicator-option:hover { background: #f9fafb; }
+.pd-indicator-option--active { color: #111827; font-weight: 500; }
+.pd-indicator-icon {
+  font-size: 13px;
+  color: #6b7280;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.pd-indicator-label { flex: 1; }
+.pd-indicator-check { color: #2563eb; font-size: 12px; font-weight: 600; }
+
+/* ── Table ─────────────────────────────────────────────────── */
 .pd-brands-table {
   width: 100%;
   border-collapse: collapse;
@@ -465,16 +541,16 @@
 }
 
 .pd-brands-table thead th {
-  font-size: 10px;
-  font-weight: 600;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  padding: 7px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  padding: 8px 10px;
   text-align: left;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f3f4f6;
   white-space: nowrap;
   position: relative;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 /* ── Sortable column header button ──────────────────────────── */
@@ -484,87 +560,137 @@
   gap: 4px;
   cursor: pointer;
   user-select: none;
-  padding: 2px 4px;
-  border-radius: 4px;
-  transition: background 0.12s;
+  padding: 3px 6px;
+  border-radius: 5px;
+  transition: background 0.12s, color 0.12s;
   white-space: nowrap;
+  font-size: 11px;
+  color: #9ca3af;
 }
-.pd-brands-th-btn:hover { background: #f1f5f9; color: #475569; }
-.pd-brands-th-active { color: #334155; }
-.pd-th-arrow { font-size: 9px; opacity: 0.7; }
+.pd-brands-th-btn:hover { background: #f3f4f6; color: #374151; }
+
+/* Active state — blue pill matching Peec AI */
+.pd-brands-th-active {
+  background: #eff6ff;
+  color: #2563eb !important;
+}
+.pd-brands-th-active:hover { background: #dbeafe; }
+
+/* Sort direction arrows */
+.pd-th-arrow {
+  font-size: 10px;
+  opacity: 0.8;
+}
+/* SOV trending arrow — slightly blue tint */
+.pd-th-arrow--trend {
+  color: #2563eb;
+  opacity: 1;
+  font-size: 11px;
+}
 
 /* ── Sort dropdown menu ─────────────────────────────────────── */
 .pd-brands-sort-menu {
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
-  min-width: 180px;
+  min-width: 190px;
   background: #fff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-  z-index: 200;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
+  z-index: 300;
   padding: 6px 0;
+  overflow: hidden;
 }
 .pd-sort-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
   padding: 6px 14px 4px;
+  letter-spacing: 0;
 }
 .pd-sort-option {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   color: #374151;
   cursor: pointer;
-  text-transform: none;
-  letter-spacing: 0;
   transition: background 0.1s;
 }
-.pd-sort-option:hover { background: #f8fafc; }
-.pd-sort-opt-icon { font-size: 12px; color: #64748b; width: 14px; text-align: center; }
-.pd-sort-check { margin-left: auto; color: #6366f1; font-size: 11px; }
-.pd-sort-active { color: #6366f1; font-weight: 500; }
+.pd-sort-option:hover { background: #f9fafb; }
+.pd-sort-opt-icon { font-size: 12px; color: #6b7280; width: 16px; text-align: center; flex-shrink: 0; }
+.pd-sort-check { color: #2563eb; font-size: 12px; font-weight: 600; margin-left: 4px; }
+.pd-sort-active { color: #2563eb; }
 
-/* ── Sentiment cell ─────────────────────────────────────────── */
-.pd-sentiment-cell {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #334155;
+/* ── Table rows ─────────────────────────────────────────────── */
+.pd-brands-table tbody tr {
+  transition: background 0.1s;
+  border-bottom: 1px solid #f3f4f6;
 }
-
-.pd-brands-table tbody tr { transition: background 0.12s; }
-.pd-brands-table tbody tr:hover { background: #f8fafc; }
+.pd-brands-table tbody tr:last-child { border-bottom: none; }
+.pd-brands-table tbody tr:hover { background: #fafafa; }
 
 .pd-brands-table tbody td {
-  padding: 9px 8px;
-  color: #475569;
-  border-bottom: 1px solid #f8fafc;
+  padding: 10px 10px;
+  color: #374151;
   white-space: nowrap;
+  font-size: 13px;
 }
 
 .pd-rank {
-  font-weight: 700;
-  color: #94a3b8;
-  width: 24px;
+  font-weight: 400;
+  color: #9ca3af;
+  width: 28px;
   text-align: center;
+  font-size: 13px;
 }
 
+/* ── Metric cells ───────────────────────────────────────────── */
+.pd-vis-value {
+  font-weight: 600;
+  color: #111827;
+}
+
+.pd-metric-with-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.pd-delta-pos {
+  font-size: 11px;
+  font-weight: 500;
+  color: #16a34a;
+}
+.pd-delta-neg {
+  font-size: 11px;
+  font-weight: 500;
+  color: #dc2626;
+}
+
+/* ── Sentiment cell ─────────────────────────────────────────── */
+.pd-sentiment-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #374151;
+}
+
+/* ── Brand cell ─────────────────────────────────────────────── */
 .pd-brand-cell {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-weight: 600;
-  color: #1e293b;
+  gap: 8px;
+  font-weight: 500;
+  color: #111827;
+  font-size: 13px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pd-brand-dot {
