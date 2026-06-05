@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, BarChart, Bar, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
   Settings, ChevronDown,
@@ -46,7 +47,8 @@ interface Props {
 }
 
 export default function OverviewClient({ chatFacts, projectName, projectBrands, externalFilters, initialDomainTypeOverrides, updateDomainTypeOverrideAction }: Props) {
-  const [resolution, setResolution] = useState<Resolution>("W");
+  const [resolution, setResolution]   = useState<Resolution>("W");
+  const [chartView, setChartView]     = useState<"line" | "bar">("line");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<ChatRecordView | null>(null);
   const [onlyOwnMentions, setOnlyOwnMentions] = useState(false);
@@ -56,12 +58,38 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
   );
   const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
 
+  // ── Top 7 Brands indicator mode ───────────────────────────────────────────
+  type IndicatorMode = "default" | "indicators-only" | "none";
+  const [indicatorMode, setIndicatorMode]     = useState<IndicatorMode>("default");
+  const [indicatorPanelOpen, setIndicatorPanelOpen] = useState(false);
+  const indicatorPanelRef                     = useRef<HTMLDivElement>(null);
+
   // ── All Chats section state ───────────────────────────────────────────────
   const CHAT_PAGE_SIZE = 10;
   const [chatPage, setChatPage]                   = useState(1);
-  const [chatBrandFilters, setChatBrandFilters]   = useState<Set<string>>(new Set()); // empty = all
-  const [chatSourceFilters, setChatSourceFilters] = useState<Set<string>>(new Set()); // empty = all
-  const [chatFeatureFilters, setChatFeatureFilters] = useState<Set<string>>(new Set()); // empty = all
+  const [chatBrandFilters, setChatBrandFilters]   = useState<Set<string>>(new Set());
+  const [chatSourceFilters, setChatSourceFilters] = useState<Set<string>>(new Set());
+  const [chatFeatureFilters, setChatFeatureFilters] = useState<Set<string>>(new Set());
+  const [colSettingsOpen, setColSettingsOpen]     = useState(false);
+  const colSettingsRef                            = useRef<HTMLDivElement>(null);
+
+  const DEFAULT_COLS = { mentions: true, sources: true, features: true, position: true, created: true, citations: false };
+  const [visibleCols, setVisibleCols] = useState({ ...DEFAULT_COLS });
+
+  function toggleCol(col: keyof typeof visibleCols) {
+    setVisibleCols(prev => ({ ...prev, [col]: !prev[col] }));
+  }
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (colSettingsRef.current && !colSettingsRef.current.contains(e.target as Node))
+        setColSettingsOpen(false);
+      if (indicatorPanelRef.current && !indicatorPanelRef.current.contains(e.target as Node))
+        setIndicatorPanelOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
 
   async function handleTypeOverride(domain: string, type: string) {
     setTypeOverrides(prev => new Map(prev).set(domain, type));
@@ -149,13 +177,22 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
     [chatFacts, effectiveModels, effectiveDateRange],
   );
 
+  // All brands (no slice) — needed for correct SOV denominator
+  const allBrands = useMemo(
+    () => aggregateBrands(filteredChats, 9999, undefined, stableBrandColors),
+    [filteredChats, stableBrandColors]
+  );
+  const totalAllBrandCount = useMemo(
+    () => allBrands.reduce((s, b) => s + b.count, 0),
+    [allBrands]
+  );
+
   const brands = useMemo(() => {
-    const all = aggregateBrands(filteredChats, 50, undefined, stableBrandColors);
     const filtered = effectiveBrandIds === null
-      ? all
-      : all.filter((b) => effectiveBrandIds.includes(b.name));
+      ? allBrands
+      : allBrands.filter((b) => effectiveBrandIds.includes(b.name));
     return filtered.slice(0, 7);
-  }, [filteredChats, stableBrandColors, effectiveBrandIds]);
+  }, [allBrands, effectiveBrandIds]);
 
   const domains = useMemo(() => aggregateDomains(filteredChats, 10), [filteredChats]);
   const totalDomainCitations = useMemo(() => totalCitations(filteredChats), [filteredChats]);
@@ -165,6 +202,56 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [filteredChats, brands, resolution, effectiveDateRange],
   );
+
+  // Bar chart: aggregated visibility per brand over full date range
+  const barData = useMemo(() => {
+    const total = filteredChats.length;
+    return brands.map(b => ({
+      name:   b.name,
+      value:  total > 0 ? Math.round((b.count / total) * 100) : 0,
+      color:  b.color,
+      domain: guessBrandDomain(b.name),
+    }));
+  }, [brands, filteredChats]);
+
+  // Prompts per date for tooltip footer
+  const promptsPerDate = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of filteredChats) {
+      const d = c.runDate.slice(0, 10);
+      map.set(d, (map.get(d) ?? 0) + 1);
+    }
+    return map;
+  }, [filteredChats]);
+
+  // Dynamic "Showing data for X days" label
+  const daysLabel = useMemo(() => {
+    const diff = Math.round(
+      (effectiveDateRange.end.getTime() - effectiveDateRange.start.getTime()) / 86400000
+    );
+    return `Showing data for ${diff} day${diff !== 1 ? "s" : ""}`;
+  }, [effectiveDateRange]);
+
+  // ── Previous period (for delta calculations) ──────────────────────────────
+  const prevDateRange = useMemo(() => {
+    const duration = effectiveDateRange.end.getTime() - effectiveDateRange.start.getTime();
+    const prevEnd   = new Date(effectiveDateRange.start.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - duration);
+    return { start: prevStart, end: prevEnd };
+  }, [effectiveDateRange]);
+
+  const prevFilteredChats = useMemo(
+    () => filterByDateRange(filterByEngines(chatFacts, effectiveModels), prevDateRange),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatFacts, effectiveModels, prevDateRange],
+  );
+
+  const prevBrands = useMemo(
+    () => aggregateBrands(prevFilteredChats, 50, undefined, stableBrandColors),
+    [prevFilteredChats, stableBrandColors]
+  );
+
+  // prevTotalMentions removed — prev period delta now calculated inline per row
 
   const recentChats = useMemo(() => {
     const records = toChatRecords(filteredChats);
@@ -193,7 +280,6 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
   const allChatBrands  = useMemo(() => [...new Set(recentChats.flatMap(c => c.brandsFound))].sort(), [recentChats]);
   const allChatSources = useMemo(() => [...new Set(recentChats.flatMap(c => c.sourcesFound.map(s => s.domain)))].sort(), [recentChats]);
 
-  const totalMentions = brands.reduce((s, b) => s + b.count, 0);
   const maxDomainCount = domains.length > 0 ? domains[0].count : 1;
 
   const sortedBrands = useMemo(() => {
@@ -207,6 +293,21 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
     });
     return list;
   }, [brands, brandSortCol, brandSortMode]);
+
+  // ── Pinned own brand (Peec AI behavior) ──────────────────────────────────
+  // If no own brand is in the top-7 list, find it in allBrands and pin it at bottom
+  // with its REAL rank from allBrands (sorted by count descending).
+  const pinnedOwnBrand = useMemo(() => {
+    const ownBrandInTop7 = sortedBrands.some(b => ownBrandNames.has(b.name));
+    if (ownBrandInTop7) return null; // already visible, no need to pin
+
+    // allBrands sorted by count desc (same as aggregateBrands output)
+    const allSorted = [...allBrands].sort((a, b) => b.count - a.count);
+    const ownIdx    = allSorted.findIndex(b => ownBrandNames.has(b.name));
+    if (ownIdx === -1) return null; // no own brand in data at all
+
+    return { brand: allSorted[ownIdx], rank: ownIdx + 1 };
+  }, [sortedBrands, allBrands, ownBrandNames]);
 
   const ownDomainSet = useMemo(() => {
     const set = new Set<string>();
@@ -255,80 +356,314 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
 
         <div className="pd-overview-grid">
           <div className="pd-chart-card">
+            {/* ── Chart header ──────────────────────────────── */}
             <div className="pd-chart-header">
               <div className="pd-chart-label">
-                Visibility <span className="pd-info-icon" title="Brand visibility over time">ⓘ</span>
+                Visibility <InfoTooltip text="Brand visibility over time — % of chats mentioning each brand." />
               </div>
-              <div className="pd-resolution-toggle">
-                {(["D", "W", "M"] as const).map((r) => (
-                  <button key={r} className={`pd-res-btn ${resolution === r ? "pd-res-active" : ""}`}
-                    onClick={() => setResolution(r)}>{r}</button>
-                ))}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {/* D/W/M only visible in line view */}
+                {chartView === "line" && (
+                  <div className="pd-resolution-toggle">
+                    {(["D", "W", "M"] as const).map((r) => (
+                      <button key={r} className={`pd-res-btn ${resolution === r ? "pd-res-active" : ""}`}
+                        onClick={() => setResolution(r)}>{r}</button>
+                    ))}
+                  </div>
+                )}
+                {/* "..." menu placeholder */}
+                <button className="ch-dots-btn" title="Chart options">···</button>
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={{ stroke: "#e2e8f0" }} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: "8px", color: "#f1f5f9", fontSize: 11 }} />
-                {brands.map((b) => (
-                  <Line key={b.name} type="monotone" dataKey={b.name} stroke={b.color} strokeWidth={2} dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
-                ))}
-              </LineChart>
+
+            {/* ── Chart body ────────────────────────────────── */}
+            <ResponsiveContainer width="100%" height={248}>
+              {chartView === "line" ? (
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="4 4"
+                    stroke="rgba(0,0,0,0.05)"
+                    horizontal={true}
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: "#94a3b8" }}
+                    axisLine={{ stroke: "#e5e7eb" }}
+                    tickLine={false}
+                    dy={6}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: "#94a3b8" }}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={[0, "auto"]}
+                    tickFormatter={(v) => `${v}%`}
+                    width={36}
+                  />
+                  <Tooltip
+                    wrapperStyle={{ zIndex: 100, pointerEvents: "none" }}
+                    position={{ y: 8 }}
+                    cursor={{ stroke: "#94a3b8", strokeWidth: 1, strokeDasharray: "4 4" }}
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      const sorted = [...payload]
+                        .filter(p => (p.value as number) > 0)
+                        .sort((a, b) => ((b.value as number) ?? 0) - ((a.value as number) ?? 0));
+                      const pc = promptsPerDate.get(label as string) ?? 0;
+                      return (
+                        <div className="ch-tooltip">
+                          <div className="ch-tooltip-date">{label}</div>
+                          {sorted.map(p => (
+                            <div key={p.dataKey as string} className="ch-tooltip-row">
+                              <span className="ch-tooltip-dot" style={{ background: p.color as string }} />
+                              <DomainFavicon domain={guessBrandDomain(p.dataKey as string)} size={13} />
+                              <span className="ch-tooltip-name">{p.dataKey as string}</span>
+                              <span className="ch-tooltip-val">{((p.value as number) ?? 0).toFixed(1)}%</span>
+                            </div>
+                          ))}
+                          {pc > 0 && <div className="ch-tooltip-footer">{pc} new prompts created</div>}
+                        </div>
+                      );
+                    }}
+                  />
+                  {brands.map((b) => (
+                    <Line
+                      key={b.name}
+                      type="monotone"
+                      dataKey={b.name}
+                      stroke={b.color}
+                      strokeWidth={1.8}
+                      dot={{ r: 2.5, fill: b.color, strokeWidth: 0 }}
+                      activeDot={{ r: 4, strokeWidth: 0 }}
+                      isAnimationActive={false}
+                    />
+                  ))}
+                </LineChart>
+              ) : (
+                <BarChart
+                  data={barData}
+                  barCategoryGap="28%"
+                  margin={{ top: 8, right: 16, left: 0, bottom: 4 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="4 4"
+                    stroke="rgba(0,0,0,0.05)"
+                    horizontal={true}
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="name"
+                    tickLine={false}
+                    axisLine={{ stroke: "#e5e7eb" }}
+                    tick={(props) => {
+                      const { x, y, payload } = props;
+                      const dom = guessBrandDomain(payload.value as string);
+                      return (
+                        <g transform={`translate(${Number(x)},${Number(y) + 4})`}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <image
+                            href={`https://www.google.com/s2/favicons?domain=${dom}&sz=32`}
+                            x={-10} y={0} width={20} height={20}
+                          />
+                        </g>
+                      );
+                    }}
+                    height={32}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: "#94a3b8" }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => `${v}%`}
+                    width={36}
+                  />
+                  <Tooltip
+                    wrapperStyle={{ zIndex: 100, pointerEvents: "none" }}
+                    cursor={{ fill: "rgba(0,0,0,0.04)" }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload as { name: string; value: number; domain: string };
+                      const diff = Math.round(
+                        (effectiveDateRange.end.getTime() - effectiveDateRange.start.getTime()) / 86400000
+                      );
+                      return (
+                        <div className="ch-tooltip">
+                          <div className="ch-tooltip-bar-header">
+                            <span>Visibility</span>
+                            <span className="ch-tooltip-days">{diff} days</span>
+                          </div>
+                          <div className="ch-tooltip-row">
+                            <DomainFavicon domain={d.domain} size={14} />
+                            <span className="ch-tooltip-name">{d.name}</span>
+                            <span className="ch-tooltip-val">{d.value}%</span>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="value" radius={[5, 5, 0, 0]} isAnimationActive={false}>
+                    {barData.map((e) => (
+                      <Cell key={e.name} fill={e.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              )}
             </ResponsiveContainer>
-            <div className="pd-chart-footer">Showing data for 30 days</div>
+
+            {/* ── Chart footer ──────────────────────────────── */}
+            <div className="pd-chart-footer">
+              <span>{daysLabel}</span>
+              <div className="ch-view-toggle">
+                {/* Line chart icon */}
+                <button
+                  className={`ch-view-btn ${chartView === "line" ? "ch-view-btn--active" : ""}`}
+                  onClick={() => setChartView("line")}
+                  title="Line chart"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <polyline points="22 12 18 8 13 13 8 8 2 14" />
+                  </svg>
+                </button>
+                {/* Bar chart icon */}
+                <button
+                  className={`ch-view-btn ${chartView === "bar" ? "ch-view-btn--active" : ""}`}
+                  onClick={() => setChartView("bar")}
+                  title="Bar chart"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="2"  y="10" width="4" height="12" rx="1"/>
+                    <rect x="9"  y="6"  width="4" height="16" rx="1"/>
+                    <rect x="16" y="2"  width="4" height="20" rx="1"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="pd-brands-card" onClick={() => setOpenBrandMenu(null)}>
             <div className="pd-brands-header">
               <span className="pd-brands-title">Top 7 Brands <InfoTooltip text="Top brands across LLMs for your prompts" /></span>
+              {/* ⚙ ↑ ↺ icons matching Peec AI */}
+              <div className="pd-brands-actions">
+                {/* ⚙ Settings — opens "Change indicators" panel */}
+                <div ref={indicatorPanelRef} style={{ position: "relative" }}>
+                  <button
+                    className={`pd-brands-action-btn ${indicatorPanelOpen ? "pd-brands-action-btn--active" : ""}`}
+                    title="Change indicators"
+                    onClick={() => setIndicatorPanelOpen(v => !v)}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                  </button>
+
+                  {/* Change indicators panel */}
+                  {indicatorPanelOpen && (
+                    <div className="pd-indicator-panel">
+                      <div className="pd-indicator-title">Change indicators</div>
+                      {([
+                        { value: "default",         icon: "⊙", label: "Default" },
+                        { value: "indicators-only", icon: "↕", label: "Indicators only" },
+                        { value: "none",            icon: "T", label: "None" },
+                      ] as { value: IndicatorMode; icon: string; label: string }[]).map(opt => (
+                        <div
+                          key={opt.value}
+                          className={`pd-indicator-option ${indicatorMode === opt.value ? "pd-indicator-option--active" : ""}`}
+                          onClick={() => { setIndicatorMode(opt.value); setIndicatorPanelOpen(false); }}
+                        >
+                          <span className="pd-indicator-icon">{opt.icon}</span>
+                          <span className="pd-indicator-label">{opt.label}</span>
+                          {indicatorMode === opt.value && <span className="pd-indicator-check">✓</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button className="pd-brands-action-btn" title="Export">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </button>
+                <button className="pd-brands-action-btn" title="Refresh">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                </button>
+              </div>
             </div>
             <table className="pd-brands-table">
               <thead>
                 <tr>
                   <th style={{ width: 28 }}>#</th>
                   <th>Brand</th>
-                  {(["visibility", "sov", "sentiment", "position"] as BrandSortCol[]).map((col) => {
-                    const labels: Record<BrandSortCol, string> = { visibility: "Visibility", sov: "SOV", sentiment: "Sentiment", position: "Position" };
-                    const tooltips: Record<BrandSortCol, string> = {
-                      visibility: "The percentage of chats mentioning the brand in the last 30 days.",
-                      sov: "The brand's mentions divided by the total number of brand mentions across all chats in the last 30 days.",
-                      sentiment: "The brand's sentiment score when mentioned in the last 30 days.",
-                      position: "The brand's average position when mentioned in the last 30 days.",
+                  {(["visibility", "sov", "sentiment", "position"] as BrandSortCol[]).map((col, colIdx) => {
+                    // Dynamic days count for tooltip text
+                    const days = Math.round(
+                      (effectiveDateRange.end.getTime() - effectiveDateRange.start.getTime()) / 86400000
+                    );
+                    const labels: Record<BrandSortCol, string> = {
+                      visibility: "Visibility",
+                      sov: "SOV",
+                      sentiment: "Sentiment",
+                      position: "Position",
                     };
-                    const isActive = brandSortCol === col;
-                    const icon = isActive
-                      ? (brandSortMode === "high-low" || brandSortMode === "negative-trend" ? "↓" : "↑")
-                      : "↕";
+                    const tooltipTexts: Record<BrandSortCol, string> = {
+                      visibility: `The percentage of chats mentioning the brand in the last ${days} days.`,
+                      sov: `The brand's mentions divided by the total number of brand mentions across all chats in the last ${days} days.`,
+                      sentiment: `The brand's sentiment score when mentioned in the last ${days} days.`,
+                      position: `The brand's average position when mentioned in the last ${days} days.`,
+                    };
+                    const isActive   = brandSortCol === col;
+                    const menuOpen   = openBrandMenu === col;
+                    // SOV always shows trending arrow (fixed icon in Peec AI)
+                    const headerIcon = col === "sov"
+                      ? "↗"
+                      : isActive
+                        ? (brandSortMode === "high-low" || brandSortMode === "negative-trend" ? "↓" : "↑")
+                        : "↕";
+                    // Right-align sort menu for last 2 columns to avoid overflow
+                    const menuRight = colIdx >= 2;
                     return (
                       <th key={col} style={{ position: "relative" }}>
                         <span
-                          className={`pd-brands-th-btn ${isActive ? "pd-brands-th-active" : ""}`}
-                          onClick={(e) => { e.stopPropagation(); setOpenBrandMenu(openBrandMenu === col ? null : col); }}
+                          className={`pd-brands-th-btn ${isActive || menuOpen ? "pd-brands-th-active" : ""}`}
+                          onClick={(e) => { e.stopPropagation(); setOpenBrandMenu(menuOpen ? null : col); }}
                         >
-                          {labels[col]} <span className="pd-th-arrow">{icon}</span>
-                          <InfoTooltip text={tooltips[col]} />
+                          {labels[col]}
+                          <span className={`pd-th-arrow ${col === "sov" ? "pd-th-arrow--trend" : ""}`}>
+                            {headerIcon}
+                          </span>
+                          <InfoTooltip text={tooltipTexts[col]} />
                         </span>
-                        {openBrandMenu === col && (
-                          <div className="pd-brands-sort-menu" onClick={e => e.stopPropagation()}>
+
+                        {menuOpen && (
+                          <div
+                            className="pd-brands-sort-menu"
+                            style={{ right: menuRight ? 0 : "auto", left: menuRight ? "auto" : 0 }}
+                            onClick={e => e.stopPropagation()}
+                          >
                             <div className="pd-sort-label">Sort by</div>
                             {([
                               { mode: "high-low",       icon: "↓", label: "Value  High - low" },
                               { mode: "low-high",       icon: "↑", label: "Value  Low - high" },
                               { mode: "positive-trend", icon: "↗", label: "Positive trend" },
                               { mode: "negative-trend", icon: "↘", label: "Negative trend" },
-                            ] as { mode: BrandSortMode; icon: string; label: string }[]).map(opt => (
-                              <div
-                                key={opt.mode}
-                                className={`pd-sort-option ${brandSortCol === col && brandSortMode === opt.mode ? "pd-sort-active" : ""}`}
-                                onClick={() => { setBrandSortCol(col); setBrandSortMode(opt.mode); setOpenBrandMenu(null); }}
-                              >
-                                <span className="pd-sort-opt-icon">{opt.icon}</span>
-                                {opt.label}
-                                {brandSortCol === col && brandSortMode === opt.mode && <span className="pd-sort-check">✓</span>}
-                              </div>
-                            ))}
+                            ] as { mode: BrandSortMode; icon: string; label: string }[]).map(opt => {
+                              const isChecked = brandSortCol === col && brandSortMode === opt.mode;
+                              return (
+                                <div
+                                  key={opt.mode}
+                                  className={`pd-sort-option ${isChecked ? "pd-sort-active" : ""}`}
+                                  onClick={() => { setBrandSortCol(col); setBrandSortMode(opt.mode); setOpenBrandMenu(null); }}
+                                >
+                                  <span className="pd-sort-opt-icon">{opt.icon}</span>
+                                  <span style={{ flex: 1 }}>{opt.label}</span>
+                                  {isChecked && <span className="pd-sort-check">✓</span>}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </th>
@@ -337,11 +672,41 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                 </tr>
               </thead>
               <tbody>
-                {sortedBrands.map((b, i) => {
-                  const vis = totalMentions > 0 ? Math.round((b.count / totalMentions) * 100) : 0;
-                  const sov = vis;
+                {/* Show max 6 when own brand is pinned at bottom, otherwise 7 */}
+                {(pinnedOwnBrand ? sortedBrands.slice(0, 6) : sortedBrands).map((b, i) => {
+                  // Visibility = chats mentioning brand / total chats × 100
+                  const totalChats = filteredChats.length;
+                  const vis = totalChats > 0 ? Math.round((b.count / totalChats) * 100) : 0;
+
+                  // SOV = brand mentions / ALL brands total mentions × 100
+                  const sov = totalAllBrandCount > 0 ? Math.round((b.count / totalAllBrandCount) * 100) : 0;
+
                   const sent = b.sentiment ? Math.round(b.sentiment) : 0;
                   const dotColor = sentimentDotColor(sent);
+
+                  // Previous period deltas — same correct formulas
+                  const prevAllBrandCount = prevBrands.reduce((s, p) => s + p.count, 0);
+                  const prevTotalChats    = prevFilteredChats.length;
+                  const pb      = prevBrands.find(p => p.name === b.name);
+                  const pVis    = prevTotalChats > 0 && pb ? Math.round((pb.count / prevTotalChats) * 100) : 0;
+                  const pSov    = prevAllBrandCount > 0 && pb ? Math.round((pb.count / prevAllBrandCount) * 100) : 0;
+                  const visDelta = vis - pVis;
+                  const sovDelta = sov - pSov;
+                  const sentDelta = pb && pb.sentiment ? Math.round(b.sentiment - pb.sentiment) : 0;
+                  const posDelta  = pb && pb.position && b.position
+                    ? parseFloat((b.position - pb.position).toFixed(1)) : 0;
+
+                  // Render delta based on indicatorMode
+                  const showValue = indicatorMode !== "indicators-only";
+                  const showDelta = indicatorMode !== "none";
+
+                  const deltaEl = (v: number, fmt: (n: number) => string) =>
+                    showDelta && v !== 0 ? (
+                      <span className={v > 0 ? "pd-delta-pos" : "pd-delta-neg"}>
+                        {v > 0 ? "+" : ""}{fmt(v)}
+                      </span>
+                    ) : null;
+
                   return (
                     <tr key={b.name}>
                       <td className="pd-rank">{i + 1}</td>
@@ -349,21 +714,101 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                         <DomainFavicon domain={guessBrandDomain(b.name)} size={16} />
                         {b.name}
                       </td>
-                      <td><span className="pd-vis-value">{vis}%</span></td>
-                      <td><span className="pd-vis-value">{sov}%</span></td>
+                      {/* Visibility */}
+                      <td>
+                        <span className="pd-metric-with-delta">
+                          {showValue && <span className="pd-vis-value">{vis}%</span>}
+                          {deltaEl(visDelta, n => `${n}%`)}
+                        </span>
+                      </td>
+                      {/* SOV */}
+                      <td>
+                        <span className="pd-metric-with-delta">
+                          {showValue && <span className="pd-vis-value">{sov}%</span>}
+                          {deltaEl(sovDelta, n => `${n}%`)}
+                        </span>
+                      </td>
+                      {/* Sentiment */}
                       <td>
                         <span className="pd-sentiment-cell">
                           <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
-                          {sent > 0 ? sent : "—"}
+                          {showValue && <span className="pd-vis-value">{sent > 0 ? sent : "—"}</span>}
+                          {deltaEl(sentDelta, n => `${n > 0 ? "+" : ""}${n}`)}
                         </span>
                       </td>
-                      <td>{b.position ? `#${b.position.toFixed(1)}` : "—"}</td>
+                      {/* Position */}
+                      <td>
+                        <span className="pd-metric-with-delta">
+                          {showValue && <span>{b.position ? `#${b.position.toFixed(1)}` : "—"}</span>}
+                          {deltaEl(posDelta, (n: number) => `${n > 0 ? "+" : ""}${n}`)}
+                        </span>
+                      </td>
                     </tr>
                   );
                 })}
                 {sortedBrands.length === 0 && (
                   <tr><td colSpan={6} className="pd-empty">No brands extracted yet</td></tr>
                 )}
+
+                {/* ── Pinned own brand (shows even if outside top 7) ── */}
+                {pinnedOwnBrand && (() => {
+                  const b   = pinnedOwnBrand.brand;
+                  const totalChats     = filteredChats.length;
+                  const vis  = totalChats > 0 ? Math.round((b.count / totalChats) * 100) : 0;
+                  const sov  = totalAllBrandCount > 0 ? Math.round((b.count / totalAllBrandCount) * 100) : 0;
+                  const sent = b.sentiment ? Math.round(b.sentiment) : 0;
+                  const dotColor = sentimentDotColor(sent);
+                  const prevAllBrandCount = prevBrands.reduce((s, p) => s + p.count, 0);
+                  const prevTotalChats    = prevFilteredChats.length;
+                  const pb       = prevBrands.find(p => p.name === b.name);
+                  const pVis     = prevTotalChats > 0 && pb ? Math.round((pb.count / prevTotalChats) * 100) : 0;
+                  const pSov     = prevAllBrandCount > 0 && pb ? Math.round((pb.count / prevAllBrandCount) * 100) : 0;
+                  const visDelta = vis - pVis;
+                  const sovDelta = sov - pSov;
+                  const sentDelta = pb && pb.sentiment ? Math.round(b.sentiment - pb.sentiment) : 0;
+                  const posDelta  = pb && pb.position && b.position ? parseFloat((b.position - pb.position).toFixed(1)) : 0;
+                  const showValue = indicatorMode !== "indicators-only";
+                  const showDelta = indicatorMode !== "none";
+                  const deltaEl = (v: number, fmt: (n: number) => string) =>
+                    showDelta && v !== 0 ? (
+                      <span className={v > 0 ? "pd-delta-pos" : "pd-delta-neg"}>
+                        {v > 0 ? "+" : ""}{fmt(v)}
+                      </span>
+                    ) : null;
+                  return (
+                    <>
+                      {/* Separator line */}
+                      <tr className="pd-pinned-separator">
+                        <td colSpan={6} />
+                      </tr>
+                      {/* Pinned row with real rank */}
+                      <tr className="pd-pinned-row">
+                        <td className="pd-rank">{pinnedOwnBrand.rank}</td>
+                        <td className="pd-brand-cell">
+                          <DomainFavicon domain={guessBrandDomain(b.name)} size={16} />
+                          {b.name}
+                        </td>
+                        <td><span className="pd-metric-with-delta">
+                          {showValue && <span className="pd-vis-value">{vis}%</span>}
+                          {deltaEl(visDelta, n => `${n}%`)}
+                        </span></td>
+                        <td><span className="pd-metric-with-delta">
+                          {showValue && <span className="pd-vis-value">{sov}%</span>}
+                          {deltaEl(sovDelta, n => `${n}%`)}
+                        </span></td>
+                        <td><span className="pd-sentiment-cell">
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
+                          {showValue && <span className="pd-vis-value">{sent > 0 ? sent : "—"}</span>}
+                          {deltaEl(sentDelta, n => `${n > 0 ? "+" : ""}${n}`)}
+                        </span></td>
+                        <td><span className="pd-metric-with-delta">
+                          {showValue && <span>{b.position ? `#${b.position.toFixed(1)}` : "—"}</span>}
+                          {deltaEl(posDelta, (n: number) => `${n > 0 ? "+" : ""}${n}`)}
+                        </span></td>
+                      </tr>
+                    </>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
@@ -514,6 +959,57 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
               onChange={(v) => { setChatSourceFilters(v); setChatPage(1); }}
               searchable
             />
+
+            {/* Column settings icon */}
+            <div ref={colSettingsRef} style={{ position: "relative" }}>
+              <button
+                className={`ac-col-btn ${colSettingsOpen ? "ac-col-btn--active" : ""}`}
+                onClick={() => setColSettingsOpen(v => !v)}
+                title="Column settings"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                  <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                </svg>
+              </button>
+
+              {colSettingsOpen && (
+                <div className="ac-col-panel">
+                  {/* Fixed columns */}
+                  <div className="ac-col-group-label">Fixed columns</div>
+                  <div className="ac-col-row ac-col-row--fixed">
+                    <span className="ac-col-dot" />
+                    <span className="ac-col-name">Chat</span>
+                  </div>
+
+                  {/* Active columns */}
+                  <div className="ac-col-group-label">Active columns</div>
+                  {(["mentions","sources","features","position","created"] as const).map(col => (
+                    <div key={col} className="ac-col-row" onClick={() => toggleCol(col)}>
+                      <span className={`ac-col-checkbox ${visibleCols[col] ? "ac-col-checkbox--on" : ""}`}>
+                        {visibleCols[col] && <svg width="10" height="10" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>}
+                      </span>
+                      <span className="ac-col-name" style={{ textTransform: "capitalize" }}>{col}</span>
+                    </div>
+                  ))}
+
+                  {/* Available columns */}
+                  <div className="ac-col-group-label">Available columns</div>
+                  <div className="ac-col-row" onClick={() => toggleCol("citations")}>
+                    <span className={`ac-col-checkbox ${visibleCols.citations ? "ac-col-checkbox--on" : ""}`}>
+                      {visibleCols.citations && <svg width="10" height="10" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>}
+                    </span>
+                    <span className="ac-col-name">Citations</span>
+                  </div>
+
+                  {/* Reset */}
+                  <div className="ac-col-separator" />
+                  <button className="ac-col-reset" onClick={() => setVisibleCols({ ...DEFAULT_COLS })}>
+                    Reset to default
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -542,10 +1038,12 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
               <thead>
                 <tr>
                   <th className="ac-th-chat">Chat</th>
-                  <th className="ac-th-mentions">Mentions</th>
-                  <th className="ac-th-sources">Sources</th>
-                  <th className="ac-th-position">Position</th>
-                  <th className="ac-th-created">Created</th>
+                  {visibleCols.mentions   && <th className="ac-th-mentions">Mentions</th>}
+                  {visibleCols.sources    && <th className="ac-th-sources">Sources</th>}
+                  {visibleCols.features   && <th className="ac-th-sources">Features</th>}
+                  {visibleCols.citations  && <th className="ac-th-mentions">Citations</th>}
+                  {visibleCols.position   && <th className="ac-th-position">Position</th>}
+                  {visibleCols.created    && <th className="ac-th-created">Created</th>}
                 </tr>
               </thead>
               <tbody>
@@ -556,7 +1054,7 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                   return (
                     <tr key={chat.id} className="ac-row" onClick={() => setSelectedChat(chat)}>
 
-                      {/* Chat: engine icon + query + snippet */}
+                      {/* Chat — always visible */}
                       <td className="ac-td-chat">
                         <div className="ac-chat-engine">
                           <EngineIcon engine={chat.engine} />
@@ -567,35 +1065,57 @@ export default function OverviewClient({ chatFacts, projectName, projectBrands, 
                         </div>
                       </td>
 
-                      {/* Mentions: brand favicons + overflow */}
-                      <td className="ac-td-mentions">
-                        <div className="ac-icons-row">
-                          {chat.brandsFound.slice(0, 4).map((b) => (
-                            <DomainFavicon key={b} domain={guessBrandDomain(b)} size={18} />
-                          ))}
-                          {extra > 0 && <span className="ac-more">+{extra}</span>}
-                        </div>
-                      </td>
+                      {/* Mentions */}
+                      {visibleCols.mentions && (
+                        <td className="ac-td-mentions">
+                          <div className="ac-icons-row">
+                            {chat.brandsFound.slice(0, 4).map((b) => (
+                              <DomainFavicon key={b} domain={guessBrandDomain(b)} size={18} />
+                            ))}
+                            {extra > 0 && <span className="ac-more">+{extra}</span>}
+                          </div>
+                        </td>
+                      )}
 
-                      {/* Sources: domain favicons */}
-                      <td className="ac-td-sources">
-                        <div className="ac-icons-row">
-                          {chat.sourcesFound.slice(0, 4).map((s, i) => (
-                            <DomainFavicon key={i} domain={s.domain} size={18} />
-                          ))}
-                          {chat.sourcesFound.length > 4 && (
-                            <span className="ac-more">+{chat.sourcesFound.length - 4}</span>
-                          )}
-                        </div>
-                      </td>
+                      {/* Sources */}
+                      {visibleCols.sources && (
+                        <td className="ac-td-sources">
+                          <div className="ac-icons-row">
+                            {chat.sourcesFound.slice(0, 4).map((s, i) => (
+                              <DomainFavicon key={i} domain={s.domain} size={18} />
+                            ))}
+                            {chat.sourcesFound.length > 4 && (
+                              <span className="ac-more">+{chat.sourcesFound.length - 4}</span>
+                            )}
+                          </div>
+                        </td>
+                      )}
+
+                      {/* Features (placeholder) */}
+                      {visibleCols.features && (
+                        <td className="ac-td-sources">
+                          <span className="ac-more" style={{ color: "#9ca3af" }}>—</span>
+                        </td>
+                      )}
+
+                      {/* Citations (placeholder) */}
+                      {visibleCols.citations && (
+                        <td className="ac-td-mentions">
+                          <span className="ac-more" style={{ color: "#9ca3af" }}>—</span>
+                        </td>
+                      )}
 
                       {/* Position */}
-                      <td className="ac-td-position">
-                        {chat.avgPosition > 0 ? chat.avgPosition.toFixed(1) : "—"}
-                      </td>
+                      {visibleCols.position && (
+                        <td className="ac-td-position">
+                          {chat.avgPosition > 0 ? chat.avgPosition.toFixed(1) : "—"}
+                        </td>
+                      )}
 
                       {/* Created */}
-                      <td className="ac-td-created">{timeAgo}</td>
+                      {visibleCols.created && (
+                        <td className="ac-td-created">{timeAgo}</td>
+                      )}
                     </tr>
                   );
                 })}
