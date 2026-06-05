@@ -22,6 +22,8 @@ interface Props {
   filterBrands: PageFilterBrand[];
   availableTags: PageFilterTag[];
   addBrandAction: (name: string) => Promise<{ ok: boolean; error?: string }>;
+  initialHiddenBrandIds: string[];
+  updateBrandFilterAction: (hiddenBrandIds: string[] | null) => Promise<{ ok: boolean; error?: string }>;
 }
 
 function makeDefaultDateRange(): PageFilterDateRange {
@@ -42,20 +44,49 @@ export default function OverviewWrapper({
   filterBrands,
   availableTags,
   addBrandAction,
+  initialHiddenBrandIds,
+  updateBrandFilterAction,
 }: Props) {
   const [dateRange, setDateRange] = useState<PageFilterDateRange>(makeDefaultDateRange);
   const [selectedModels, setSelectedModels] = useState<string[]>(ALL_ENGINES);
-  const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
 
-  // Convert selected brand IDs → brand names for OverviewClient filtering.
-  // OverviewClient's aggregateBrands returns objects with `name` not `id`,
-  // so we must compare by name, not by ID.
+  // Initialize selectedBrandIds from DB hidden list:
+  // null = all brands visible, array = only these IDs are visible
+  const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(() => {
+    if (!initialHiddenBrandIds || initialHiddenBrandIds.length === 0) return null;
+    // Select all brands EXCEPT the hidden ones
+    const visibleIds = filterBrands
+      .filter((b) => !initialHiddenBrandIds.includes(b.name))
+      .map((b) => b.id);
+    return visibleIds.length === filterBrands.length ? null : visibleIds;
+  });
+
+  // Called by PageFilterBar when user checks/unchecks brands
+  async function handleBrandsChange(ids: string[] | null) {
+    setSelectedBrandIds(ids);
+    // Convert visible IDs → hidden brand names → save to DB
+    const hiddenNames =
+      ids === null
+        ? []
+        : filterBrands.filter((b) => !ids.includes(b.id)).map((b) => b.name);
+    await updateBrandFilterAction(hiddenNames.length > 0 ? hiddenNames : null);
+  }
+
+  // Convert selected brand IDs → brand names for OverviewClient filtering
   const selectedBrandNames: string[] | null =
     selectedBrandIds === null
       ? null
       : selectedBrandIds
           .map((id) => filterBrands.find((b) => b.id === id)?.name)
           .filter((n): n is string => !!n);
+
+  // Initial brand IDs to pass to PageFilterBar so UI stays in sync after refresh
+  const initialBrandIds: string[] | null =
+    !initialHiddenBrandIds || initialHiddenBrandIds.length === 0
+      ? null
+      : filterBrands
+          .filter((b) => !initialHiddenBrandIds.includes(b.name))
+          .map((b) => b.id);
 
   return (
     <>
@@ -66,7 +97,8 @@ export default function OverviewWrapper({
         addBrandAction={addBrandAction}
         onDateChange={setDateRange}
         onModelsChange={setSelectedModels}
-        onBrandsChange={setSelectedBrandIds}
+        onBrandsChange={handleBrandsChange}
+        initialBrands={initialBrandIds}
       />
       <OverviewClient
         chatFacts={chatFacts}
