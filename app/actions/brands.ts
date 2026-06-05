@@ -58,8 +58,6 @@ export async function markBrandAsOwn(brandId: string): Promise<{ ok: boolean; er
 
 /**
  * Save brand filter state (hidden brand IDs) to the project in DB.
- * hiddenBrandIds = null  → all brands visible (reset / empty array)
- * hiddenBrandIds = [...] → these brand IDs are hidden
  */
 export async function updateBrandFilter(
   hiddenBrandIds: string[] | null,
@@ -73,4 +71,54 @@ export async function updateBrandFilter(
     .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)));
 
   return { ok: true };
+}
+
+/**
+ * Save a single domain type override to the project in DB.
+ * domain  = the domain string (e.g. "clutch.co")
+ * type    = the new domain type (e.g. "Competitor"), or null to remove override
+ */
+export async function updateDomainTypeOverride(
+  domain: string,
+  type: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const projectId = await getActiveProjectId();
+  const workspaceId = await getWorkspaceId();
+
+  const [row] = await db
+    .select({ overrides: projects.domainTypeOverrides })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)))
+    .limit(1);
+
+  const current = (row?.overrides ?? {}) as Record<string, string>;
+
+  if (type === null) {
+    delete current[domain];
+  } else {
+    current[domain] = type;
+  }
+
+  await db
+    .update(projects)
+    .set({ domainTypeOverrides: current })
+    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)));
+
+  return { ok: true };
+}
+
+/**
+ * Load all domain type overrides for the active project.
+ */
+export async function getDomainTypeOverrides(): Promise<Record<string, string>> {
+  const projectId = await getActiveProjectId();
+  const workspaceId = await getWorkspaceId();
+
+  const [row] = await db
+    .select({ overrides: projects.domainTypeOverrides })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)))
+    .limit(1);
+
+  return (row?.overrides ?? {}) as Record<string, string>;
 }
