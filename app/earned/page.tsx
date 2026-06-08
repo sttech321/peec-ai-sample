@@ -13,40 +13,31 @@ export const dynamic = "force-dynamic";
 export default async function EarnedPage() {
   const activeProjectId = await getActiveProjectId();
 
-  const [projectRecord] = await db
-    .select({ name: projects.name, workspaceId: projects.workspaceId })
-    .from(projects)
-    .where(eq(projects.id, activeProjectId))
-    .limit(1);
-  const projectName = projectRecord?.name || "General";
-  const workspaceId = projectRecord?.workspaceId ?? "unknown";
+  // Parallel fetch — all independent queries run simultaneously
+  const [
+    [projectRecord],
+    [latestChat],
+    promptCountResult,
+    ownBrandsRows,
+    rawSources,
+  ] = await Promise.all([
+    db.select({ name: projects.name, workspaceId: projects.workspaceId })
+      .from(projects).where(eq(projects.id, activeProjectId)).limit(1),
 
-  // Fetch last scan date from chats table
-  const [latestChat] = await db
-    .select({ createdAt: chats.createdAt })
-    .from(chats)
-    .innerJoin(prompts, eq(prompts.id, chats.promptId))
-    .where(eq(prompts.projectId, activeProjectId))
-    .orderBy(desc(chats.createdAt))
-    .limit(1);
+    db.select({ createdAt: chats.createdAt })
+      .from(chats)
+      .innerJoin(prompts, eq(prompts.id, chats.promptId))
+      .where(eq(prompts.projectId, activeProjectId))
+      .orderBy(desc(chats.createdAt)).limit(1),
 
-  const lastScanDate: Date | null = latestChat?.createdAt ?? null;
+    db.select({ promptCount: sql<number>`count(*)::int` })
+      .from(prompts).where(eq(prompts.projectId, activeProjectId)) as any,
 
-  // Count how many prompts exist (to know if user has set up any)
-  const [{ promptCount }] = await db
-    .select({ promptCount: sql<number>`count(*)::int` })
-    .from(prompts)
-    .where(eq(prompts.projectId, activeProjectId)) as any[];
+    db.select({ domains: brands.domains })
+      .from(brands)
+      .where(and(eq(brands.projectId, activeProjectId), eq(brands.isOwn, true))),
 
-  // Own-brand domains to exclude from competitor lists
-  const ownBrandsRows = await db
-    .select({ domains: brands.domains })
-    .from(brands)
-    .where(and(eq(brands.projectId, activeProjectId), eq(brands.isOwn, true)));
-  const ownDomains = new Set(ownBrandsRows.flatMap((b) => b.domains ?? []));
-
-  // Query sources with retrieval + citation + brand mention counts
-  const rawSources = await db
+    db
     .select({
       url: sources.url,
       title: sql<string | null>`MAX(${sources.title})`,
@@ -63,32 +54,31 @@ export default async function EarnedPage() {
     .where(eq(prompts.projectId, activeProjectId))
     .groupBy(sources.url, sources.domain)
     .orderBy(sql`count(distinct ${sources.id}) desc`)
-    .limit(300) as any[];
+    .limit(300) as unknown as any[],
+  ]);
 
-  // Auto-generate actions if today's scan data exists but no actions yet
+  const projectName = projectRecord?.name || "General";
+  const workspaceId = projectRecord?.workspaceId ?? "unknown";
+  const lastScanDate: Date | null = latestChat?.createdAt ?? null;
+  const promptCount = promptCountResult[0]?.promptCount ?? 0;
+  const ownDomains = new Set(ownBrandsRows.flatMap((b) => b.domains ?? []));
+
+  // Move generateActionsForProject to background — don't block page render
   if (rawSources.length > 0 && lastScanDate) {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    const scanIsRecent = lastScanDate >= todayStart;
-
-    if (scanIsRecent) {
-      // Only auto-generate; the guard inside prevents duplicate generation
-      await generateActionsForProject(activeProjectId, workspaceId);
+    if (lastScanDate >= todayStart) {
+      generateActionsForProject(activeProjectId, workspaceId)
+        .catch(err => console.warn("[EarnedPage] action generation failed:", err));
     }
   }
 
-  // Fetch actions (after potential auto-generation above)
-  const actions = await db
-    .select()
-    .from(earnedActions)
-    .where(eq(earnedActions.projectId, activeProjectId));
-
-  // Query prompt queries — used as "phrases" in editorial detail panels
-  const promptRows = await db
-    .select({ query: prompts.query })
-    .from(prompts)
-    .where(eq(prompts.projectId, activeProjectId))
-    .limit(100);
+  // Parallel fetch: actions + prompts are independent
+  const [actions, promptRows] = await Promise.all([
+    db.select().from(earnedActions).where(eq(earnedActions.projectId, activeProjectId)),
+    db.select({ query: prompts.query })
+      .from(prompts).where(eq(prompts.projectId, activeProjectId)).limit(100),
+  ]);
 
   type SourceRow = { title: string; url: string; domain: string; retrievals: number; citationRate: number; mentions: number };
   type ChannelRow = { name: string; count: number };

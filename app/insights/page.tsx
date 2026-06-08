@@ -16,43 +16,34 @@ import "./insights.css";
 export default async function InsightsPage() {
   const activeProjectId = await getActiveProjectId();
 
-  const [projectRecord] = await db
-    .select({ name: projects.name })
-    .from(projects)
-    .where(eq(projects.id, activeProjectId))
-    .limit(1);
+  // All independent queries run in parallel
+  const [[projectRecord], [ownBrand], profileResult, chatFacts, projectBrands, filterData] =
+    await Promise.all([
+      db.select({ name: projects.name }).from(projects)
+        .where(eq(projects.id, activeProjectId)).limit(1),
+
+      db.select({ name: brands.name, domains: brands.domains }).from(brands)
+        .where(and(eq(brands.projectId, activeProjectId), eq(brands.isOwn, true))).limit(1),
+
+      db.select({ data: brandProfiles.data }).from(brandProfiles)
+        .where(eq(brandProfiles.projectId, activeProjectId)).limit(1)
+        .catch(() => [] as { data: unknown }[]),
+
+      fetchChatFacts({ projectId: activeProjectId }),
+      fetchProjectBrands(activeProjectId),
+      getPageFilterData(activeProjectId),
+    ]);
+
   const projectName = projectRecord?.name || "General";
-
-  // Find the explicit "own" brand, if one is flagged.
-  const [ownBrand] = await db
-    .select({ name: brands.name, domains: brands.domains })
-    .from(brands)
-    .where(and(eq(brands.projectId, activeProjectId), eq(brands.isOwn, true)))
-    .limit(1);
-
-  // Try to read the brand profile for the real domain. Resilient to missing table.
   let profileDomain: string | null = null;
   try {
-    const [profileRow] = await db
-      .select({ data: brandProfiles.data })
-      .from(brandProfiles)
-      .where(eq(brandProfiles.projectId, activeProjectId))
-      .limit(1);
-    const data = profileRow?.data as Partial<BrandProfile> | undefined;
+    const data = (profileResult as any[])[0]?.data as Partial<BrandProfile> | undefined;
     if (data?.domain) profileDomain = String(data.domain).trim();
-  } catch (err) {
-    console.warn("[InsightsPage] brand profile read failed:", err);
-  }
+  } catch { /* brand profile optional */ }
 
   const ownDomain =
     profileDomain ||
     (ownBrand?.domains && ownBrand.domains.length > 0 ? ownBrand.domains[0] : null);
-
-  const [chatFacts, projectBrands, filterData] = await Promise.all([
-    fetchChatFacts({ projectId: activeProjectId }),
-    fetchProjectBrands(activeProjectId),
-    getPageFilterData(activeProjectId),
-  ]);
 
   return (
     <DashboardLayout currentPath="/insights">

@@ -5,7 +5,7 @@ import BrandColorPicker from "./BrandColorPicker";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, MoreHorizontal, Check, X,
-  ExternalLink, ChevronDown, ChevronUp, Info,
+  ChevronDown, ChevronUp, Info,
 } from "lucide-react";
 import {
   deleteBrand, acceptSuggestion, rejectSuggestion, createBrand,
@@ -166,39 +166,64 @@ function SuggestionCard({ s, onAccept, onReject }: {
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
 }) {
+  const [hovered, setHovered] = useState(false);
+
   const domainHost = s.domain
     ? s.domain.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]
     : null;
 
+  const hasMentions = (s.mentions ?? 0) > 0;
+
   return (
-    <div className="bp-sug-card">
+    <div
+      className={`bp-sug-card ${hovered ? "bp-sug-card--hovered" : ""}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Top row: mentions count + action buttons (visible on hover) */}
       <div className="bp-sug-top">
-        <span className="bp-sug-mentions">{(s.mentions ?? 0).toLocaleString()} mentions</span>
-        <div className="bp-sug-btns">
-          <button className="bp-sug-btn bp-sug-btn--reject" title="Reject" onClick={() => onReject(s.id)}>
-            <X size={11} />
+        <span className="bp-sug-mentions">
+          {hasMentions
+            ? `${(s.mentions ?? 0).toLocaleString()} mentions`
+            : <span className="bp-sug-suggested-label">Suggested</span>
+          }
+        </span>
+        <div className={`bp-sug-btns ${hovered ? "bp-sug-btns--visible" : ""}`}>
+          <button
+            className="bp-sug-btn bp-sug-btn--reject"
+            title="Dismiss"
+            onClick={(e) => { e.stopPropagation(); onReject(s.id); }}
+          >
+            <X size={12} />
           </button>
-          <button className="bp-sug-btn bp-sug-btn--accept" title="Accept" onClick={() => onAccept(s.id)}>
-            <Check size={11} />
+          <button
+            className="bp-sug-btn bp-sug-btn--accept"
+            title="Add brand"
+            onClick={(e) => { e.stopPropagation(); onAccept(s.id); }}
+          >
+            <Check size={12} />
           </button>
         </div>
       </div>
+
+      {/* Brand info row */}
       <div className="bp-sug-name-row">
-        <BrandAvatar id={s.id} name={s.name} domain={s.domain} size={20} />
-        <span className="bp-sug-name">{s.name}</span>
+        <BrandAvatar id={s.id} name={s.name} domain={s.domain} size={22} />
+        <div className="bp-sug-info">
+          <span className="bp-sug-name">{s.name}</span>
+          {domainHost && (
+            <a
+              href={`https://${domainHost}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bp-sug-domain"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {domainHost}
+            </a>
+          )}
+        </div>
       </div>
-      {domainHost && (
-        <a
-          href={`https://${domainHost}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="bp-sug-domain"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {domainHost}
-          <ExternalLink size={10} />
-        </a>
-      )}
     </div>
   );
 }
@@ -432,7 +457,13 @@ export default function BrandsClient({
 
           <div className="bp-sidebar-cards">
             {suggestions.length === 0 ? (
-              <p className="bp-sidebar-empty">No suggestions yet.</p>
+              <div className="bp-sidebar-empty-state">
+                <p className="bp-sidebar-empty">No suggestions yet.</p>
+                <p className="bp-sidebar-empty-hint">
+                  Run some prompts — brands that frequently appear in AI responses
+                  but aren&apos;t tracked will be suggested here.
+                </p>
+              </div>
             ) : (
               suggestions.map((s) => (
                 <SuggestionCard key={s.id} s={s} onAccept={doAccept} onReject={doReject} />

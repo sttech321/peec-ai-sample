@@ -177,6 +177,8 @@ export const chats = pgTable("chats", {
   workspaceIdx: index("chats_workspace_idx").on(t.workspaceId),
   promptIdx: index("chats_prompt_idx").on(t.promptId),
   engineDateIdx: index("chats_engine_date_idx").on(t.engine, t.runDate),
+  runDateIdx: index("chats_rundate_idx").on(t.runDate),                            // date-range filter
+  promptRunDateIdx: index("chats_prompt_rundate_idx").on(t.promptId, t.runDate),   // prompt+date combo
   idempotencyIdx: uniqueIndex("chats_idempotency_idx").on(t.workspaceId, t.promptId, t.engine, t.runDate),
 }));
 
