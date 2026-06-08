@@ -67,7 +67,12 @@ export async function GET(req: NextRequest) {
     response.cookies.delete("oauth_state");
     return response;
   } catch (err) {
-    console.error("Google OAuth callback error:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Google OAuth] callback failed:", msg);
+    // Show detailed error in dev mode so easier to debug
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Google OAuth] Full error:", err);
+    }
     return NextResponse.redirect(new URL("/sign-in?error=oauth_failed", req.url));
   }
 }
