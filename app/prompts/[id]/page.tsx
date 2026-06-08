@@ -4,7 +4,7 @@ import { db } from "../../../db";
 import { prompts, topics, projects, tags, promptTags } from "../../../db/schema";
 import { eq } from "drizzle-orm";
 import { fetchChatFacts, fetchProjectBrands } from "../../../lib/chat-facts-server";
-import { updateBrandFilter, getDomainTypeOverrides, updateDomainTypeOverride } from "../../actions/brands";
+import { updateBrandFilter, getDomainTypeOverrides, updateDomainTypeOverride, getBrandColors, updateBrandColorByName } from "../../actions/brands";
 import "./prompt-detail.css";
 import "../prompts-comparison.css";
 import "../../urls/urls.css";
@@ -38,7 +38,7 @@ export default async function PromptDetail({ params }: { params: Promise<{ id: s
   }
   const prompt = promptRecord[0];
 
-  const [chatFacts, projectBrands, availableTagsRaw, selectedTagsRaw, projectRow, domainTypeOverrides] = await Promise.all([
+  const [chatFacts, projectBrands, availableTagsRaw, selectedTagsRaw, projectRow, domainTypeOverrides, savedBrandColors] = await Promise.all([
     fetchChatFacts({ projectId: prompt.projectId, promptId }),
     fetchProjectBrands(prompt.projectId),
     db
@@ -56,6 +56,7 @@ export default async function PromptDetail({ params }: { params: Promise<{ id: s
       .where(eq(projects.id, prompt.projectId))
       .limit(1),
     getDomainTypeOverrides(),
+    getBrandColors(),
   ]);
 
   const hiddenBrandIds: string[] = projectRow[0]?.hiddenBrandIds ?? [];
@@ -90,6 +91,8 @@ export default async function PromptDetail({ params }: { params: Promise<{ id: s
         updateBrandFilterAction={updateBrandFilter}
         initialDomainTypeOverrides={domainTypeOverrides}
         updateDomainTypeOverrideAction={updateDomainTypeOverride}
+        initialBrandColors={savedBrandColors}
+        updateBrandColorByNameAction={updateBrandColorByName}
       />
     </DashboardLayout>
   );

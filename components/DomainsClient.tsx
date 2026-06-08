@@ -6,12 +6,14 @@ import {
 } from "recharts";
 import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import EngineIcon from "./EngineIcon";
+import DomainFavicon from "./DomainFavicon";
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
 import BrandsDropdown from "./BrandsDropdown";
 import { ChatFact, Resolution, filterByEngines, filterByDateRange } from "../lib/chat-aggregations";
 import {
   aggregateDomainsFull,
   buildDomainShareSeries,
+  buildDomainCountSeries,
   classifyDomain,
   DOMAIN_TYPES,
   DOMAIN_TYPE_COLORS,
@@ -31,6 +33,8 @@ interface Props {
   projectBrands: ProjectBrand[];
   ownDomains: string[];
   competitorDomains: string[];
+  externalDateRange?: DateRangeValue;
+  externalModels?: string[];
 }
 
 const PAGE_SIZE = 20;
@@ -81,9 +85,16 @@ export default function DomainsClient({
   projectBrands,
   ownDomains,
   competitorDomains,
+  externalDateRange,
+  externalModels,
 }: Props) {
   const [resolution, setResolution] = useState<Resolution>("W");
-  const [dateRange, setDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
+  const [internalDateRange, setInternalDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
+  // Legend hover + hidden domains
+  const [hoveredDomain, setHoveredDomain] = useState<string | null>(null);
+  const [hiddenDomains, setHiddenDomains] = useState<Set<string>>(new Set());
+  // Use external filter (from PageFilterBar) if provided, otherwise internal
+  const dateRange = externalDateRange ?? internalDateRange;
   const [selectedBrands, setSelectedBrands] = useState<string[] | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [domainTypeFilter, setDomainTypeFilter] = useState<DomainType | null>(null);
@@ -102,10 +113,12 @@ export default function DomainsClient({
     for (const c of chatFacts) set.add(c.engine);
     return Array.from(set);
   }, [chatFacts]);
-  const [selectedModels, setSelectedModels] = useState<string[]>(allEngines);
+  const [internalModels, setInternalModels] = useState<string[]>(allEngines);
+  // Use external models filter if provided, otherwise internal
+  const selectedModels = externalModels?.length ? externalModels : internalModels;
 
   const toggleModel = (m: string) => {
-    setSelectedModels((prev) =>
+    setInternalModels((prev) =>
       prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m],
     );
   };
@@ -181,8 +194,12 @@ export default function DomainsClient({
     [allDomains, selectedBrands, brandFilteredCurrent, brandFilteredPrevious],
   );
 
-  // ── Top 5 fuel the chart
-  const topDomains = useMemo(() => brandScopedDomains.slice(0, 5), [brandScopedDomains]);
+  // ── Top 5 fuel the chart (excluding user-hidden domains)
+  const allTopDomains  = useMemo(() => brandScopedDomains.slice(0, 5), [brandScopedDomains]);
+  const topDomains     = useMemo(
+    () => allTopDomains.filter(d => !hiddenDomains.has(d.domain)),
+    [allTopDomains, hiddenDomains],
+  );
 
   // ── Domain Movers
   const moversData = useMemo(() => {
@@ -210,9 +227,10 @@ export default function DomainsClient({
     () => Math.max(1, ...moversData.map((d) => d.citations)),
     [moversData],
   );
+  // Count-based series (Peec AI: "Source retrievals over time" shows raw counts)
   const chartData = useMemo(
     () =>
-      buildDomainShareSeries(
+      buildDomainCountSeries(
         brandFilteredCurrent,
         topDomains.map((d) => d.domain),
         resolution,
@@ -314,76 +332,135 @@ export default function DomainsClient({
 
       <div className="urls-overview">
         <div className="ins-chart-card urls-chart-card">
+          {/* ── Chart header — matching Peec AI style ── */}
           <div className="ins-chart-header">
-            <div className="urls-chart-title">Source Retrieved by Domain</div>
-            <div className="pd-resolution-toggle">
-              {(["D", "W", "M"] as const).map((r) => (
-                <button
-                  key={r}
-                  className={`pd-res-btn ${resolution === r ? "pd-res-active" : ""}`}
-                  onClick={() => setResolution(r)}
-                >
-                  {r}
-                </button>
-              ))}
+            <div className="urls-chart-title">Source retrievals over time</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div className="pd-resolution-toggle">
+                {(["D", "W", "M"] as const).map((r) => (
+                  <button
+                    key={r}
+                    className={`pd-res-btn ${resolution === r ? "pd-res-active" : ""}`}
+                    onClick={() => setResolution(r)}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <button className="ch-dots-btn" title="Chart options">···</button>
             </div>
           </div>
 
+          {/* ── Line chart — raw counts, matching Peec AI ── */}
           <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={chartData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+            <LineChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="4 4" stroke="rgba(0,0,0,0.05)" horizontal vertical={false} />
               <XAxis
                 dataKey="date"
                 tick={{ fontSize: 10, fill: "#94a3b8" }}
-                axisLine={{ stroke: "#e2e8f0" }}
+                axisLine={{ stroke: "#e5e7eb" }}
                 tickLine={false}
+                dy={6}
               />
               <YAxis
                 tick={{ fontSize: 10, fill: "#94a3b8" }}
                 axisLine={false}
                 tickLine={false}
-                width={36}
-                tickFormatter={(v) => `${v}%`}
-                domain={[0, 50]}
+                width={42}
+                domain={[0, "auto"]}
+                tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
               />
               <Tooltip
-                contentStyle={{
-                  background: "#0f172a",
-                  border: "1px solid #1e293b",
-                  borderRadius: 8,
-                  color: "#f1f5f9",
-                  fontSize: 11,
+                wrapperStyle={{ zIndex: 100, pointerEvents: "none" }}
+                position={{ y: 8 }}
+                cursor={{ stroke: "#94a3b8", strokeWidth: 1, strokeDasharray: "4 4" }}
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null;
+                  const sorted = [...payload]
+                    .filter(p => (p.value as number) > 0)
+                    .sort((a, b) => ((b.value as number) ?? 0) - ((a.value as number) ?? 0));
+                  return (
+                    <div className="ch-tooltip">
+                      <div className="ch-tooltip-date">{label}</div>
+                      {sorted.map(p => (
+                        <div key={p.dataKey as string} className="ch-tooltip-row">
+                          <span className="ch-tooltip-dot" style={{ background: p.color as string }} />
+                          <DomainFavicon domain={p.dataKey as string} size={13} />
+                          <span className="ch-tooltip-name">{shortDomainLabel(p.dataKey as string)}</span>
+                          <span className="ch-tooltip-val">{(p.value as number).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
                 }}
-                labelStyle={{ color: "#cbd5e1", marginBottom: 6 }}
-                formatter={(value: any, name: any) => [`${Number(value).toFixed(1)}%`, name]}
               />
-              {topDomains.map((d, i) => (
-                <Line
-                  key={d.domain}
-                  type="monotone"
-                  dataKey={d.domain}
-                  stroke={LINE_COLORS[i % LINE_COLORS.length]}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 3, strokeWidth: 0 }}
-                />
-              ))}
+              {topDomains.map((d, i) => {
+                const color   = LINE_COLORS[i % LINE_COLORS.length];
+                const isHover = hoveredDomain === d.domain;
+                const faded   = hoveredDomain !== null && !isHover;
+                return (
+                  <Line
+                    key={d.domain}
+                    type="monotone"
+                    dataKey={d.domain}
+                    stroke={color}
+                    strokeWidth={isHover ? 2.5 : 1.8}
+                    strokeOpacity={faded ? 0.12 : 1}
+                    dot={{ r: isHover ? 3 : 2.5, fill: color, strokeWidth: 0, fillOpacity: faded ? 0.12 : 1 }}
+                    activeDot={{ r: 5, strokeWidth: 0, opacity: faded ? 0.12 : 1 }}
+                    opacity={faded ? 0.12 : 1}
+                    isAnimationActive={false}
+                  />
+                );
+              })}
             </LineChart>
           </ResponsiveContainer>
 
+          {/* ── Legend ── */}
           <div className="urls-legend">
-            {topDomains.length === 0 && (
+            {allTopDomains.length === 0 && (
               <span className="urls-legend-empty">No domains retrieved in this window.</span>
             )}
-            {topDomains.map((d, i) => (
-              <span key={d.domain} className="urls-legend-chip">
+            {allTopDomains.map((d, i) => {
+              const color   = LINE_COLORS[i % LINE_COLORS.length];
+              const hidden  = hiddenDomains.has(d.domain);
+              const isHover = hoveredDomain === d.domain;
+              return (
                 <span
-                  className="urls-legend-dot"
-                  style={{ background: LINE_COLORS[i % LINE_COLORS.length] }}
-                />
-                {shortDomainLabel(d.domain)}
-              </span>
-            ))}
+                  key={d.domain}
+                  className={`urls-legend-chip ${isHover ? "urls-legend-chip--active" : ""} ${hidden ? "urls-legend-chip--hidden" : ""}`}
+                  style={isHover ? { borderColor: color } : undefined}
+                  onMouseEnter={() => setHoveredDomain(d.domain)}
+                  onMouseLeave={() => setHoveredDomain(null)}
+                  title={d.domain}
+                >
+                  <span className="urls-legend-dot" style={{ background: hidden ? "#cbd5e1" : color }} />
+                  <span className="urls-legend-label">{shortDomainLabel(d.domain)}</span>
+                  {/* Full domain tooltip on hover */}
+                  {isHover && (
+                    <span className="urls-legend-full-domain">{d.domain}</span>
+                  )}
+                  {/* × button to toggle domain visibility */}
+                  {isHover && (
+                    <button
+                      className="urls-legend-remove"
+                      onClick={e => {
+                        e.stopPropagation();
+                        setHiddenDomains(prev => {
+                          const next = new Set(prev);
+                          if (next.has(d.domain)) next.delete(d.domain);
+                          else next.add(d.domain);
+                          return next;
+                        });
+                      }}
+                      title={hidden ? "Show domain" : "Hide domain"}
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              );
+            })}
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import BrandColorPicker from "./BrandColorPicker";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, MoreHorizontal, Check, X,
@@ -41,6 +42,7 @@ interface Brand {
   id: string;
   name: string;
   isOwn?: boolean;
+  color?: string | null;
   aliases: string[];
   domains: string[];
   mentions?: number;
@@ -107,17 +109,24 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 }
 
 // ─── BrandRow ────────────────────────────────────────────────────────────────
-function BrandRow({ brand, openMenu, onMenu, onDelete }: {
+function BrandRow({ brand, openMenu, onMenu, onDelete, onColorDotClick }: {
   brand: Brand;
   openMenu: string | null;
   onMenu: (id: string) => void;
   onDelete: (id: string) => void;
+  onColorDotClick: (id: string, e: React.MouseEvent) => void;
 }) {
-  const color = colorFromId(brand.id);
+  const paletteColor = colorFromId(brand.id);
+  const color = brand.color ?? paletteColor;
   return (
     <tr className="bp-row">
       <td className="bp-td bp-td--color">
-        <span className="bp-dot" style={{ background: color }} />
+        <span
+          className="brand-color-dot"
+          style={{ background: color, width: 18, height: 18, borderRadius: "50%" }}
+          title="Change brand color"
+          onClick={e => onColorDotClick(brand.id, e)}
+        />
       </td>
       <td className="bp-td">
         <div className="bp-name-cell">
@@ -201,12 +210,13 @@ function normalizeDomain(raw: string): string {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 export default function BrandsClient({
-  initialBrands, initialSuggestions, projectId, workspaceId,
+  initialBrands, initialSuggestions, projectId, workspaceId, updateBrandColorAction,
 }: {
   initialBrands: Brand[];
   initialSuggestions: Suggestion[];
   projectId: string;
   workspaceId: string;
+  updateBrandColorAction?: (brandId: string, color: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const router = useRouter();
 
@@ -214,6 +224,16 @@ export default function BrandsClient({
   const [suggestions, setSuggestions] = useState<Suggestion[]>(initialSuggestions);
   const [search,      setSearch]      = useState("");
   const [openMenu,    setOpenMenu]    = useState<string | null>(null);
+  const [pickerInfo, setPickerInfo] = useState<{ id: string; pos: { top: number; left: number } } | null>(null);
+
+  function openPickerAt(brandId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (pickerInfo?.id === brandId) { setPickerInfo(null); return; }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const top  = window.innerHeight - rect.bottom > 300 ? rect.bottom + 8 : rect.top - 300;
+    const left = Math.max(8, Math.min(rect.right + 8, window.innerWidth - 230));
+    setPickerInfo({ id: brandId, pos: { top, left } });
+  }
   const { isOpen: modal, open: openModal, close: closeModal } = useBrandsModal();
 
   const [sortField, setSortField] = useState<SortField>("mentions");
@@ -369,15 +389,33 @@ export default function BrandsClient({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((brand) => (
-                    <BrandRow
-                      key={brand.id}
-                      brand={brand}
-                      openMenu={openMenu}
-                      onMenu={(id) => setOpenMenu(openMenu === id ? null : id)}
-                      onDelete={doDelete}
-                    />
-                  ))}
+                  {rows.map((brand) => {
+                    const brandColor = brand.color ?? colorFromId(brand.id);
+                    return (
+                      <>
+                        <BrandRow
+                          key={brand.id}
+                          brand={brand}
+                          openMenu={openMenu}
+                          onMenu={(id) => setOpenMenu(openMenu === id ? null : id)}
+                          onDelete={doDelete}
+                          onColorDotClick={(id, e) => openPickerAt(id, e)}
+                        />
+                        {pickerInfo?.id === brand.id && (
+                          <BrandColorPicker
+                            key={`picker-${brand.id}`}
+                            color={brandColor}
+                            position={pickerInfo.pos}
+                            onChange={async (color) => {
+                              setBrands(prev => prev.map(b => b.id === brand.id ? { ...b, color } : b));
+                              await updateBrandColorAction?.(brand.id, color);
+                            }}
+                            onClose={() => setPickerInfo(null)}
+                          />
+                        )}
+                      </>
+                    );
+                  })}
                 </tbody>
               </table>
             )}

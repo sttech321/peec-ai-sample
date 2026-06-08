@@ -26,6 +26,9 @@ interface Props {
   updateBrandFilterAction: (hiddenBrandIds: string[] | null) => Promise<{ ok: boolean; error?: string }>;
   initialDomainTypeOverrides: Record<string, string>;
   updateDomainTypeOverrideAction: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
+  availableEngines?: string[];
+  initialBrandColors: Record<string, string>;
+  updateBrandColorAction: (brandId: string, color: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 function makeDefaultDateRange(): PageFilterDateRange {
@@ -36,8 +39,6 @@ function makeDefaultDateRange(): PageFilterDateRange {
   start.setHours(0, 0, 0, 0);
   return { start, end, preset: "7", label: "Last 7 days" };
 }
-
-const ALL_ENGINES = ["ChatGPT", "Claude", "Perplexity", "Gemini", "AI Overviews"];
 
 export default function OverviewWrapper({
   projectName,
@@ -50,33 +51,46 @@ export default function OverviewWrapper({
   updateBrandFilterAction,
   initialDomainTypeOverrides,
   updateDomainTypeOverrideAction,
+  availableEngines,
+  initialBrandColors,
+  updateBrandColorAction,
 }: Props) {
-  const [dateRange, setDateRange] = useState<PageFilterDateRange>(makeDefaultDateRange);
-  const [selectedModels, setSelectedModels] = useState<string[]>(ALL_ENGINES);
+  const [dateRange, setDateRange]     = useState<PageFilterDateRange>(makeDefaultDateRange);
+  // Initialize with availableEngines from DB; fallback to engines in chatFacts; finally []
+  const [selectedModels, setSelectedModels] = useState<string[]>(() => {
+    if (availableEngines?.length) return availableEngines;
+    // Derive from chatFacts if availableEngines not provided
+    const fromData = [...new Set(chatFacts.map((c) => c.engine))];
+    return fromData.length ? fromData : [];
+  });
 
-  // Initialize selectedBrandIds from DB hidden list:
-  // null = all brands visible, array = only these IDs are visible
+  // Brand filter — initialize from DB
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(() => {
-    if (!initialHiddenBrandIds || initialHiddenBrandIds.length === 0) return null;
-    // Select all brands EXCEPT the hidden ones
+    if (!initialHiddenBrandIds?.length) return null;
     const visibleIds = filterBrands
       .filter((b) => !initialHiddenBrandIds.includes(b.name))
       .map((b) => b.id);
     return visibleIds.length === filterBrands.length ? null : visibleIds;
   });
 
-  // Called by PageFilterBar when user checks/unchecks brands
+  // Brand color overrides — initialize from DB saved colors
+  const [brandColorOverrides, setBrandColorOverrides] = useState<Record<string, string>>(initialBrandColors);
+
   async function handleBrandsChange(ids: string[] | null) {
     setSelectedBrandIds(ids);
-    // Convert visible IDs → hidden brand names → save to DB
-    const hiddenNames =
-      ids === null
-        ? []
-        : filterBrands.filter((b) => !ids.includes(b.id)).map((b) => b.name);
+    const hiddenNames = ids === null
+      ? []
+      : filterBrands.filter((b) => !ids.includes(b.id)).map((b) => b.name);
     await updateBrandFilterAction(hiddenNames.length > 0 ? hiddenNames : null);
   }
 
-  // Convert selected brand IDs → brand names for OverviewClient filtering
+  async function handleBrandColorChange(brandName: string, color: string) {
+    setBrandColorOverrides(prev => ({ ...prev, [brandName]: color }));
+    // Look up brand ID from filterBrands list
+    const brand = filterBrands.find(b => b.name === brandName);
+    if (brand) await updateBrandColorAction(brand.id, color);
+  }
+
   const selectedBrandNames: string[] | null =
     selectedBrandIds === null
       ? null
@@ -84,9 +98,8 @@ export default function OverviewWrapper({
           .map((id) => filterBrands.find((b) => b.id === id)?.name)
           .filter((n): n is string => !!n);
 
-  // Initial brand IDs to pass to PageFilterBar so UI stays in sync after refresh
   const initialBrandIds: string[] | null =
-    !initialHiddenBrandIds || initialHiddenBrandIds.length === 0
+    !initialHiddenBrandIds?.length
       ? null
       : filterBrands
           .filter((b) => !initialHiddenBrandIds.includes(b.name))
@@ -103,6 +116,7 @@ export default function OverviewWrapper({
         onModelsChange={setSelectedModels}
         onBrandsChange={handleBrandsChange}
         initialBrands={initialBrandIds}
+        initialModels={availableEngines}
       />
       <OverviewClient
         chatFacts={chatFacts}
@@ -115,6 +129,8 @@ export default function OverviewWrapper({
         }}
         initialDomainTypeOverrides={initialDomainTypeOverrides}
         updateDomainTypeOverrideAction={updateDomainTypeOverrideAction}
+        brandColorOverrides={brandColorOverrides}
+        onBrandColorChange={handleBrandColorChange}
       />
     </>
   );

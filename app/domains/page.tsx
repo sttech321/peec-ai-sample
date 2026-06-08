@@ -1,6 +1,5 @@
 import DashboardLayout from "../../components/DashboardLayout";
-import DomainsClient from "../../components/DomainsClient";
-import PageFilterBar from "../../components/PageFilterBar";
+import DomainsWrapper from "../../components/DomainsWrapper";
 import { db } from "../../db";
 import { projects, brands, brandProfiles } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
@@ -64,20 +63,21 @@ export default async function DomainsPage() {
     getPageFilterData(activeProjectId),
   ]);
 
+  // Derive available engines from actual data (dynamic, not hardcoded)
+  const availableEngines = [...new Set(chatFacts.map((c) => c.engine))].sort();
+
   return (
     <DashboardLayout currentPath="/domains">
-      <PageFilterBar
+      <DomainsWrapper
         projectName={projectName}
-        projectBrands={filterData.projectBrands}
-        availableTags={filterData.availableTags}
-        addBrandAction={addBrand}
-      />
-      <DomainsClient
         chatFacts={chatFacts}
-        projectName={projectName}
         projectBrands={projectBrands}
+        filterBrands={filterData.projectBrands}
+        availableTags={filterData.availableTags}
         ownDomains={ownDomains}
         competitorDomains={competitorDomains}
+        addBrandAction={addBrand}
+        availableEngines={availableEngines}
       />
     </DashboardLayout>
   );
