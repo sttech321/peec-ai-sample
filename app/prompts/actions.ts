@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getActiveProjectId, getWorkspaceId } from "../../lib/project-context";
 import { runPipelineForAllEngines, type PipelineJob } from "../../lib/run-pipeline";
 import { DEFAULT_ENGINES } from "../../lib/ai-clients";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 
 export async function addPrompt(formData: FormData) {
   const query = formData.get("query") as string;
@@ -15,6 +15,14 @@ export async function addPrompt(formData: FormData) {
   if (!query || query.trim() === "") return;
 
   const projectId = await getActiveProjectId();
+
+  // Duplicate check — same query in same project not allowed
+  const duplicate = await db
+    .select({ id: prompts.id })
+    .from(prompts)
+    .where(and(eq(prompts.projectId, projectId), eq(prompts.query, query.trim())))
+    .limit(1);
+  if (duplicate.length > 0) return; // silently skip — already tracked
 
   let topic = await db.query.topics.findFirst({
     where: (t, { eq }) => eq(t.projectId, projectId),
@@ -32,7 +40,7 @@ export async function addPrompt(formData: FormData) {
     workspaceId,
     projectId,
     topicId: topic.id,
-    query,
+    query: query.trim(),
     volumeTier: "Medium",
   });
 
@@ -73,15 +81,25 @@ export async function createTopic(args: {
 
   const stems = generatePromptStems(name, count, args.location, args.language);
   if (stems.length > 0) {
-    await db.insert(prompts).values(
-      stems.map((q) => ({
-        workspaceId,
-        projectId,
-        topicId: inserted.id,
-        query: q,
-        volumeTier: "Medium" as const,
-      })),
-    );
+    // Filter out any stems that already exist in this project
+    const existingRows = await db
+      .select({ query: prompts.query })
+      .from(prompts)
+      .where(eq(prompts.projectId, projectId));
+    const existingSet = new Set(existingRows.map(r => r.query.toLowerCase().trim()));
+    const uniqueStems = stems.filter(q => !existingSet.has(q.toLowerCase().trim()));
+
+    if (uniqueStems.length > 0) {
+      await db.insert(prompts).values(
+        uniqueStems.map((q) => ({
+          workspaceId,
+          projectId,
+          topicId: inserted.id,
+          query: q,
+          volumeTier: "Medium" as const,
+        })),
+      );
+    }
   }
 
   revalidatePath("/prompts");
@@ -290,7 +308,7 @@ export async function addPromptsBulk(args: {
   topicId: string | null;
   location: string;
   tagIds: string[];
-}): Promise<{ ok: boolean; inserted: number; error?: string; newPrompts?: { id: string; query: string }[] }> {
+}): Promise<{ ok: boolean; inserted: number; skipped?: number; error?: string; newPrompts?: { id: string; query: string }[] }> {
   const workspaceId = await getWorkspaceId();
   const projectId = await getActiveProjectId();
 
@@ -299,6 +317,20 @@ export async function addPromptsBulk(args: {
     .filter((t) => t.length > 0 && t.length <= 200);
   if (cleaned.length === 0) return { ok: false, inserted: 0, error: "No valid prompts" };
 
+  // Pre-load existing queries for this project (single DB call)
+  const existingRows = await db
+    .select({ query: prompts.query })
+    .from(prompts)
+    .where(eq(prompts.projectId, projectId));
+  const existingSet = new Set(existingRows.map(r => r.query.toLowerCase().trim()));
+
+  const skipped = cleaned.filter(q => existingSet.has(q.toLowerCase()));
+  const unique  = cleaned.filter(q => !existingSet.has(q.toLowerCase()));
+
+  if (unique.length === 0) {
+    return { ok: false, inserted: 0, error: `All ${skipped.length} prompt(s) already exist in this project` };
+  }
+
   let topicId = args.topicId;
   if (!topicId) {
     let general = await db.query.topics.findFirst({
@@ -306,11 +338,11 @@ export async function addPromptsBulk(args: {
         and(eq(t.projectId, projectId), eq(t.name, "General Topic")),
     });
     if (!general) {
-      const [inserted] = await db
+      const [ins] = await db
         .insert(topics)
         .values({ workspaceId, projectId, name: "General Topic" })
         .returning();
-      general = inserted;
+      general = ins;
     }
     topicId = general.id;
   }
@@ -319,7 +351,7 @@ export async function addPromptsBulk(args: {
   const inserted = await db
     .insert(prompts)
     .values(
-      cleaned.map((q) => ({
+      unique.map((q) => ({
         workspaceId,
         projectId,
         topicId: topicId!,
@@ -345,7 +377,8 @@ export async function addPromptsBulk(args: {
   return {
     ok: true,
     inserted: inserted.length,
-    newPrompts: inserted.map((p, i) => ({ id: p.id, query: cleaned[i] })),
+    skipped: skipped.length,
+    newPrompts: inserted.map((p, i) => ({ id: p.id, query: unique[i] })),
   };
 }
 
@@ -389,6 +422,13 @@ export async function addPromptsFromCsv(args: {
   const useHeaders  = promptCol >= 0;
 
   const dataRows = rows.slice(1).filter((r) => r.length > 0 && r[promptCol >= 0 ? promptCol : 0]?.trim());
+
+  // Pre-load existing prompts for deduplication (single query)
+  const existingPromptRows = await db
+    .select({ query: prompts.query })
+    .from(prompts)
+    .where(eq(prompts.projectId, projectId));
+  const existingPromptSet = new Set(existingPromptRows.map(r => r.query.toLowerCase().trim()));
 
   // Pre-build topic + tag caches so each row doesn't hit the DB on its own.
   const existingTopics = await db
@@ -476,6 +516,7 @@ export async function addPromptsFromCsv(args: {
     }
 
     if (!promptText || promptText.length > 200) continue;
+    if (existingPromptSet.has(promptText.toLowerCase())) continue; // skip duplicate
 
     let topicId: string;
     if (topicName) topicId = await ensureTopic(topicName);
@@ -483,6 +524,8 @@ export async function addPromptsFromCsv(args: {
       if (!defaultTopicId) defaultTopicId = await ensureTopic("General Topic");
       topicId = defaultTopicId;
     }
+
+    existingPromptSet.add(promptText.toLowerCase()); // prevent intra-batch duplicates
 
     const [createdPrompt] = await db
       .insert(prompts)
@@ -527,6 +570,13 @@ export async function addPromptsFromParsed(args: {
   );
   if (validItems.length === 0) return { ok: false, inserted: 0, error: "No valid prompts found" };
 
+  // Pre-load existing prompts for deduplication
+  const existingPromptRows = await db
+    .select({ query: prompts.query })
+    .from(prompts)
+    .where(eq(prompts.projectId, projectId));
+  const existingPromptSet = new Set(existingPromptRows.map(r => r.query.toLowerCase().trim()));
+
   const existingTopics = await db
     .select({ id: topics.id, name: topics.name })
     .from(topics)
@@ -561,12 +611,17 @@ export async function addPromptsFromParsed(args: {
   let inserted = 0;
   const newPromptsList: { id: string; query: string }[] = [];
   for (const item of validItems) {
+    const queryText = item.prompt.trim();
+    if (existingPromptSet.has(queryText.toLowerCase())) continue; // skip duplicate
+
     const topicId = await ensureTopic(item.topic);
     const location = (item.location || "US").toUpperCase().slice(0, 2);
 
+    existingPromptSet.add(queryText.toLowerCase()); // prevent intra-batch duplicates
+
     const [created] = await db
       .insert(prompts)
-      .values({ workspaceId, projectId, topicId, query: item.prompt.trim(), volumeTier: "Medium", location })
+      .values({ workspaceId, projectId, topicId, query: queryText, volumeTier: "Medium", location })
       .returning({ id: prompts.id });
 
     const validTags = item.tags.filter(
@@ -576,7 +631,7 @@ export async function addPromptsFromParsed(args: {
       const tagIds = await Promise.all(validTags.map(ensureTag));
       await db.insert(promptTags).values(tagIds.map((tagId) => ({ workspaceId, promptId: created.id, tagId })));
     }
-    newPromptsList.push({ id: created.id, query: item.prompt.trim() });
+    newPromptsList.push({ id: created.id, query: queryText });
     inserted++;
   }
 

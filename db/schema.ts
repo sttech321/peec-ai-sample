@@ -117,9 +117,10 @@ export const prompts = pgTable("prompts", {
   location: varchar("location", { length: 2 }).default("US").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
-  workspaceIdx: index("prompts_workspace_idx").on(t.workspaceId),
-  projectIdx: index("prompts_project_idx").on(t.projectId),
-  topicIdx: index("prompts_topic_idx").on(t.topicId),
+  workspaceIdx:      index("prompts_workspace_idx").on(t.workspaceId),
+  projectIdx:        index("prompts_project_idx").on(t.projectId),
+  topicIdx:          index("prompts_topic_idx").on(t.topicId),
+  queryProjectIdx:   uniqueIndex("prompts_query_project_idx").on(t.projectId, t.query), // prevent duplicate prompts
 }));
 
 // ─── Tags ─────────────────────────────────────────────────────────────────────
