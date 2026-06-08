@@ -5,10 +5,12 @@ import {
   citations,
   brandMentions,
   brands,
+  brandSuggestions,
   prompts,
 } from "../db/schema";
 import { and, eq, or, sql } from "drizzle-orm";
 import { callAIEngine, extractBrandsWithLLM } from "./ai-clients";
+import { guessBrandDomain } from "./brand-domain";
 
 export type PipelineJob = {
   workspaceId: string;
@@ -137,33 +139,50 @@ export async function runPipelineForOneEngine(job: PipelineJob): Promise<void> {
         ))
         .limit(1);
 
-      let brandId: string;
       if (existingBrand.length > 0) {
-        brandId = existingBrand[0].id;
+        // ── Tracked brand → record mention normally ────────────────────────
+        const brandId = existingBrand[0].id;
+        await db.insert(brandMentions).values({
+          workspaceId, chatId,
+          brandId,
+          position:    typeof brand.position   === "number" ? brand.position   : null,
+          sentiment:   typeof brand.sentiment  === "number" ? brand.sentiment  : null,
+          confidence:  typeof brand.confidence === "number" ? brand.confidence : null,
+          mentionText: brand.mentionText || brandName,
+        });
       } else {
-        // Auto-create brand so mention is recorded immediately (visibility works)
-        const [created] = await db
-          .insert(brands)
-          .values({
+        // ── Untracked brand → upsert to suggestions (not auto-create) ──────
+        const domain = guessBrandDomain(brandName);
+        const [existingSug] = await db
+          .select({ id: brandSuggestions.id, mentions: brandSuggestions.mentions })
+          .from(brandSuggestions)
+          .where(and(
+            eq(brandSuggestions.projectId, projectId),
+            sql`lower(${brandSuggestions.name}) = lower(${brandName})`,
+          ))
+          .limit(1);
+
+        if (existingSug) {
+          // Increment mention count
+          await db
+            .update(brandSuggestions)
+            .set({
+              mentions: (existingSug.mentions ?? 0) + 1,
+              updatedAt: new Date(),
+            })
+            .where(eq(brandSuggestions.id, existingSug.id));
+        } else {
+          // New suggestion
+          await db.insert(brandSuggestions).values({
             workspaceId,
             projectId,
             name: brandName,
-            isOwn: false,
-            aliases: [],
-            domains: [],
-          })
-          .returning({ id: brands.id });
-        brandId = created.id;
+            domain: domain ?? null,
+            mentions: 1,
+            status: "pending",
+          }).onConflictDoNothing();
+        }
       }
-
-      await db.insert(brandMentions).values({
-        workspaceId, chatId,
-        brandId,
-        position:    typeof brand.position   === "number" ? brand.position   : null,
-        sentiment:   typeof brand.sentiment  === "number" ? brand.sentiment  : null,
-        confidence:  typeof brand.confidence === "number" ? brand.confidence : null,
-        mentionText: brand.mentionText || brandName,
-      });
     }
   }, `persist-brand-mentions [${engine}]`);
 
