@@ -509,6 +509,69 @@ export function buildPerformanceMatrix(
   return out;
 }
 
+/**
+ * Performance matrix grouped by topic or tag instead of engine.
+ * groupMap: chatId → groupKey (topics) or chatId → groupKey[] (tags)
+ * Returns same BrandEngineCell shape — "engine" field holds the group key.
+ */
+export function buildPerformanceMatrixByGroup(
+  chats: ChatFact[],
+  brandNames: string[],
+  groupMap: Record<string, string | string[]>,
+): BrandEngineCell[] {
+  // Collect unique group keys
+  const allGroups = new Set<string>();
+  for (const val of Object.values(groupMap)) {
+    if (Array.isArray(val)) val.forEach(v => allGroups.add(v));
+    else allGroups.add(val);
+  }
+
+  const out: BrandEngineCell[] = [];
+
+  for (const group of allGroups) {
+    const groupChats = chats.filter(c => {
+      const v = groupMap[c.id];
+      if (!v) return false;
+      return Array.isArray(v) ? v.includes(group) : v === group;
+    });
+
+    const total = groupChats.length;
+    const brandStats = new Map<string, { hits: number; sentSum: number; sentN: number; posSum: number; posN: number }>();
+    let totalMentions = 0;
+
+    for (const c of groupChats) {
+      const seen = new Set<string>();
+      for (const b of c.brands) {
+        if (seen.has(b.name)) continue;
+        seen.add(b.name);
+        totalMentions++;
+        if (!brandNames.includes(b.name)) continue;
+        let s = brandStats.get(b.name);
+        if (!s) { s = { hits: 0, sentSum: 0, sentN: 0, posSum: 0, posN: 0 }; brandStats.set(b.name, s); }
+        s.hits += 1;
+        if (b.sentiment != null) { s.sentSum += b.sentiment; s.sentN += 1; }
+        if (b.position  != null) { s.posSum  += b.position;  s.posN  += 1; }
+      }
+    }
+
+    for (const brand of brandNames) {
+      const s = brandStats.get(brand);
+      const h = s?.hits || 0;
+      out.push({
+        brand,
+        engine: group, // group key stored in "engine" field
+        hits: h,
+        total,
+        visibility: total > 0 ? (h / total) * 100 : 0,
+        sentiment:  s && s.sentN > 0 ? s.sentSum / s.sentN : 0,
+        position:   s && s.posN  > 0 ? s.posSum  / s.posN  : 0,
+        sov:        totalMentions > 0 ? (h / totalMentions) * 100 : 0,
+      });
+    }
+  }
+  return out;
+}
+
 /** Generic top-N per engine, sortable by any metric. */
 export interface RankEntry {
   brand: string;

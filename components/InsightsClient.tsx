@@ -15,7 +15,8 @@ import {
   filterByEngines, filterByDateRange,
   buildVisibilitySeries, buildSentimentSeries, buildPositionSeries,
   buildSovSeries, buildDomainRetrievalSeries,
-  buildPerformanceMatrix, buildTopRankings, buildTopRankingsBy, buildTopRankingsByGroup,
+  buildPerformanceMatrix, buildPerformanceMatrixByGroup,
+  buildTopRankings, buildTopRankingsBy, buildTopRankingsByGroup,
   computeBrandKpis, previousPeriod,
 } from "../lib/chat-aggregations";
 
@@ -149,7 +150,7 @@ export default function InsightsClient({
   function hideRankTooltip() { setRankHover(null); }
 
   // ── Feature 1: X/Y Axis switcher ──────────────────────────────────────
-  type MatrixAxis = "models" | "brands";
+  type MatrixAxis = "models" | "brands" | "topics" | "tags";
   const [matrixXAxis, setMatrixXAxis] = useState<MatrixAxis>("models");
   const [axisSwitcherOpen, setAxisSwitcherOpen] = useState(false);
   const axisSwitcherRef = useRef<HTMLDivElement>(null);
@@ -324,10 +325,26 @@ export default function InsightsClient({
     [selectedModels, visibleMatrixEngines],
   );
 
-  const matrixCells = useMemo(
-    () => buildPerformanceMatrix(filteredChats, activeMatrixBrands, activeMatrixEngines),
-    [filteredChats, activeMatrixBrands, activeMatrixEngines],
-  );
+  // Derive which group keys are active for the X-axis
+  const activeXGroups = useMemo(() => {
+    if (matrixXAxis === "models") return activeMatrixEngines;
+    if (matrixXAxis === "brands") return activeMatrixBrands;
+    // For topics/tags, derive unique group keys from chatTopicMap/chatTagsMap
+    const map = matrixXAxis === "topics" ? chatTopicMap : chatTagsMap;
+    const keys = new Set<string>();
+    for (const val of Object.values(map)) {
+      if (Array.isArray(val)) val.forEach(v => keys.add(v));
+      else keys.add(val as string);
+    }
+    return [...keys].sort();
+  }, [matrixXAxis, activeMatrixEngines, activeMatrixBrands, chatTopicMap, chatTagsMap]);
+
+  const matrixCells = useMemo(() => {
+    if (matrixXAxis === "topics") return buildPerformanceMatrixByGroup(filteredChats, activeMatrixBrands, chatTopicMap);
+    if (matrixXAxis === "tags")   return buildPerformanceMatrixByGroup(filteredChats, activeMatrixBrands, chatTagsMap);
+    // models or brands (swapped axes handled in render)
+    return buildPerformanceMatrix(filteredChats, activeMatrixBrands, activeMatrixEngines);
+  }, [filteredChats, activeMatrixBrands, activeMatrixEngines, matrixXAxis, chatTopicMap, chatTagsMap]);
 
   // ── Matrix sort state ─────────────────────────────────────────────────
   const [matrixSortEngine, setMatrixSortEngine] = useState<string | null>(null); // null = sort by row label
@@ -644,37 +661,50 @@ export default function InsightsClient({
                 className="pd-filter-chip"
                 onClick={() => setAxisSwitcherOpen(v => !v)}
               >
-                {matrixXAxis === "models" ? "AI models vs Brands" : "Brands vs AI models"}
+                {matrixXAxis === "models" ? "AI models vs Brands" :
+                 matrixXAxis === "brands" ? "Brands vs AI models" :
+                 matrixXAxis === "topics" ? "Topics vs Brands" : "Tags vs Brands"}
                 <ChevronDown size={11} />
               </button>
               {axisSwitcherOpen && (
                 <div className="ins-axis-menu">
                   <div className="ins-axis-section-label">X-axis · Columns</div>
-                  {(["models", "brands"] as MatrixAxis[]).map(opt => (
+                  {([
+                    { key: "models" as MatrixAxis, label: "AI models", icon: "⊙" },
+                    { key: "brands" as MatrixAxis, label: "Brands",    icon: "⊞" },
+                    { key: "topics" as MatrixAxis, label: "Topics",    icon: "◎" },
+                    { key: "tags"   as MatrixAxis, label: "Tags",      icon: "◈" },
+                  ]).map(opt => (
                     <button
-                      key={opt}
-                      className={`ins-axis-option ${matrixXAxis === opt ? "ins-axis-option--active" : ""}`}
-                      onClick={() => { setMatrixXAxis(opt); setAxisSwitcherOpen(false); }}
+                      key={opt.key}
+                      className={`ins-axis-option ${matrixXAxis === opt.key ? "ins-axis-option--active" : ""}`}
+                      onClick={() => { setMatrixXAxis(opt.key); setAxisSwitcherOpen(false); }}
                     >
-                      <span className="ins-axis-icon">{opt === "models" ? "⊙" : "⊞"}</span>
-                      {opt === "models" ? "AI models" : "Brands"}
-                      {matrixXAxis === opt && <Check size={12} style={{ marginLeft: "auto" }} />}
+                      <span className="ins-axis-icon">{opt.icon}</span>
+                      {opt.label}
+                      {matrixXAxis === opt.key && <Check size={12} style={{ marginLeft: "auto" }} />}
                     </button>
                   ))}
                   <div className="ins-axis-sep" />
                   <div className="ins-axis-section-label">Y-axis · Rows</div>
-                  {(["brands", "models"] as MatrixAxis[]).map(opt => {
-                    const yAxis: MatrixAxis = matrixXAxis === "models" ? "brands" : "models";
-                    const isActive = yAxis === opt;
+                  {([
+                    { key: "models" as MatrixAxis, label: "AI models", icon: "⊙" },
+                    { key: "brands" as MatrixAxis, label: "Brands",    icon: "⊞" },
+                    { key: "topics" as MatrixAxis, label: "Topics",    icon: "◎" },
+                    { key: "tags"   as MatrixAxis, label: "Tags",      icon: "◈" },
+                  ]).map(opt => {
+                    // Y-axis auto-set: always Brands when X is not Brands, else AI models
+                    const yAxis: MatrixAxis = matrixXAxis === "brands" ? "models" : "brands";
+                    const isActive = yAxis === opt.key;
                     return (
                       <button
-                        key={opt}
+                        key={opt.key}
                         className={`ins-axis-option ${isActive ? "ins-axis-option--active" : ""}`}
                         disabled
-                        style={{ opacity: isActive ? 1 : 0.45 }}
+                        style={{ opacity: isActive ? 1 : 0.4 }}
                       >
-                        <span className="ins-axis-icon">{opt === "models" ? "⊙" : "⊞"}</span>
-                        {opt === "models" ? "AI models" : "Brands"}
+                        <span className="ins-axis-icon">{opt.icon}</span>
+                        {opt.label}
                         {isActive && <Check size={12} style={{ marginLeft: "auto" }} />}
                       </button>
                     );
@@ -788,13 +818,12 @@ export default function InsightsClient({
                 <tr>
                   {matrixXAxis === "models" ? (
                     <>
-                      {/* Brands row-header with sort toggle */}
                       <th className="ins-matrix-rowhead">
                         <button className="ins-matrix-sort-btn" onClick={() => toggleMatrixSort(null)}>
                           Brands {matrixSortEngine === null ? (matrixSortDir === "desc" ? "↓" : "↑") : "↕"}
                         </button>
                       </th>
-                      {activeMatrixEngines.map(m => (
+                      {activeXGroups.map(m => (
                         <th key={m}>
                           <button className="ins-matrix-sort-btn" onClick={() => toggleMatrixSort(m)}>
                             {m} {matrixSortEngine === m ? (matrixSortDir === "desc" ? "↓" : "↑") : "↕"}
@@ -802,7 +831,7 @@ export default function InsightsClient({
                         </th>
                       ))}
                     </>
-                  ) : (
+                  ) : matrixXAxis === "brands" ? (
                     <>
                       <th className="ins-matrix-rowhead">AI models</th>
                       {activeMatrixBrands.map(b => (
@@ -813,13 +842,30 @@ export default function InsightsClient({
                         </th>
                       ))}
                     </>
+                  ) : (
+                    /* Topics or Tags — group key as columns */
+                    <>
+                      <th className="ins-matrix-rowhead">
+                        <button className="ins-matrix-sort-btn" onClick={() => toggleMatrixSort(null)}>
+                          Brands {matrixSortEngine === null ? (matrixSortDir === "desc" ? "↓" : "↑") : "↕"}
+                        </button>
+                      </th>
+                      {activeXGroups.map(g => (
+                        <th key={g}>
+                          <button className="ins-matrix-sort-btn" onClick={() => toggleMatrixSort(g)}>
+                            {g} {matrixSortEngine === g ? (matrixSortDir === "desc" ? "↓" : "↑") : "↕"}
+                          </button>
+                        </th>
+                      ))}
+                    </>
                   )}
                 </tr>
               </thead>
               <tbody>
-                {matrixXAxis === "models" ? (
+                {matrixXAxis === "models" || matrixXAxis === "topics" || matrixXAxis === "tags" ? (
+                  /* Brands as rows, groups as columns */
                   sortedMatrixBrands.length === 0 ? (
-                    <tr><td className="ins-empty" colSpan={activeMatrixEngines.length + 1}>No data for this filter combination.</td></tr>
+                    <tr><td className="ins-empty" colSpan={activeXGroups.length + 1}>No data for this filter combination.</td></tr>
                   ) : sortedMatrixBrands.map(brand => {
                     const isYou = brand === yourBrand;
                     return (
@@ -828,10 +874,10 @@ export default function InsightsClient({
                           {brand}
                           {isYou && <span className="ins-you-pill">You</span>}
                         </td>
-                        {activeMatrixEngines.map(engine => {
-                          const cell = cellFor(brand, engine);
+                        {activeXGroups.map(group => {
+                          const cell = cellFor(brand, group);
                           return (
-                            <td key={engine}>
+                            <td key={group}>
                               <div className={`ins-heat ins-heat-${getHeatClass(cell)}`}>
                                 {getDisplayVal(cell)}
                               </div>
@@ -842,6 +888,7 @@ export default function InsightsClient({
                     );
                   })
                 ) : (
+                  /* Brands axis: engines as rows, brands as columns */
                   activeMatrixEngines.length === 0 ? (
                     <tr><td className="ins-empty" colSpan={activeMatrixBrands.length + 1}>No data for this filter combination.</td></tr>
                   ) : activeMatrixEngines.map(engine => (
