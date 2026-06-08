@@ -232,10 +232,22 @@ function BrandFilterDropdown({
     return () => window.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Split into own (tracked) brand and all others
+  const trackedBrands = useMemo(() => brands.filter((b) => b.isOwn), [brands]);
+  const otherBrands   = useMemo(() => brands.filter((b) => !b.isOwn), [brands]);
+
+  const q = query.toLowerCase();
+  const filteredTracked = useMemo(
+    () => (q ? trackedBrands.filter((b) => b.name.toLowerCase().includes(q)) : trackedBrands),
+    [trackedBrands, q],
+  );
+  const filteredOthers = useMemo(
+    () => (q ? otherBrands.filter((b) => b.name.toLowerCase().includes(q)) : otherBrands),
+    [otherBrands, q],
+  );
   const filtered = useMemo(
-    () =>
-      brands.filter((b) => b.name.toLowerCase().includes(query.toLowerCase())),
-    [brands, query],
+    () => [...filteredTracked, ...filteredOthers],
+    [filteredTracked, filteredOthers],
   );
 
   const allSelected = selectedIds === null;
@@ -305,21 +317,54 @@ function BrandFilterDropdown({
             {filtered.length === 0 && (
               <div className="pp-dd-empty">No brands found</div>
             )}
-            {filtered.map((b) => {
-              const checked =
-                selectedIds === null ? true : selectedIds.includes(b.id);
-              return (
-                <label key={b.id} className="pp-brand-item">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleBrand(b.id)}
-                  />
-                  <BrandRowFavicon name={b.name} domain={b.domain} />
-                  <span className="pp-brand-name">{b.name}</span>
-                </label>
-              );
-            })}
+
+            {/* ── Tracked brand (isOwn) section ─────────────────── */}
+            {filteredTracked.length > 0 && (
+              <>
+                <div className="pp-brand-section-label">Tracked brand</div>
+                {filteredTracked.map((b) => {
+                  const checked = selectedIds === null ? true : selectedIds.includes(b.id);
+                  return (
+                    <label key={b.id} className="pp-brand-item">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleBrand(b.id)}
+                      />
+                      <BrandRowFavicon name={b.name} domain={b.domain} />
+                      <span className="pp-brand-name">{b.name}</span>
+                      {b.isOwn && (
+                        <span className="pp-brand-you-badge">You</span>
+                      )}
+                    </label>
+                  );
+                })}
+                {filteredOthers.length > 0 && (
+                  <div className="pp-brand-section-divider" />
+                )}
+              </>
+            )}
+
+            {/* ── All other brands section ───────────────────────── */}
+            {filteredOthers.length > 0 && (
+              <>
+                <div className="pp-brand-section-label">All brands</div>
+                {filteredOthers.map((b) => {
+                  const checked = selectedIds === null ? true : selectedIds.includes(b.id);
+                  return (
+                    <label key={b.id} className="pp-brand-item">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleBrand(b.id)}
+                      />
+                      <BrandRowFavicon name={b.name} domain={b.domain} />
+                      <span className="pp-brand-name">{b.name}</span>
+                    </label>
+                  );
+                })}
+              </>
+            )}
           </div>
           {onAddBrand &&
             (adding ? (
