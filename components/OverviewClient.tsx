@@ -454,18 +454,24 @@ export default function OverviewClient({
                       );
                     }}
                   />
-                  {brands.map((b) => (
-                    <Line
-                      key={b.name}
-                      type="monotone"
-                      dataKey={b.name}
-                      stroke={b.color}
-                      strokeWidth={1.8}
-                      dot={{ r: 2.5, fill: b.color, strokeWidth: 0 }}
-                      activeDot={{ r: 4, strokeWidth: 0 }}
-                      isAnimationActive={false}
-                    />
-                  ))}
+                  {brands.map((b) => {
+                    const isHov = hoveredBrand === b.name;
+                    const faded = hoveredBrand !== null && !isHov;
+                    return (
+                      <Line
+                        key={b.name}
+                        type="monotone"
+                        dataKey={b.name}
+                        stroke={b.color}
+                        strokeWidth={isHov ? 2.8 : 1.8}
+                        strokeOpacity={faded ? 0.1 : 1}
+                        dot={{ r: isHov ? 3.5 : 2.5, fill: b.color, strokeWidth: 0, fillOpacity: faded ? 0.1 : 1 }}
+                        activeDot={{ r: isHov ? 5 : 4, strokeWidth: 0, opacity: faded ? 0 : 1 }}
+                        isAnimationActive={false}
+                        style={{ transition: "stroke-opacity 0.15s, opacity 0.15s" }}
+                      />
+                    );
+                  })}
                 </LineChart>
               ) : (
                 <BarChart
@@ -530,9 +536,10 @@ export default function OverviewClient({
                     }}
                   />
                   <Bar dataKey="value" radius={[5, 5, 0, 0]} isAnimationActive={false}>
-                    {barData.map((e) => (
-                      <Cell key={e.name} fill={e.color} />
-                    ))}
+                    {barData.map((e) => {
+                      const faded = hoveredBrand !== null && hoveredBrand !== e.name;
+                      return <Cell key={e.name} fill={e.color} fillOpacity={faded ? 0.12 : 1} />;
+                    })}
                   </Bar>
                 </BarChart>
               )}
