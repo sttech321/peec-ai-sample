@@ -410,6 +410,37 @@
   white-space: nowrap;
 }
 
+/* ── Tracked brand / All brands section labels ────────────────────────── */
+.pp-brand-section-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  padding: 8px 8px 3px;
+  letter-spacing: 0.01em;
+  user-select: none;
+}
+
+/* Thin divider between "Tracked brand" and "All brands" sections */
+.pp-brand-section-divider {
+  height: 1px;
+  background: #f3f4f6;
+  margin: 4px 6px;
+}
+
+/* "You" badge — green pill next to own brand name */
+.pp-brand-you-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 999px;
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
+}
+
 /* ── Enhanced brand item row (with hover actions) ────────────────────── */
 .pp-brand-item-row {
   display: flex;
@@ -1307,6 +1338,55 @@
 .pp-empty-sub {
   font-size: 13px;
   color: #71717a;
+}
+
+/* ── Pagination page-size dropdown — opens UPWARD (bottom of page) ──── */
+.pp-pagination-left .pp-dd-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: auto;
+}
+
+/* Trigger button in pagination — cleaner style */
+.pp-pagination-left .pp-dd-trigger {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  gap: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: border-color 0.12s, background 0.12s;
+}
+.pp-pagination-left .pp-dd-trigger:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+/* Dropdown menu inside pagination — compact and clean */
+.pp-pagination-left .pp-dd-menu {
+  border-radius: 8px;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+  padding: 4px;
+  min-width: 120px;
+}
+.pp-pagination-left .pp-dd-item {
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 6px 10px;
+  color: #374151;
+}
+.pp-pagination-left .pp-dd-item:hover { background: #f3f4f6; }
+.pp-pagination-left .pp-dd-item-active {
+  background: #f0f9ff;
+  color: #0369a1;
+  font-weight: 600;
 }
 
 /* ── Pagination row ───────────────────────────────────────────────────── */

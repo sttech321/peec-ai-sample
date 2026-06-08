@@ -2,7 +2,7 @@ import DashboardLayout from "../../components/DashboardLayout";
 import InsightsClient from "../../components/InsightsClient";
 import PageFilterBar from "../../components/PageFilterBar";
 import { db } from "../../db";
-import { projects, brands, brandProfiles } from "../../db/schema";
+import { projects, brands, brandProfiles, chats, prompts, topics, tags, promptTags } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import { fetchChatFacts, fetchProjectBrands } from "../../lib/chat-facts-server";
@@ -17,7 +17,8 @@ export default async function InsightsPage() {
   const activeProjectId = await getActiveProjectId();
 
   // All independent queries run in parallel
-  const [[projectRecord], [ownBrand], profileResult, chatFacts, projectBrands, filterData] =
+  const [[projectRecord], [ownBrand], profileResult, chatFacts, projectBrands, filterData,
+         chatTopicRows, chatTagRows] =
     await Promise.all([
       db.select({ name: projects.name }).from(projects)
         .where(eq(projects.id, activeProjectId)).limit(1),
@@ -32,7 +33,32 @@ export default async function InsightsPage() {
       fetchChatFacts({ projectId: activeProjectId }),
       fetchProjectBrands(activeProjectId),
       getPageFilterData(activeProjectId),
+
+      // chatId → topicName
+      db.select({ chatId: chats.id, topicName: topics.name })
+        .from(chats)
+        .innerJoin(prompts, eq(chats.promptId, prompts.id))
+        .innerJoin(topics, eq(prompts.topicId, topics.id))
+        .where(eq(prompts.projectId, activeProjectId)),
+
+      // chatId → tagName (one row per tag per chat)
+      db.select({ chatId: chats.id, tagName: tags.name })
+        .from(chats)
+        .innerJoin(prompts, eq(chats.promptId, prompts.id))
+        .innerJoin(promptTags, eq(promptTags.promptId, prompts.id))
+        .innerJoin(tags, eq(promptTags.tagId, tags.id))
+        .where(eq(prompts.projectId, activeProjectId)),
     ]);
+
+  // Build maps: chatId → topicName, chatId → tagNames[]
+  const chatTopicMap: Record<string, string> = {};
+  for (const r of chatTopicRows) chatTopicMap[r.chatId] = r.topicName;
+
+  const chatTagsMap: Record<string, string[]> = {};
+  for (const r of chatTagRows) {
+    if (!chatTagsMap[r.chatId]) chatTagsMap[r.chatId] = [];
+    chatTagsMap[r.chatId].push(r.tagName);
+  }
 
   const projectName = projectRecord?.name || "General";
   let profileDomain: string | null = null;
@@ -59,6 +85,8 @@ export default async function InsightsPage() {
         projectBrands={projectBrands}
         ownBrandName={ownBrand?.name ?? null}
         ownDomain={ownDomain}
+        chatTopicMap={chatTopicMap}
+        chatTagsMap={chatTagsMap}
       />
     </DashboardLayout>
   );

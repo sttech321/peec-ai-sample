@@ -5,10 +5,8 @@ import { BrandsModalProvider } from "../../lib/brands-modal-context";
 import { db } from "../../db";
 import { brands, brandSuggestions, brandMentions, projects } from "../../db/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
-import { getActiveProjectId, getWorkspaceId } from "../../lib/project-context";
+import { getActiveProjectId } from "../../lib/project-context";
 import { updateBrandColor } from "../actions/brands";
-import { generateBrandSuggestions } from "../../lib/brand-suggestions";
-import { fetchChatFacts } from "../../lib/chat-facts-server";
 import "./brands.css";
 
 export default async function BrandsPage() {
@@ -47,20 +45,8 @@ export default async function BrandsPage() {
     )
     .orderBy(drizzleSql`count(${brandMentions.id}) desc`);
 
-  // ── Generate fresh suggestions from chatFacts ────────────────────────────
-  // chatFacts se untracked brands dhundh kar suggestions generate karo
-  const [workspaceId, chatFacts] = await Promise.all([
-    getWorkspaceId(),
-    fetchChatFacts({ projectId: activeProjectId }),
-  ]);
-
-  // Background mein generate (page load slow na ho)
-  generateBrandSuggestions(
-    activeProjectId,
-    workspaceId,
-    chatFacts,
-  ).catch(err => console.warn("[BrandsPage] suggestion generation failed:", err));
-
+  // Suggestions are now populated by the pipeline (run-pipeline.ts) in real-time.
+  // Just read from DB — no heavy chatFacts fetch needed.
   const suggestions = await db
     .select()
     .from(brandSuggestions)

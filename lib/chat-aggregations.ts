@@ -301,6 +301,135 @@ export function buildVisibilitySeries(
   });
 }
 
+/** Sentiment over time for one brand (0-100 scale, NaN bucket → 0) */
+export function buildSentimentSeries(
+  chats: ChatFact[],
+  brandName: string,
+  resolution: Resolution,
+  range?: DateRange | null,
+  now: Date = new Date(),
+): SeriesPoint[] {
+  const tl = range ? timelineForRange(range.start, range.end, resolution) : timeline(now, resolution);
+  const earliest = tl[0].getTime();
+  const buckets = new Map<string, { sum: number; count: number }>();
+  for (const c of chats) {
+    const dt = new Date(c.runDate);
+    if (dt.getTime() < earliest) continue;
+    const key = bucketStart(dt, resolution).toISOString();
+    for (const b of c.brands) {
+      if (b.name !== brandName || b.sentiment == null) continue;
+      const cur = buckets.get(key) ?? { sum: 0, count: 0 };
+      cur.sum += b.sentiment;
+      cur.count += 1;
+      buckets.set(key, cur);
+    }
+  }
+  return tl.map((b) => {
+    const key = b.toISOString();
+    const v = buckets.get(key);
+    const point: SeriesPoint = { date: formatLabel(b, resolution) };
+    point[brandName] = v && v.count > 0 ? Math.round((v.sum / v.count) * 10) / 10 : 0;
+    return point;
+  });
+}
+
+/** Average position over time for one brand (lower = better) */
+export function buildPositionSeries(
+  chats: ChatFact[],
+  brandName: string,
+  resolution: Resolution,
+  range?: DateRange | null,
+  now: Date = new Date(),
+): SeriesPoint[] {
+  const tl = range ? timelineForRange(range.start, range.end, resolution) : timeline(now, resolution);
+  const earliest = tl[0].getTime();
+  const buckets = new Map<string, { sum: number; count: number }>();
+  for (const c of chats) {
+    const dt = new Date(c.runDate);
+    if (dt.getTime() < earliest) continue;
+    const key = bucketStart(dt, resolution).toISOString();
+    for (const b of c.brands) {
+      if (b.name !== brandName || b.position == null) continue;
+      const cur = buckets.get(key) ?? { sum: 0, count: 0 };
+      cur.sum += b.position;
+      cur.count += 1;
+      buckets.set(key, cur);
+    }
+  }
+  return tl.map((b) => {
+    const key = b.toISOString();
+    const v = buckets.get(key);
+    const point: SeriesPoint = { date: formatLabel(b, resolution) };
+    point[brandName] = v && v.count > 0 ? Math.round((v.sum / v.count) * 10) / 10 : 0;
+    return point;
+  });
+}
+
+/** Share of Voice over time for one brand (0-100) */
+export function buildSovSeries(
+  chats: ChatFact[],
+  brandName: string,
+  resolution: Resolution,
+  range?: DateRange | null,
+  now: Date = new Date(),
+): SeriesPoint[] {
+  const tl = range ? timelineForRange(range.start, range.end, resolution) : timeline(now, resolution);
+  const earliest = tl[0].getTime();
+  const buckets = new Map<string, { hits: number; total: number }>();
+  for (const c of chats) {
+    const dt = new Date(c.runDate);
+    if (dt.getTime() < earliest) continue;
+    const key = bucketStart(dt, resolution).toISOString();
+    const cur = buckets.get(key) ?? { hits: 0, total: 0 };
+    const seen = new Set<string>();
+    for (const b of c.brands) {
+      if (seen.has(b.name)) continue;
+      seen.add(b.name);
+      cur.total += 1;
+      if (b.name === brandName) cur.hits += 1;
+    }
+    buckets.set(key, cur);
+  }
+  return tl.map((b) => {
+    const key = b.toISOString();
+    const v = buckets.get(key);
+    const point: SeriesPoint = { date: formatLabel(b, resolution) };
+    point[brandName] = v && v.total > 0 ? Math.round((v.hits / v.total) * 1000) / 10 : 0;
+    return point;
+  });
+}
+
+/** Domain retrieval % over time — % of chats where domain is cited */
+export function buildDomainRetrievalSeries(
+  chats: ChatFact[],
+  domain: string,
+  resolution: Resolution,
+  range?: DateRange | null,
+  now: Date = new Date(),
+): SeriesPoint[] {
+  const tl = range ? timelineForRange(range.start, range.end, resolution) : timeline(now, resolution);
+  const earliest = tl[0].getTime();
+  const normDomain = domain.toLowerCase().replace(/^www\./, "");
+  const buckets = new Map<string, { hits: number; total: number }>();
+  for (const c of chats) {
+    const dt = new Date(c.runDate);
+    if (dt.getTime() < earliest) continue;
+    const key = bucketStart(dt, resolution).toISOString();
+    const cur = buckets.get(key) ?? { hits: 0, total: 0 };
+    cur.total += 1;
+    const cited = c.sources.some(s => s.domain.toLowerCase().replace(/^www\./, "") === normDomain);
+    if (cited) cur.hits += 1;
+    buckets.set(key, cur);
+  }
+  return tl.map((b) => {
+    const key = b.toISOString();
+    const v = buckets.get(key);
+    const point: SeriesPoint = { date: formatLabel(b, resolution) };
+    point[domain] = v && v.total > 0 ? Math.round((v.hits / v.total) * 1000) / 10 : 0;
+    return point;
+  });
+}
+
 // ── Insights aggregations ─────────────────────────────────────────────────
 
 export interface BrandEngineCell {
@@ -376,6 +505,201 @@ export function buildPerformanceMatrix(
         sov: tbo > 0 ? (h / tbo) * 100 : 0,
       });
     }
+  }
+  return out;
+}
+
+/**
+ * Performance matrix grouped by topic or tag instead of engine.
+ * groupMap: chatId → groupKey (topics) or chatId → groupKey[] (tags)
+ * Returns same BrandEngineCell shape — "engine" field holds the group key.
+ */
+export function buildPerformanceMatrixByGroup(
+  chats: ChatFact[],
+  brandNames: string[],
+  groupMap: Record<string, string | string[]>,
+): BrandEngineCell[] {
+  // Collect unique group keys
+  const allGroups = new Set<string>();
+  for (const val of Object.values(groupMap)) {
+    if (Array.isArray(val)) val.forEach(v => allGroups.add(v));
+    else allGroups.add(val);
+  }
+
+  const out: BrandEngineCell[] = [];
+
+  for (const group of allGroups) {
+    const groupChats = chats.filter(c => {
+      const v = groupMap[c.id];
+      if (!v) return false;
+      return Array.isArray(v) ? v.includes(group) : v === group;
+    });
+
+    const total = groupChats.length;
+    const brandStats = new Map<string, { hits: number; sentSum: number; sentN: number; posSum: number; posN: number }>();
+    let totalMentions = 0;
+
+    for (const c of groupChats) {
+      const seen = new Set<string>();
+      for (const b of c.brands) {
+        if (seen.has(b.name)) continue;
+        seen.add(b.name);
+        totalMentions++;
+        if (!brandNames.includes(b.name)) continue;
+        let s = brandStats.get(b.name);
+        if (!s) { s = { hits: 0, sentSum: 0, sentN: 0, posSum: 0, posN: 0 }; brandStats.set(b.name, s); }
+        s.hits += 1;
+        if (b.sentiment != null) { s.sentSum += b.sentiment; s.sentN += 1; }
+        if (b.position  != null) { s.posSum  += b.position;  s.posN  += 1; }
+      }
+    }
+
+    for (const brand of brandNames) {
+      const s = brandStats.get(brand);
+      const h = s?.hits || 0;
+      out.push({
+        brand,
+        engine: group, // group key stored in "engine" field
+        hits: h,
+        total,
+        visibility: total > 0 ? (h / total) * 100 : 0,
+        sentiment:  s && s.sentN > 0 ? s.sentSum / s.sentN : 0,
+        position:   s && s.posN  > 0 ? s.posSum  / s.posN  : 0,
+        sov:        totalMentions > 0 ? (h / totalMentions) * 100 : 0,
+      });
+    }
+  }
+  return out;
+}
+
+/** Generic top-N per engine, sortable by any metric. */
+export interface RankEntry {
+  brand: string;
+  visibility: number;
+  sentiment: number;
+  position: number;
+  sov: number;
+  hits: number;
+  total: number;
+}
+
+export function buildTopRankingsBy(
+  chats: ChatFact[],
+  engines: string[],
+  metric: "visibility" | "sentiment" | "position" | "sov",
+  topN = 10,
+): Record<string, RankEntry[]> {
+  const out: Record<string, RankEntry[]> = {};
+
+  for (const engine of engines) {
+    const engineChats = chats.filter(c => c.engine === engine);
+    const total = engineChats.length;
+    const map = new Map<string, { hits: number; sentSum: number; sentN: number; posSum: number; posN: number }>();
+
+    for (const c of engineChats) {
+      const seen = new Set<string>();
+      for (const b of c.brands) {
+        if (seen.has(b.name)) continue;
+        seen.add(b.name);
+        let s = map.get(b.name);
+        if (!s) { s = { hits: 0, sentSum: 0, sentN: 0, posSum: 0, posN: 0 }; map.set(b.name, s); }
+        s.hits += 1;
+        if (b.sentiment != null) { s.sentSum += b.sentiment; s.sentN += 1; }
+        if (b.position  != null) { s.posSum  += b.position;  s.posN  += 1; }
+      }
+    }
+
+    // Total brand mentions across engine (for SoV)
+    let totalMentions = 0;
+    for (const s of map.values()) totalMentions += s.hits;
+
+    const entries: RankEntry[] = Array.from(map.entries()).map(([brand, s]) => ({
+      brand,
+      hits: s.hits,
+      total,
+      visibility: total > 0 ? (s.hits / total) * 100 : 0,
+      sentiment:  s.sentN > 0 ? s.sentSum / s.sentN : 0,
+      position:   s.posN  > 0 ? s.posSum  / s.posN  : 0,
+      sov:        totalMentions > 0 ? (s.hits / totalMentions) * 100 : 0,
+    }));
+
+    // Sort: position ascending (lower = better), others descending
+    entries.sort((a, b) =>
+      metric === "position"
+        ? (a.position || 999) - (b.position || 999)
+        : (b[metric] || 0) - (a[metric] || 0)
+    );
+
+    out[engine] = entries.slice(0, topN);
+  }
+  return out;
+}
+
+/**
+ * Rankings grouped by topic OR tag instead of engine.
+ * groupMap: chatId → groupKey  (for topics, one key per chat)
+ *           chatId → groupKey[] (for tags, multiple keys per chat)
+ */
+export function buildTopRankingsByGroup(
+  chats: ChatFact[],
+  groupMap: Record<string, string | string[]>,
+  metric: "visibility" | "sentiment" | "position" | "sov",
+  topN = 10,
+): Record<string, RankEntry[]> {
+  // Collect all group keys
+  const allGroups = new Set<string>();
+  for (const val of Object.values(groupMap)) {
+    if (Array.isArray(val)) val.forEach(v => allGroups.add(v));
+    else allGroups.add(val);
+  }
+  if (allGroups.size === 0) return {};
+
+  const out: Record<string, RankEntry[]> = {};
+
+  for (const group of allGroups) {
+    // Filter chats that belong to this group
+    const groupChats = chats.filter(c => {
+      const v = groupMap[c.id];
+      if (!v) return false;
+      return Array.isArray(v) ? v.includes(group) : v === group;
+    });
+
+    if (groupChats.length === 0) continue;
+
+    const total = groupChats.length;
+    const map = new Map<string, { hits: number; sentSum: number; sentN: number; posSum: number; posN: number }>();
+
+    for (const c of groupChats) {
+      const seen = new Set<string>();
+      for (const b of c.brands) {
+        if (seen.has(b.name)) continue;
+        seen.add(b.name);
+        let s = map.get(b.name);
+        if (!s) { s = { hits: 0, sentSum: 0, sentN: 0, posSum: 0, posN: 0 }; map.set(b.name, s); }
+        s.hits += 1;
+        if (b.sentiment != null) { s.sentSum += b.sentiment; s.sentN += 1; }
+        if (b.position  != null) { s.posSum  += b.position;  s.posN  += 1; }
+      }
+    }
+
+    let totalMentions = 0;
+    for (const s of map.values()) totalMentions += s.hits;
+
+    const entries: RankEntry[] = Array.from(map.entries()).map(([brand, s]) => ({
+      brand, hits: s.hits, total,
+      visibility: total > 0 ? (s.hits / total) * 100 : 0,
+      sentiment:  s.sentN > 0 ? s.sentSum / s.sentN : 0,
+      position:   s.posN  > 0 ? s.posSum  / s.posN  : 0,
+      sov:        totalMentions > 0 ? (s.hits / totalMentions) * 100 : 0,
+    }));
+
+    entries.sort((a, b) =>
+      metric === "position"
+        ? (a.position || 999) - (b.position || 999)
+        : (b[metric] || 0) - (a[metric] || 0)
+    );
+
+    out[group] = entries.slice(0, topN);
   }
   return out;
 }

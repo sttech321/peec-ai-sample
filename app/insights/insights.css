@@ -348,6 +348,48 @@
   min-width: 130px;
 }
 
+/* Sortable column header button */
+.ins-matrix-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: inherit;
+  font-family: inherit;
+  padding: 0;
+  white-space: nowrap;
+}
+.ins-matrix-sort-btn:hover { color: #2563eb; }
+
+/* Brand row head with "You" pill */
+.ins-matrix-rowhead--brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Green "You" pill badge — matches Peec AI */
+.ins-you-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 999px;
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
+}
+
+.ins-you-tag--inline {
+  margin-left: 4px;
+}
+
 .ins-you-tag {
   color: #94a3b8;
   font-size: 11px;
@@ -373,7 +415,7 @@
   text-align: center;
 }
 
-/* 11-step blue heat scale */
+/* 11-step blue heat scale — Visibility & SoV */
 .ins-heat-h0  { background: #fafafa; color: #cbd5e1; }
 .ins-heat-h1  { background: #eff6ff; }
 .ins-heat-h2  { background: #dbeafe; }
@@ -385,6 +427,32 @@
 .ins-heat-h8  { background: #14b8a6; color: #f0fdfa; }
 .ins-heat-h9  { background: #0d9488; color: #f0fdfa; }
 .ins-heat-h10 { background: #0f766e; color: #f0fdfa; }
+
+/* Green scale — Sentiment */
+.ins-heat-s0  { background: #fafafa; color: #cbd5e1; }
+.ins-heat-s1  { background: #fef2f2; color: #ef4444; }
+.ins-heat-s2  { background: #fee2e2; color: #ef4444; }
+.ins-heat-s3  { background: #fecaca; }
+.ins-heat-s4  { background: #fde68a; }
+.ins-heat-s5  { background: #fef9c3; }
+.ins-heat-s6  { background: #dcfce7; color: #166534; }
+.ins-heat-s7  { background: #bbf7d0; color: #166534; }
+.ins-heat-s8  { background: #86efac; color: #14532d; }
+.ins-heat-s9  { background: #4ade80; color: #14532d; }
+.ins-heat-s10 { background: #16a34a; color: #f0fdf4; }
+
+/* Teal/turquoise scale — Position (lower = better = darker) */
+.ins-heat-p0  { background: #fafafa; color: #cbd5e1; }
+.ins-heat-p1  { background: #ecfeff; }
+.ins-heat-p2  { background: #cffafe; }
+.ins-heat-p3  { background: #a5f3fc; }
+.ins-heat-p4  { background: #67e8f9; }
+.ins-heat-p5  { background: #22d3ee; color: #0c4a6e; }
+.ins-heat-p6  { background: #06b6d4; color: #f0f9ff; }
+.ins-heat-p7  { background: #0891b2; color: #f0f9ff; }
+.ins-heat-p8  { background: #0e7490; color: #f0f9ff; }
+.ins-heat-p9  { background: #155e75; color: #ecfeff; }
+.ins-heat-p10 { background: #164e63; color: #ecfeff; }
 
 .ins-heat-legend {
   display: flex;
@@ -460,6 +528,38 @@
   color: #cbd5e1;
 }
 
+/* Sub-label metric shown in rank pill for non-visibility tabs */
+.ins-rank-metric {
+  font-size: 9.5px;
+  color: #94a3b8;
+  font-weight: 400;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ins-rank-pill--you .ins-rank-metric {
+  color: #b45309;
+}
+
+/* Rankings table wrapper — horizontal scroll */
+.ins-rankings-wrap {
+  overflow-x: auto;
+}
+
+/* Engine column header */
+.ins-rankings-engine-head {
+  white-space: nowrap;
+  min-width: 130px;
+}
+
+/* Position column headers */
+.ins-rankings-pos-head {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .ins-rank-legend {
   display: flex;
   align-items: center;
@@ -471,9 +571,255 @@
   color: #64748b;
 }
 
+/* Group label in rankings table (Topics / Tags rows) */
+.ins-group-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+/* Empty state for Topics/Tags when no data */
+.ins-rankings-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+.ins-rankings-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+.ins-rankings-empty-sub {
+  font-size: 12px;
+  color: #9ca3af;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* ── Rankings hover tooltip ─────────────────────────────────────────── */
+.ins-rank-tooltip {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
+  padding: 12px 14px;
+  min-width: 190px;
+  pointer-events: none;
+}
+
+.ins-rank-tooltip-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f3f4f6;
+  margin-bottom: 8px;
+}
+
+.ins-rank-tooltip-brand {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.ins-rank-tooltip-engine {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.ins-rank-tooltip-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ins-rank-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ins-rank-tooltip-label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.ins-rank-tooltip-val {
+  font-size: 12px;
+  font-weight: 500;
+  color: #111827;
+}
+
 .ins-empty {
   text-align: center;
   padding: 32px;
   color: #94a3b8;
   font-size: 12px;
 }
+
+/* ── Feature 1: Axis switcher menu ───────────────────────────────────── */
+.ins-axis-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 200px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+  z-index: 200;
+  padding: 6px 0;
+}
+.ins-axis-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px 14px 3px;
+  pointer-events: none;
+}
+.ins-axis-sep { height: 1px; background: #f3f4f6; margin: 6px 0; }
+.ins-axis-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: #374151;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.1s;
+}
+.ins-axis-option:hover:not(:disabled) { background: #f9fafb; }
+.ins-axis-option--active { color: #2563eb; font-weight: 500; }
+.ins-axis-icon { font-size: 13px; color: #9ca3af; width: 16px; text-align: center; flex-shrink: 0; }
+
+/* ── Feature 2: Column selector panel ───────────────────────────────── */
+.ins-col-selector-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  background: #fff;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.ins-col-selector-btn:hover { border-color: #d1d5db; color: #374151; background: #f9fafb; }
+
+.ins-col-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 240px;
+  max-height: 420px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ins-col-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  flex-shrink: 0;
+}
+.ins-col-search-icon { color: #9ca3af; flex-shrink: 0; }
+.ins-col-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #111827;
+  background: transparent;
+  font-family: inherit;
+}
+.ins-col-search-input::placeholder { color: #9ca3af; }
+
+.ins-col-group-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 8px 12px 3px;
+}
+.ins-col-items {
+  overflow-y: auto;
+  max-height: 140px;
+  padding: 2px 0;
+}
+.ins-col-items::-webkit-scrollbar { width: 4px; }
+.ins-col-items::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
+
+.ins-col-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+}
+.ins-col-item:hover { background: #f9fafb; }
+.ins-col-item input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #2563eb;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.ins-col-item-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ins-you-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.ins-col-reset {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #9ca3af;
+  background: transparent;
+  border: none;
+  border-top: 1px solid #f3f4f6;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.1s;
+  flex-shrink: 0;
+}
+.ins-col-reset:hover { color: #6b7280; }
