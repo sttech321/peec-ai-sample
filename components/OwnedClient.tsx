@@ -133,21 +133,17 @@ function ActionCard({ action, onUpdate }: { action: OwnedAction; onUpdate: (id: 
           <>{beforeLink}<a href={action.pageUrl} target="_blank" rel="noopener noreferrer">{linkText}</a>{afterLink}</>
         ) : (action.description)}
       </div>
+      {/* 3 buttons only — Done / Decline / Todo */}
       <div className="ac-card-actions">
-        <div className="ac-card-actions-left">
-          <button className={`ac-action-btn ac-action-btn-done ${action.status === "done" ? "ac-action-btn-active" : ""}`} onClick={() => toggle("done")}>
-            <Check size={12} /> Done
-          </button>
-          <button className={`ac-action-btn ac-action-btn-decline ${action.status === "declined" ? "ac-action-btn-active" : ""}`} onClick={() => toggle("declined")}>
-            <X size={12} /> Decline
-          </button>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="ac-card-date">{timeAgo(action.updatedAt)}</span>
-          <button className={`ac-action-btn ac-action-btn-todo ${action.status === "todo" ? "ac-action-btn-active" : ""}`} onClick={() => onUpdate(action.id, "todo")}>
-            <Square size={12} /> Todo
-          </button>
-        </div>
+        <button className={`ac-action-btn ac-action-btn-done ${action.status === "done" ? "ac-action-btn-active" : ""}`} onClick={() => toggle("done")}>
+          <Check size={12} /> Done
+        </button>
+        <button className={`ac-action-btn ac-action-btn-decline ${action.status === "declined" ? "ac-action-btn-active" : ""}`} onClick={() => toggle("declined")}>
+          <X size={12} /> Decline
+        </button>
+        <button className={`ac-action-btn ac-action-btn-todo ${action.status === "todo" ? "ac-action-btn-active" : ""}`} onClick={() => onUpdate(action.id, "todo")}>
+          <Square size={12} /> Todo
+        </button>
       </div>
     </div>
   );

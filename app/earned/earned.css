@@ -361,39 +361,41 @@
 .ac-card-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  gap: 0;
   padding-top: 10px;
-  border-top: 1px solid #f4f4f5;
+  border-top: 1px solid #f3f4f6;
 }
-.ac-card-actions-left { display: inline-flex; gap: 4px; }
 
+/* ── Action buttons — Done / Decline / Todo (Peec AI style) ─────────── */
 .ac-action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
+  gap: 4px;
+  padding: 5px 12px;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: none;
+  border-right: 1px solid #f3f4f6;
+  border-radius: 0;
   font-size: 12px;
-  color: #71717a;
+  font-weight: 400;
+  color: #9ca3af;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: color 0.12s, background 0.12s;
+  white-space: nowrap;
+  font-family: inherit;
 }
-.ac-action-btn:hover { background: #fafafa; color: #3f3f46; }
-.ac-action-btn-done.ac-action-btn-active {
-  background: #ecfdf5;
-  color: #047857;
-}
-.ac-action-btn-decline.ac-action-btn-active {
-  background: #fef2f2;
-  color: #b91c1c;
-}
-.ac-action-btn-todo.ac-action-btn-active {
-  background: #eff6ff;
-  color: #1d4ed8;
-}
+.ac-action-btn:first-child { padding-left: 0; }
+.ac-action-btn:last-child  { border-right: none; }
+.ac-action-btn:hover       { color: #374151; background: transparent; }
+
+/* Done — green when active */
+.ac-action-btn-done.ac-action-btn-active { color: #16a34a; font-weight: 500; }
+
+/* Decline — red when active */
+.ac-action-btn-decline.ac-action-btn-active { color: #dc2626; font-weight: 500; }
+
+/* Todo — blue when active */
+.ac-action-btn-todo.ac-action-btn-active { color: #2563eb; font-weight: 500; }
 
 /* ── Empty state ──────────────────────────────────────────────────────── */
 .ac-empty {
