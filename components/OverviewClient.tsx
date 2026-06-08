@@ -270,7 +270,12 @@ export default function OverviewClient({
     [prevFilteredChats, stableBrandColors]
   );
 
-  // prevTotalMentions removed — prev period delta now calculated inline per row
+  // Pre-compute prev period totals ONCE — not inside .map() per row
+  const prevAllBrandCountMemo = useMemo(
+    () => prevBrands.reduce((s, b) => s + b.count, 0),
+    [prevBrands]
+  );
+  const prevTotalChatsMemo = prevFilteredChats.length;
 
   const recentChats = useMemo(() => {
     const records = toChatRecords(filteredChats);
@@ -703,9 +708,9 @@ export default function OverviewClient({
                   const sent = b.sentiment ? Math.round(b.sentiment) : 0;
                   const dotColor = sentimentDotColor(sent);
 
-                  // Previous period deltas — same correct formulas
-                  const prevAllBrandCount = prevBrands.reduce((s, p) => s + p.count, 0);
-                  const prevTotalChats    = prevFilteredChats.length;
+                  // Use pre-computed totals (not re-computed per row)
+                  const prevAllBrandCount = prevAllBrandCountMemo;
+                  const prevTotalChats    = prevTotalChatsMemo;
                   const pb      = prevBrands.find(p => p.name === b.name);
                   const pVis    = prevTotalChats > 0 && pb ? Math.round((pb.count / prevTotalChats) * 100) : 0;
                   const pSov    = prevAllBrandCount > 0 && pb ? Math.round((pb.count / prevAllBrandCount) * 100) : 0;
@@ -801,8 +806,8 @@ export default function OverviewClient({
                   const sov  = totalAllBrandCount > 0 ? Math.round((b.count / totalAllBrandCount) * 100) : 0;
                   const sent = b.sentiment ? Math.round(b.sentiment) : 0;
                   const dotColor = sentimentDotColor(sent);
-                  const prevAllBrandCount = prevBrands.reduce((s, p) => s + p.count, 0);
-                  const prevTotalChats    = prevFilteredChats.length;
+                  const prevAllBrandCount = prevAllBrandCountMemo;
+                  const prevTotalChats    = prevTotalChatsMemo;
                   const pb       = prevBrands.find(p => p.name === b.name);
                   const pVis     = prevTotalChats > 0 && pb ? Math.round((pb.count / prevTotalChats) * 100) : 0;
                   const pSov     = prevAllBrandCount > 0 && pb ? Math.round((pb.count / prevAllBrandCount) * 100) : 0;

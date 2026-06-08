@@ -41,7 +41,8 @@ export async function fetchProjectBrands(projectId: string): Promise<ProjectBran
   return Array.from(dedup.values());
 }
 
-export async function fetchChatFacts(scope: Scope, monthsBack = 13): Promise<ChatFact[]> {
+export async function fetchChatFacts(scope: Scope, monthsBack = 6): Promise<ChatFact[]> {
+  // Limit to 6 months (was 13) — reduces data transfer by ~50%
   const earliest = new Date();
   earliest.setMonth(earliest.getMonth() - monthsBack);
 
@@ -61,37 +62,41 @@ export async function fetchChatFacts(scope: Scope, monthsBack = 13): Promise<Cha
     })
     .from(chats)
     .innerJoin(prompts, eq(chats.promptId, prompts.id))
-    .where(and(...baseFilters));
+    .where(and(...baseFilters))
+    .orderBy(chats.runDate);
 
   if (chatRows.length === 0) return [];
 
   const chatIds = new Set(chatRows.map((c) => c.id));
 
-  const brandRows = await db
-    .select({
-      chatId: brandMentions.chatId,
-      brandName: brands.name,
-      sentiment: brandMentions.sentiment,
-      position: brandMentions.position,
-    })
-    .from(brandMentions)
-    .innerJoin(brands, eq(brandMentions.brandId, brands.id))
-    .innerJoin(chats, eq(brandMentions.chatId, chats.id))
-    .innerJoin(prompts, eq(chats.promptId, prompts.id))
-    .where(and(...baseFilters));
+  // Parallel fetch — brandRows and sourceRows are independent
+  const [brandRows, sourceRows] = await Promise.all([
+    db
+      .select({
+        chatId: brandMentions.chatId,
+        brandName: brands.name,
+        sentiment: brandMentions.sentiment,
+        position: brandMentions.position,
+      })
+      .from(brandMentions)
+      .innerJoin(brands, eq(brandMentions.brandId, brands.id))
+      .innerJoin(chats, eq(brandMentions.chatId, chats.id))
+      .innerJoin(prompts, eq(chats.promptId, prompts.id))
+      .where(and(...baseFilters)),
 
-  const sourceRows = await db
-    .select({
-      chatId: sources.chatId,
-      domain: sources.domain,
-      category: sources.category,
-      url: sources.url,
-      title: sources.title,
-    })
-    .from(sources)
-    .innerJoin(chats, eq(sources.chatId, chats.id))
-    .innerJoin(prompts, eq(chats.promptId, prompts.id))
-    .where(and(...baseFilters));
+    db
+      .select({
+        chatId: sources.chatId,
+        domain: sources.domain,
+        category: sources.category,
+        url: sources.url,
+        title: sources.title,
+      })
+      .from(sources)
+      .innerJoin(chats, eq(sources.chatId, chats.id))
+      .innerJoin(prompts, eq(chats.promptId, prompts.id))
+      .where(and(...baseFilters)),
+  ]);
 
   const brandsByChat = new Map<string, ChatFact["brands"]>();
   for (const r of brandRows) {

@@ -20,54 +20,45 @@ function inferContentType(text: string): string {
 export default async function OwnedPage() {
   const activeProjectId = await getActiveProjectId();
 
-  const [project] = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, activeProjectId))
-    .limit(1);
+  // Parallel fetch — all 5 queries are independent
+  const [[project], actions, ownBrands, rawSources, promptRows] = await Promise.all([
+    db.select().from(projects).where(eq(projects.id, activeProjectId)).limit(1),
 
-  const actions = await db
-    .select()
-    .from(ownedActions)
-    .where(eq(ownedActions.projectId, activeProjectId));
+    db.select().from(ownedActions).where(eq(ownedActions.projectId, activeProjectId)),
 
-  // Own-brand domains — exclude these from competitor domain lists
-  const ownBrands = await db
-    .select({ domains: brands.domains })
-    .from(brands)
-    .where(and(eq(brands.projectId, activeProjectId), eq(brands.isOwn, true)));
+    db.select({ domains: brands.domains })
+      .from(brands)
+      .where(and(eq(brands.projectId, activeProjectId), eq(brands.isOwn, true))),
+
+    db.select({
+        url: sources.url,
+        title: sql<string | null>`MAX(${sources.title})`,
+        domain: sources.domain,
+        category: sql<string | null>`MAX(${sources.category})`,
+        retrievals: sql<number>`count(distinct ${sources.id})::int`,
+        citationCount: sql<number>`count(distinct ${citations.id})::int`,
+      })
+      .from(sources)
+      .innerJoin(chats, eq(chats.id, sources.chatId))
+      .innerJoin(prompts, eq(prompts.id, chats.promptId))
+      .leftJoin(citations, eq(citations.sourceId, sources.id))
+      .where(eq(prompts.projectId, activeProjectId))
+      .groupBy(sources.url, sources.domain)
+      .orderBy(sql`count(distinct ${sources.id}) desc`)
+      .limit(500) as any,
+
+    db.select({ query: prompts.query })
+      .from(prompts)
+      .where(eq(prompts.projectId, activeProjectId))
+      .limit(100),
+  ]);
+
   const ownDomains = new Set(ownBrands.flatMap((b) => b.domains ?? []));
 
-  // Query sources for the project with retrieval + citation metrics
-  const rawSources = await db
-    .select({
-      url: sources.url,
-      title: sql<string | null>`MAX(${sources.title})`,
-      domain: sources.domain,
-      category: sql<string | null>`MAX(${sources.category})`,
-      retrievals: sql<number>`count(distinct ${sources.id})::int`,
-      citationCount: sql<number>`count(distinct ${citations.id})::int`,
-    })
-    .from(sources)
-    .innerJoin(chats, eq(chats.id, sources.chatId))
-    .innerJoin(prompts, eq(prompts.id, chats.promptId))
-    .leftJoin(citations, eq(citations.sourceId, sources.id))
-    .where(eq(prompts.projectId, activeProjectId))
-    .groupBy(sources.url, sources.domain)
-    .orderBy(sql`count(distinct ${sources.id}) desc`)
-    .limit(500) as any[];
-
   // Competitor sources only (exclude own-brand domains)
-  const competitorSources = rawSources.filter(
+  const competitorSources = (rawSources as any[]).filter(
     (r: any) => !ownDomains.has(r.domain as string)
   );
-
-  // Query prompt queries (used as "phrases")
-  const promptRows = await db
-    .select({ query: prompts.query })
-    .from(prompts)
-    .where(eq(prompts.projectId, activeProjectId))
-    .limit(100);
 
   // Build top domains map (same data for all content types — competitor domains)
   const domainCounts = new Map<string, number>();
