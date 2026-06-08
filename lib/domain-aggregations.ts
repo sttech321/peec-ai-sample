@@ -191,6 +191,39 @@ export interface DomainSeriesPoint {
   [domain: string]: number | string;
 }
 
+// For each bucket: raw citation count per domain (matching Peec AI "Source retrievals over time").
+export function buildDomainCountSeries(
+  chats: ChatFact[],
+  domains: string[],
+  resolution: Resolution,
+  range: { start: Date; end: Date },
+): DomainSeriesPoint[] {
+  const tl = timelineForRange(range.start, range.end, resolution);
+  const targets = new Set(domains.map((d) => d.toLowerCase()));
+  const perBucket = new Map<string, Map<string, number>>();
+
+  for (const c of chats) {
+    const key = bucketStart(new Date(c.runDate), resolution).toISOString();
+    for (const s of c.sources) {
+      const d = s.domain.toLowerCase();
+      if (!targets.has(d)) continue;
+      let inner = perBucket.get(key);
+      if (!inner) { inner = new Map(); perBucket.set(key, inner); }
+      inner.set(d, (inner.get(d) || 0) + 1);
+    }
+  }
+
+  return tl.map((b) => {
+    const key = b.toISOString();
+    const hits = perBucket.get(key);
+    const point: DomainSeriesPoint = { date: formatLabel(b, resolution) };
+    for (const d of domains) {
+      point[d] = hits?.get(d.toLowerCase()) || 0;
+    }
+    return point;
+  });
+}
+
 // For each bucket: share of total citations in that bucket (0-100) per domain.
 export function buildDomainShareSeries(
   chats: ChatFact[],
