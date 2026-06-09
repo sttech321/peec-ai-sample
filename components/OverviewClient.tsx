@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   LineChart, Line, BarChart, Bar, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -54,6 +55,7 @@ export default function OverviewClient({
   initialDomainTypeOverrides, updateDomainTypeOverrideAction,
   brandColorOverrides = {}, onBrandColorChange,
 }: Props) {
+  const router = useRouter();
   const [resolution, setResolution]   = useState<Resolution>("W");
   const [chartView, setChartView]     = useState<"line" | "bar">("line");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
@@ -578,7 +580,8 @@ export default function OverviewClient({
           <div className="pd-brands-card" onClick={() => setOpenBrandMenu(null)}>
             <div className="pd-brands-header">
               <span className="pd-brands-title">Top 7 Brands <InfoTooltip text="Top brands across LLMs for your prompts" /></span>
-              {/* ⚙ ↑ ↺ icons matching Peec AI */}
+              {/* Right group: action icons + Show all button */}
+              <div className="pd-brands-header-right">
               <div className="pd-brands-actions">
                 {/* ⚙ Settings — opens "Change indicators" panel */}
                 <div ref={indicatorPanelRef} style={{ position: "relative" }}>
@@ -619,10 +622,11 @@ export default function OverviewClient({
                 <button className="pd-brands-action-btn" title="Export">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 </button>
-                <button className="pd-brands-action-btn" title="Refresh">
+                <button className="pd-brands-action-btn" title="View all rankings" onClick={() => router.push("/ranking")}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 </button>
               </div>
+              </div>{/* end pd-brands-header-right */}
             </div>
             <table className="pd-brands-table">
               <thead>
