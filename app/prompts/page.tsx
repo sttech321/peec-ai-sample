@@ -22,6 +22,8 @@ import {
   addPromptsFromParsed,
   runNow,
   createTopic,
+  renameTopic,
+  deleteTopic,
   assignTagToPromptByName,
   removeTagFromPrompt,
   batchAssignTag,
@@ -528,6 +530,8 @@ export default async function PromptsPage() {
         addBrandAction={addBrand}
         markBrandAsOwnAction={markBrandAsOwn}
         createTopicAction={createTopic}
+        renameTopicAction={renameTopic}
+        deleteTopicAction={deleteTopic}
         assignTagAction={assignTagToPromptByName}
         removeTagAction={removeTagFromPrompt}
         batchAssignTagAction={batchAssignTag}

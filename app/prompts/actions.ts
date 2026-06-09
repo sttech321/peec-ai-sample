@@ -794,3 +794,87 @@ export async function batchDeletePrompts(args: {
   revalidatePath("/prompts");
   return { ok: true, deleted: ids.length };
 }
+
+// ─── Topic edit / delete ───────────────────────────────────────────────────
+
+export async function renameTopic(args: {
+  topicId: string;
+  name: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const name = args.name.trim();
+  if (!name) return { ok: false, error: "Topic name is required" };
+  if (name.length > 255) return { ok: false, error: "Topic name too long" };
+
+  const projectId = await getActiveProjectId();
+
+  const dup = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(eq(topics.projectId, projectId), eq(topics.name, name), ne(topics.id, args.topicId)))
+    .limit(1);
+  if (dup.length) return { ok: false, error: "A topic with that name already exists" };
+
+  await db
+    .update(topics)
+    .set({ name })
+    .where(and(eq(topics.id, args.topicId), eq(topics.projectId, projectId)));
+
+  revalidatePath("/prompts");
+  return { ok: true };
+}
+
+/**
+ * Delete a topic. All prompts belonging to it are first moved to a fallback
+ * topic (existing "General Topic", any other topic, or a freshly created
+ * "General Topic"). This avoids FK cascade silently dropping prompts.
+ */
+export async function deleteTopic(args: {
+  topicId: string;
+}): Promise<{ ok: boolean; moved: number; error?: string }> {
+  const projectId = await getActiveProjectId();
+  const workspaceId = await getWorkspaceId();
+
+  // Find a fallback topic — prefer "General Topic" but not the one being deleted
+  let [fallback] = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(
+      eq(topics.projectId, projectId),
+      eq(topics.name, "General Topic"),
+      ne(topics.id, args.topicId),
+    ))
+    .limit(1);
+
+  if (!fallback) {
+    // Use any other existing topic
+    const [other] = await db
+      .select({ id: topics.id })
+      .from(topics)
+      .where(and(eq(topics.projectId, projectId), ne(topics.id, args.topicId)))
+      .limit(1);
+    if (other) {
+      fallback = other;
+    } else {
+      // No other topic exists — create General Topic as fallback
+      const [created] = await db
+        .insert(topics)
+        .values({ workspaceId, projectId, name: "General Topic" })
+        .returning({ id: topics.id });
+      fallback = created;
+    }
+  }
+
+  // Move prompts before deleting topic (avoids cascade delete of prompts)
+  const moved = await db
+    .update(prompts)
+    .set({ topicId: fallback.id })
+    .where(and(eq(prompts.projectId, projectId), eq(prompts.topicId, args.topicId)))
+    .returning({ id: prompts.id });
+
+  await db
+    .delete(topics)
+    .where(and(eq(topics.id, args.topicId), eq(topics.projectId, projectId)));
+
+  revalidatePath("/prompts");
+  return { ok: true, moved: moved.length };
+}
