@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Search, Settings,
   Activity, MessageSquare, BarChart3, Globe, Command, Sparkles,
   Eye, Link2, TrendingUp, Crosshair, Bug, Users, Tag,
-  FolderOpen, Key, UserCircle, Gift
+  FolderOpen, Key, UserCircle, Gift, BarChart2, MessagesSquare,
 } from "lucide-react";
 import NextLink from "next/link";
 import ProjectSwitcher from "./ProjectSwitcher";
@@ -53,6 +53,13 @@ export default async function DashboardLayout({
           {/* General */}
           <div className="sidebar-section-label">General</div>
           <NavItem href="/" icon={<LayoutDashboard size={16} />} label="Overview" active={currentPath === "/"} />
+          {/* Overview sub-items — shown when on overview, ranking, or chats */}
+          {(currentPath === "/" || currentPath === "/ranking" || currentPath === "/chats") && (
+            <div className="sidebar-sub-group">
+              <SubNavItem href="/ranking" icon={<BarChart2 size={13} />} label="Ranking" active={currentPath === "/ranking"} />
+              <SubNavItem href="/chats"   icon={<MessagesSquare size={13} />} label="Chats" active={currentPath === "/chats"} />
+            </div>
+          )}
           <NavItem href="/prompts" icon={<MessageSquare size={16} />} label="Prompts" active={currentPath === "/prompts"} />
 
           {/* Sources */}
@@ -174,6 +181,24 @@ function NavItem({ href, icon, label, active = false, dot, suffix }: any) {
         {suffix && <span className="ml-1.5 font-normal text-zinc-400">· {suffix}</span>}
       </span>
       {dot && <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />}
+    </NextLink>
+  );
+}
+
+function SubNavItem({ href, icon, label, active = false }: any) {
+  return (
+    <NextLink
+      href={href}
+      className={`group flex items-center gap-2 rounded-md px-3 py-1 text-[13px] transition-colors ml-4 ${
+        active
+          ? "font-medium text-zinc-900 bg-zinc-100"
+          : "font-normal text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50"
+      }`}
+    >
+      <span className={active ? "text-zinc-700" : "text-zinc-400 group-hover:text-zinc-600"}>
+        {icon}
+      </span>
+      <span>{label}</span>
     </NextLink>
   );
 }

@@ -335,6 +335,17 @@
   line-height: 1.4;
 }
 
+/* ── Sub-nav group (Ranking, Chats under Overview) ──────────────────────── */
+.sidebar-sub-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 2px;
+  padding-left: 4px;
+  border-left: 1.5px solid #e4e4e7;
+  margin-left: 14px;
+}
+
 /* ── Setup Progress ──────────────────────────────────────────────────────── */
 .sidebar-setup {
   padding: 12px;
