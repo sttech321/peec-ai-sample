@@ -432,9 +432,14 @@ function DateRangePicker({
   onChange: (v: PageFilterDateRange) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [calMonth, setCalMonth] = useState(() => startOfMonth(value.end));
+  const [calMonth, setCalMonth] = useState(() => startOfMonth(new Date()));
   const [pickStart, setPickStart] = useState<Date | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Always show current month when dropdown opens
+  useEffect(() => {
+    if (open) setCalMonth(startOfMonth(new Date()));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -451,6 +456,7 @@ function DateRangePicker({
   const applyPreset = (key: PageFilterDatePreset) => {
     onChange(makeDateRange(key));
     setPickStart(null);
+    setCalMonth(startOfMonth(new Date())); // snap to current month
   };
 
   const handleDayClick = (d: Date) => {
