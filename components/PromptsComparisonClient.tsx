@@ -213,6 +213,8 @@ interface Props {
   batchDeleteAction: (args: {
     promptIds: string[];
   }) => Promise<{ ok: boolean; deleted: number }>;
+  renameTopicAction: (args: { topicId: string; name: string }) => Promise<{ ok: boolean; error?: string }>;
+  deleteTopicAction: (args: { topicId: string }) => Promise<{ ok: boolean; moved: number; error?: string }>;
   canEdit?: boolean;
   canRunScans?: boolean;
   markBrandAsOwnAction?: (brandId: string) => Promise<{ ok: boolean; error?: string }>;
@@ -721,6 +723,8 @@ export default function PromptsComparisonClient({
   batchAssignTopicAction,
   batchSetActiveAction,
   batchDeleteAction,
+  renameTopicAction,
+  deleteTopicAction,
   canEdit = true,
   canRunScans = true,
   markBrandAsOwnAction,
@@ -742,6 +746,27 @@ export default function PromptsComparisonClient({
   const [selectedModels, setSelectedModels] = useState<string[]>([...ALL_ENGINES]);
   const [dateRange, setDateRange] = useState<DateRange>(() => makeDateRange("7"));
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+
+  // ── Topic menu state ─────────────────────────────────────────────────────
+  const [topicMenuId, setTopicMenuId] = useState<string | null>(null);
+  const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
+  const [editTopicName, setEditTopicName] = useState("");
+  const [topicActionBusy, setTopicActionBusy] = useState(false);
+  const [topicActionError, setTopicActionError] = useState<string | null>(null);
+  const [deleteConfirmTopicId, setDeleteConfirmTopicId] = useState<string | null>(null);
+  const topicMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close topic menu on outside click
+  useEffect(() => {
+    if (!topicMenuId) return;
+    const handler = (e: MouseEvent) => {
+      if (topicMenuRef.current && !topicMenuRef.current.contains(e.target as Node)) {
+        setTopicMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [topicMenuId]);
 
   // ── Suggestions state ────────────────────────────────────────────────────
   const [localSuggestions, setLocalSuggestions] = useState<SuggestedPrompt[]>(suggestions);
@@ -1382,14 +1407,99 @@ export default function PromptsComparisonClient({
               </button>
             </li>
             {topics.map((t) => (
-              <li key={t.id}>
-                <button
-                  className={`pp-topic-item ${selectedTopicId === t.id ? "pp-topic-item-active" : ""}`}
-                  onClick={() => setSelectedTopicId(t.id)}
-                >
-                  <span>{t.name}</span>
-                  <span className="pp-topic-count">{t.count}</span>
-                </button>
+              <li key={t.id} className="pp-topic-li">
+                {editingTopicId === t.id ? (
+                  /* ── Inline rename input ─────────────────────────────── */
+                  <div className="pp-topic-edit-row">
+                    <input
+                      className="pp-topic-edit-input"
+                      value={editTopicName}
+                      autoFocus
+                      onChange={e => setEditTopicName(e.target.value)}
+                      onKeyDown={async e => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (!editTopicName.trim() || topicActionBusy) return;
+                          setTopicActionBusy(true);
+                          setTopicActionError(null);
+                          const res = await renameTopicAction({ topicId: t.id, name: editTopicName });
+                          setTopicActionBusy(false);
+                          if (res.ok) { setEditingTopicId(null); }
+                          else setTopicActionError(res.error ?? "Failed");
+                        } else if (e.key === "Escape") {
+                          setEditingTopicId(null);
+                          setTopicActionError(null);
+                        }
+                      }}
+                    />
+                    <button
+                      className="pp-topic-edit-save"
+                      title="Save"
+                      disabled={topicActionBusy || !editTopicName.trim()}
+                      onClick={async () => {
+                        if (!editTopicName.trim() || topicActionBusy) return;
+                        setTopicActionBusy(true);
+                        setTopicActionError(null);
+                        const res = await renameTopicAction({ topicId: t.id, name: editTopicName });
+                        setTopicActionBusy(false);
+                        if (res.ok) { setEditingTopicId(null); }
+                        else setTopicActionError(res.error ?? "Failed");
+                      }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                    <button className="pp-topic-edit-cancel" title="Cancel" onClick={() => { setEditingTopicId(null); setTopicActionError(null); }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                ) : (
+                  /* ── Normal topic row ────────────────────────────────── */
+                  <div className="pp-topic-item-wrap">
+                    <button
+                      className={`pp-topic-item ${selectedTopicId === t.id ? "pp-topic-item-active" : ""}`}
+                      onClick={() => { setSelectedTopicId(t.id); setTopicMenuId(null); }}
+                    >
+                      <span className="pp-topic-name">{t.name}</span>
+                      <span className="pp-topic-count">{t.count}</span>
+                    </button>
+                    {/* 3-dot menu button — visible on hover */}
+                    <button
+                      className="pp-topic-dots"
+                      title="Topic options"
+                      onClick={e => { e.stopPropagation(); setTopicMenuId(topicMenuId === t.id ? null : t.id); }}
+                    >
+                      •••
+                    </button>
+                    {/* Dropdown menu */}
+                    {topicMenuId === t.id && (
+                      <div className="pp-topic-menu" ref={topicMenuRef}>
+                        <button
+                          className="pp-topic-menu-item"
+                          onClick={() => {
+                            setEditingTopicId(t.id);
+                            setEditTopicName(t.name);
+                            setTopicMenuId(null);
+                            setTopicActionError(null);
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          Edit
+                        </button>
+                        <button
+                          className="pp-topic-menu-item pp-topic-menu-delete"
+                          onClick={() => { setDeleteConfirmTopicId(t.id); setTopicMenuId(null); }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Inline error */}
+                {editingTopicId === t.id && topicActionError && (
+                  <div className="pp-topic-edit-error">{topicActionError}</div>
+                )}
               </li>
             ))}
           </ul>
@@ -1420,6 +1530,54 @@ export default function PromptsComparisonClient({
             );
           })()}
         </aside>
+
+        {/* ── Delete Topic Confirm Modal ────────────────────────────────── */}
+        {deleteConfirmTopicId && (() => {
+          const topic = topics.find(t => t.id === deleteConfirmTopicId);
+          return (
+            <div className="pp-modal-overlay" onClick={() => setDeleteConfirmTopicId(null)}>
+              <div className="pp-modal-card pp-topic-del-modal" onClick={e => e.stopPropagation()}>
+                <div className="pp-topic-del-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </div>
+                <div className="pp-topic-del-title">Delete &quot;{topic?.name}&quot;?</div>
+                <div className="pp-topic-del-body">
+                  {topic && topic.count > 0
+                    ? `${topic.count} prompt${topic.count === 1 ? "" : "s"} will be moved to General Topic.`
+                    : "This topic has no prompts and will be removed."}
+                </div>
+                {topicActionError && <div className="pp-topic-edit-error" style={{ marginBottom: 8 }}>{topicActionError}</div>}
+                <div className="pp-topic-del-actions">
+                  <button
+                    className="pp-topic-del-cancel"
+                    onClick={() => { setDeleteConfirmTopicId(null); setTopicActionError(null); }}
+                    disabled={topicActionBusy}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="pp-topic-del-confirm"
+                    disabled={topicActionBusy}
+                    onClick={async () => {
+                      setTopicActionBusy(true);
+                      setTopicActionError(null);
+                      const res = await deleteTopicAction({ topicId: deleteConfirmTopicId });
+                      setTopicActionBusy(false);
+                      if (res.ok) {
+                        setDeleteConfirmTopicId(null);
+                        if (selectedTopicId === deleteConfirmTopicId) setSelectedTopicId("all");
+                      } else {
+                        setTopicActionError(res.error ?? "Delete failed");
+                      }
+                    }}
+                  >
+                    {topicActionBusy ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Content */}
         <section className="pp-content">
