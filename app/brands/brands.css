@@ -683,6 +683,122 @@
   .bp-search-wrap { width: 100%; }
 }
 
+/* ── Clickable name cell ─────────────────────────────────────────────────── */
+.bp-td--name {
+  cursor: pointer;
+}
+.bp-td--name:hover .bp-name-text {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: #4f46e5;
+}
+.bp-row--editing .bp-td--name {
+  background: #eef2ff;
+}
+.bp-row--editing .bp-td--name .bp-name-text {
+  color: #4f46e5;
+}
+
+/* ── Inline edit card ────────────────────────────────────────────────────── */
+.bp-edit-tr { background: transparent; }
+.bp-edit-td { padding: 0 14px 10px 58px !important; border-bottom: 1px solid #f3f4f6; }
+
+.bp-edit-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+  box-shadow: 0 4px 16px -4px rgba(0,0,0,0.10);
+  animation: bp-up 0.15s cubic-bezier(0.16,1,0.3,1);
+}
+
+.bp-edit-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.bp-edit-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.bp-edit-input {
+  width: 100%;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 7px 32px 7px 10px;
+  font-size: 13px;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.bp-edit-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.10);
+}
+
+.bp-edit-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+.bp-edit-clear:hover { color: #374151; background: #f3f4f6; }
+
+.bp-edit-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+.bp-edit-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #374151;
+}
+
+.bp-edit-error {
+  font-size: 11px;
+  color: #ef4444;
+  line-height: 1.4;
+}
+
+.bp-edit-save-btn {
+  width: 100%;
+  background: #111827;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-top: 2px;
+}
+.bp-edit-save-btn:hover:not(:disabled) { background: #374151; }
+.bp-edit-save-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
 /* ── Animations ──────────────────────────────────────────────────────────── */
 @keyframes bp-fade {
   from { opacity: 0; }

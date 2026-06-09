@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import BrandColorPicker from "./BrandColorPicker";
 import { useRouter } from "next/navigation";
 import {
@@ -53,6 +53,15 @@ interface Suggestion {
   name: string;
   domain?: string | null;
   mentions?: number;
+}
+
+interface Props {
+  initialBrands: Brand[];
+  initialSuggestions: Suggestion[];
+  projectId: string;
+  workspaceId: string;
+  updateBrandColorAction?: (brandId: string, color: string) => Promise<{ ok: boolean; error?: string }>;
+  renameBrandAction?: (args: { brandId: string; displayName: string }) => Promise<{ ok: boolean; error?: string }>;
 }
 
 // ─── BrandAvatar ─────────────────────────────────────────────────────────────
@@ -109,17 +118,19 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 }
 
 // ─── BrandRow ────────────────────────────────────────────────────────────────
-function BrandRow({ brand, openMenu, onMenu, onDelete, onColorDotClick }: {
+function BrandRow({ brand, openMenu, onMenu, onDelete, onColorDotClick, isEditing, onNameClick }: {
   brand: Brand;
   openMenu: string | null;
   onMenu: (id: string) => void;
   onDelete: (id: string) => void;
   onColorDotClick: (id: string, e: React.MouseEvent) => void;
+  isEditing: boolean;
+  onNameClick: (brand: Brand) => void;
 }) {
   const paletteColor = colorFromId(brand.id);
   const color = brand.color ?? paletteColor;
   return (
-    <tr className="bp-row">
+    <tr className={`bp-row${isEditing ? " bp-row--editing" : ""}`}>
       <td className="bp-td bp-td--color">
         <span
           className="brand-color-dot"
@@ -128,7 +139,7 @@ function BrandRow({ brand, openMenu, onMenu, onDelete, onColorDotClick }: {
           onClick={e => onColorDotClick(brand.id, e)}
         />
       </td>
-      <td className="bp-td">
+      <td className="bp-td bp-td--name" onClick={() => onNameClick(brand)} title="Click to edit display name">
         <div className="bp-name-cell">
           <BrandAvatar id={brand.id} name={brand.name} domain={brand.domains?.[0]} />
           <span className="bp-name-text">{brand.name}</span>
@@ -235,14 +246,9 @@ function normalizeDomain(raw: string): string {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 export default function BrandsClient({
-  initialBrands, initialSuggestions, projectId, workspaceId, updateBrandColorAction,
-}: {
-  initialBrands: Brand[];
-  initialSuggestions: Suggestion[];
-  projectId: string;
-  workspaceId: string;
-  updateBrandColorAction?: (brandId: string, color: string) => Promise<{ ok: boolean; error?: string }>;
-}) {
+  initialBrands, initialSuggestions, projectId, workspaceId,
+  updateBrandColorAction, renameBrandAction,
+}: Props) {
   const router = useRouter();
 
   const [brands,      setBrands]      = useState<Brand[]>(initialBrands);
@@ -250,6 +256,49 @@ export default function BrandsClient({
   const [search,      setSearch]      = useState("");
   const [openMenu,    setOpenMenu]    = useState<string | null>(null);
   const [pickerInfo, setPickerInfo] = useState<{ id: string; pos: { top: number; left: number } } | null>(null);
+
+  // ── Inline rename state ──────────────────────────────────────────────────
+  const [editingBrandId,  setEditingBrandId]  = useState<string | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editBusy,        setEditBusy]        = useState(false);
+  const [editError,       setEditError]       = useState<string | null>(null);
+  const editCardRef = useRef<HTMLDivElement>(null);
+
+  // Close edit card on outside click
+  useEffect(() => {
+    if (!editingBrandId) return;
+    const handler = (e: MouseEvent) => {
+      if (editCardRef.current && !editCardRef.current.contains(e.target as Node)) {
+        setEditingBrandId(null);
+        setEditError(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [editingBrandId]);
+
+  function startEdit(brand: Brand) {
+    setEditingBrandId(brand.id);
+    setEditDisplayName(brand.name);
+    setEditError(null);
+    setOpenMenu(null);
+    setPickerInfo(null);
+  }
+
+  async function doRename() {
+    if (!editingBrandId || !editDisplayName.trim() || editBusy) return;
+    setEditBusy(true);
+    setEditError(null);
+    const res = await renameBrandAction?.({ brandId: editingBrandId, displayName: editDisplayName.trim() });
+    setEditBusy(false);
+    if (!res || res.ok) {
+      setBrands(prev => prev.map(b => b.id === editingBrandId ? { ...b, name: editDisplayName.trim() } : b));
+      setEditingBrandId(null);
+      router.refresh();
+    } else {
+      setEditError(res.error ?? "Failed to rename");
+    }
+  }
 
   function openPickerAt(brandId: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -416,16 +465,60 @@ export default function BrandsClient({
                 <tbody>
                   {rows.map((brand) => {
                     const brandColor = brand.color ?? colorFromId(brand.id);
+                    const isEditing = editingBrandId === brand.id;
                     return (
-                      <>
+                      <React.Fragment key={brand.id}>
                         <BrandRow
-                          key={brand.id}
                           brand={brand}
                           openMenu={openMenu}
                           onMenu={(id) => setOpenMenu(openMenu === id ? null : id)}
                           onDelete={doDelete}
                           onColorDotClick={(id, e) => openPickerAt(id, e)}
+                          isEditing={isEditing}
+                          onNameClick={startEdit}
                         />
+                        {/* Inline edit card row */}
+                        {isEditing && (
+                          <tr className="bp-edit-tr">
+                            <td colSpan={6} className="bp-edit-td">
+                              <div className="bp-edit-card" ref={editCardRef}>
+                                <label className="bp-edit-label">Display name</label>
+                                <div className="bp-edit-input-wrap">
+                                  <input
+                                    className="bp-edit-input"
+                                    value={editDisplayName}
+                                    autoFocus
+                                    maxLength={255}
+                                    onChange={e => { setEditDisplayName(e.target.value); setEditError(null); }}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter") { e.preventDefault(); doRename(); }
+                                      if (e.key === "Escape") { setEditingBrandId(null); setEditError(null); }
+                                    }}
+                                  />
+                                  {editDisplayName && (
+                                    <button className="bp-edit-clear" onClick={() => setEditDisplayName("")} tabIndex={-1}>
+                                      <X size={12} />
+                                    </button>
+                                  )}
+                                </div>
+                                {editError ? (
+                                  <p className="bp-edit-error">{editError}</p>
+                                ) : (
+                                  <p className="bp-edit-hint">
+                                    Press <kbd>↵ enter</kbd> to save edit
+                                  </p>
+                                )}
+                                <button
+                                  className="bp-edit-save-btn"
+                                  disabled={editBusy || !editDisplayName.trim()}
+                                  onClick={doRename}
+                                >
+                                  {editBusy ? "Saving…" : "Save changes"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
                         {pickerInfo?.id === brand.id && (
                           <BrandColorPicker
                             key={`picker-${brand.id}`}
@@ -438,7 +531,7 @@ export default function BrandsClient({
                             onClose={() => setPickerInfo(null)}
                           />
                         )}
-                      </>
+                      </React.Fragment>
                     );
                   })}
                 </tbody>

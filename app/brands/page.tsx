@@ -7,6 +7,7 @@ import { brands, brandSuggestions, brandMentions, projects } from "../../db/sche
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import { updateBrandColor } from "../actions/brands";
+import { renameBrand } from "./actions";
 import "./brands.css";
 
 export default async function BrandsPage() {
@@ -65,6 +66,7 @@ export default async function BrandsPage() {
           projectId={activeProjectId}
           workspaceId={project?.workspaceId || "00000000-0000-0000-0000-000000000000"}
           updateBrandColorAction={updateBrandColor}
+          renameBrandAction={renameBrand}
         />
       </DashboardLayout>
     </BrandsModalProvider>
