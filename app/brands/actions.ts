@@ -34,6 +34,47 @@ export async function renameBrand(args: {
   return { ok: true };
 }
 
+export async function updateBrandDomains(args: {
+  brandId: string;
+  domains: string[];
+}): Promise<{ ok: boolean; error?: string }> {
+  const projectId = await getActiveProjectId();
+  // Normalize each domain: strip protocol + www, lowercase
+  const cleaned = [...new Set(
+    args.domains
+      .map(d => d.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase())
+      .filter(Boolean)
+  )];
+
+  await db
+    .update(brands)
+    .set({ domains: cleaned })
+    .where(and(eq(brands.id, args.brandId), eq(brands.projectId, projectId)));
+
+  revalidatePath("/brands");
+  revalidatePath("/prompts");
+  revalidatePath("/insights");
+  return { ok: true };
+}
+
+export async function updateBrandAliases(args: {
+  brandId: string;
+  aliases: string[];
+}): Promise<{ ok: boolean; error?: string }> {
+  const projectId = await getActiveProjectId();
+  const cleaned = [...new Set(args.aliases.map(a => a.trim()).filter(Boolean))];
+
+  await db
+    .update(brands)
+    .set({ aliases: cleaned })
+    .where(and(eq(brands.id, args.brandId), eq(brands.projectId, projectId)));
+
+  revalidatePath("/brands");
+  revalidatePath("/prompts");
+  revalidatePath("/insights");
+  return { ok: true };
+}
+
 export async function deleteBrand(brandId: string) {
   await db.delete(brands).where(eq(brands.id, brandId));
   revalidatePath("/brands");
