@@ -62,6 +62,8 @@ interface Props {
   workspaceId: string;
   updateBrandColorAction?: (brandId: string, color: string) => Promise<{ ok: boolean; error?: string }>;
   renameBrandAction?: (args: { brandId: string; displayName: string }) => Promise<{ ok: boolean; error?: string }>;
+  updateBrandAliasesAction?: (args: { brandId: string; aliases: string[] }) => Promise<{ ok: boolean; error?: string }>;
+  updateBrandDomainsAction?: (args: { brandId: string; domains: string[] }) => Promise<{ ok: boolean; error?: string }>;
 }
 
 // ─── BrandAvatar ─────────────────────────────────────────────────────────────
@@ -118,19 +120,28 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 }
 
 // ─── BrandRow ────────────────────────────────────────────────────────────────
-function BrandRow({ brand, openMenu, onMenu, onDelete, onColorDotClick, isEditing, onNameClick }: {
+function BrandRow({
+  brand, openMenu, onMenu, onDelete, onColorDotClick,
+  isNameEditing, isAliasEditing, isDomainEditing,
+  onNameClick, onAliasClick, onDomainClick,
+}: {
   brand: Brand;
   openMenu: string | null;
   onMenu: (id: string) => void;
   onDelete: (id: string) => void;
   onColorDotClick: (id: string, e: React.MouseEvent) => void;
-  isEditing: boolean;
+  isNameEditing: boolean;
+  isAliasEditing: boolean;
+  isDomainEditing: boolean;
   onNameClick: (brand: Brand) => void;
+  onAliasClick: (brand: Brand) => void;
+  onDomainClick: (brand: Brand) => void;
 }) {
   const paletteColor = colorFromId(brand.id);
   const color = brand.color ?? paletteColor;
+  const isAnyEditing = isNameEditing || isAliasEditing || isDomainEditing;
   return (
-    <tr className={`bp-row${isEditing ? " bp-row--editing" : ""}`}>
+    <tr className={`bp-row${isAnyEditing ? " bp-row--editing" : ""}`}>
       <td className="bp-td bp-td--color">
         <span
           className="brand-color-dot"
@@ -139,15 +150,22 @@ function BrandRow({ brand, openMenu, onMenu, onDelete, onColorDotClick, isEditin
           onClick={e => onColorDotClick(brand.id, e)}
         />
       </td>
-      <td className="bp-td bp-td--name" onClick={() => onNameClick(brand)} title="Click to edit display name">
+      <td className={`bp-td bp-td--name${isNameEditing ? " bp-td--active-edit" : ""}`}
+        onClick={() => onNameClick(brand)} title="Click to edit display name">
         <div className="bp-name-cell">
           <BrandAvatar id={brand.id} name={brand.name} domain={brand.domains?.[0]} />
           <span className="bp-name-text">{brand.name}</span>
           {brand.isOwn && <span className="bp-badge-you">You</span>}
         </div>
       </td>
-      <td className="bp-td bp-td--muted">{brand.aliases?.join(", ") || "—"}</td>
-      <td className="bp-td bp-td--muted">{brand.domains?.join(", ") || "—"}</td>
+      <td className={`bp-td bp-td--muted bp-td--alias${isAliasEditing ? " bp-td--active-edit" : ""}`}
+        onClick={() => onAliasClick(brand)} title="Click to edit tracked names">
+        {brand.aliases?.join(", ") || "—"}
+      </td>
+      <td className={`bp-td bp-td--muted bp-td--alias${isDomainEditing ? " bp-td--active-edit" : ""}`}
+        onClick={() => onDomainClick(brand)} title="Click to edit domains">
+        {brand.domains?.join(", ") || "—"}
+      </td>
       <td className="bp-td bp-td--num">{(brand.mentions ?? 0).toLocaleString()}</td>
       <td className="bp-td bp-td--actions">
         <button
@@ -247,7 +265,7 @@ function normalizeDomain(raw: string): string {
 // ─── Main ────────────────────────────────────────────────────────────────────
 export default function BrandsClient({
   initialBrands, initialSuggestions, projectId, workspaceId,
-  updateBrandColorAction, renameBrandAction,
+  updateBrandColorAction, renameBrandAction, updateBrandAliasesAction, updateBrandDomainsAction,
 }: Props) {
   const router = useRouter();
 
@@ -257,20 +275,18 @@ export default function BrandsClient({
   const [openMenu,    setOpenMenu]    = useState<string | null>(null);
   const [pickerInfo, setPickerInfo] = useState<{ id: string; pos: { top: number; left: number } } | null>(null);
 
-  // ── Inline rename state ──────────────────────────────────────────────────
+  // ── Inline display-name edit state ───────────────────────────────────────
   const [editingBrandId,  setEditingBrandId]  = useState<string | null>(null);
   const [editDisplayName, setEditDisplayName] = useState("");
   const [editBusy,        setEditBusy]        = useState(false);
   const [editError,       setEditError]       = useState<string | null>(null);
   const editCardRef = useRef<HTMLDivElement>(null);
 
-  // Close edit card on outside click
   useEffect(() => {
     if (!editingBrandId) return;
     const handler = (e: MouseEvent) => {
       if (editCardRef.current && !editCardRef.current.contains(e.target as Node)) {
-        setEditingBrandId(null);
-        setEditError(null);
+        setEditingBrandId(null); setEditError(null);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -281,6 +297,7 @@ export default function BrandsClient({
     setEditingBrandId(brand.id);
     setEditDisplayName(brand.name);
     setEditError(null);
+    setAliasEditId(null);          // close alias card if open
     setOpenMenu(null);
     setPickerInfo(null);
   }
@@ -297,6 +314,128 @@ export default function BrandsClient({
       router.refresh();
     } else {
       setEditError(res.error ?? "Failed to rename");
+    }
+  }
+
+  // ── Inline tracked-names (alias) edit state ───────────────────────────────
+  const [aliasEditId,    setAliasEditId]    = useState<string | null>(null);
+  const [editAliases,    setEditAliases]    = useState<string[]>([]);
+  const [newAliasInput,  setNewAliasInput]  = useState("");
+  const [useRegex,       setUseRegex]       = useState(false);
+  const [aliasBusy,      setAliasBusy]      = useState(false);
+  const [aliasError,     setAliasError]     = useState<string | null>(null);
+  const [dragIdx,        setDragIdx]        = useState<number | null>(null);
+  // Individual alias item inline rename
+  const [editingAliasIdx,   setEditingAliasIdx]   = useState<number | null>(null);
+  const [editingAliasValue, setEditingAliasValue] = useState("");
+  const aliasCardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aliasEditId) return;
+    const handler = (e: MouseEvent) => {
+      if (aliasCardRef.current && !aliasCardRef.current.contains(e.target as Node)) {
+        setAliasEditId(null); setAliasError(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [aliasEditId]);
+
+  function startAliasEdit(brand: Brand) {
+    setAliasEditId(brand.id);
+    setEditAliases([...brand.aliases]);
+    setNewAliasInput("");
+    setUseRegex(false);
+    setAliasError(null);
+    setEditingAliasIdx(null);
+    setEditingBrandId(null);       // close display-name card if open
+    setOpenMenu(null);
+    setPickerInfo(null);
+  }
+
+  function addAlias() {
+    const val = newAliasInput.trim();
+    if (!val || editAliases.includes(val)) return;
+    setEditAliases(prev => [...prev, val]);
+    setNewAliasInput("");
+  }
+
+  function removeAlias(idx: number) {
+    setEditAliases(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function doSaveAliases() {
+    if (!aliasEditId || aliasBusy) return;
+    setAliasBusy(true);
+    setAliasError(null);
+    const res = await updateBrandAliasesAction?.({ brandId: aliasEditId, aliases: editAliases });
+    setAliasBusy(false);
+    if (!res || res.ok) {
+      setBrands(prev => prev.map(b => b.id === aliasEditId ? { ...b, aliases: editAliases } : b));
+      setAliasEditId(null);
+      router.refresh();
+    } else {
+      setAliasError(res.error ?? "Failed to save");
+    }
+  }
+
+  // ── Inline domain edit state ──────────────────────────────────────────────
+  const [domainEditId,      setDomainEditId]      = useState<string | null>(null);
+  const [editDomains,       setEditDomains]       = useState<string[]>([]);
+  const [newDomainInput,    setNewDomainInput]    = useState("");
+  const [domainBusy,        setDomainBusy]        = useState(false);
+  const [domainError,       setDomainError]       = useState<string | null>(null);
+  const [dragDomainIdx,     setDragDomainIdx]     = useState<number | null>(null);
+  const [editingDomainIdx,  setEditingDomainIdx]  = useState<number | null>(null);
+  const [editingDomainValue,setEditingDomainValue]= useState("");
+  const domainCardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!domainEditId) return;
+    const handler = (e: MouseEvent) => {
+      if (domainCardRef.current && !domainCardRef.current.contains(e.target as Node)) {
+        setDomainEditId(null); setDomainError(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [domainEditId]);
+
+  function startDomainEdit(brand: Brand) {
+    setDomainEditId(brand.id);
+    setEditDomains([...brand.domains]);
+    setNewDomainInput("");
+    setDomainError(null);
+    setEditingDomainIdx(null);
+    setEditingBrandId(null);
+    setAliasEditId(null);
+    setOpenMenu(null);
+    setPickerInfo(null);
+  }
+
+  function addDomain() {
+    const val = newDomainInput.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
+    if (!val || editDomains.includes(val)) return;
+    setEditDomains(prev => [...prev, val]);
+    setNewDomainInput("");
+  }
+
+  function removeDomain(idx: number) {
+    setEditDomains(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function doSaveDomains() {
+    if (!domainEditId || domainBusy) return;
+    setDomainBusy(true);
+    setDomainError(null);
+    const res = await updateBrandDomainsAction?.({ brandId: domainEditId, domains: editDomains });
+    setDomainBusy(false);
+    if (!res || res.ok) {
+      setBrands(prev => prev.map(b => b.id === domainEditId ? { ...b, domains: editDomains } : b));
+      setDomainEditId(null);
+      router.refresh();
+    } else {
+      setDomainError(res.error ?? "Failed to save");
     }
   }
 
@@ -464,8 +603,10 @@ export default function BrandsClient({
                 </thead>
                 <tbody>
                   {rows.map((brand) => {
-                    const brandColor = brand.color ?? colorFromId(brand.id);
-                    const isEditing = editingBrandId === brand.id;
+                    const brandColor     = brand.color ?? colorFromId(brand.id);
+                    const isNameEditing  = editingBrandId === brand.id;
+                    const isAliasEditing = aliasEditId    === brand.id;
+                    const isDomainEditing = domainEditId  === brand.id;
                     return (
                       <React.Fragment key={brand.id}>
                         <BrandRow
@@ -474,11 +615,16 @@ export default function BrandsClient({
                           onMenu={(id) => setOpenMenu(openMenu === id ? null : id)}
                           onDelete={doDelete}
                           onColorDotClick={(id, e) => openPickerAt(id, e)}
-                          isEditing={isEditing}
+                          isNameEditing={isNameEditing}
+                          isAliasEditing={isAliasEditing}
+                          isDomainEditing={isDomainEditing}
                           onNameClick={startEdit}
+                          onAliasClick={startAliasEdit}
+                          onDomainClick={startDomainEdit}
                         />
-                        {/* Inline edit card row */}
-                        {isEditing && (
+
+                        {/* ── Display-name inline edit card ────────────── */}
+                        {isNameEditing && (
                           <tr className="bp-edit-tr">
                             <td colSpan={6} className="bp-edit-td">
                               <div className="bp-edit-card" ref={editCardRef}>
@@ -501,24 +647,267 @@ export default function BrandsClient({
                                     </button>
                                   )}
                                 </div>
-                                {editError ? (
-                                  <p className="bp-edit-error">{editError}</p>
-                                ) : (
-                                  <p className="bp-edit-hint">
-                                    Press <kbd>↵ enter</kbd> to save edit
-                                  </p>
-                                )}
-                                <button
-                                  className="bp-edit-save-btn"
-                                  disabled={editBusy || !editDisplayName.trim()}
-                                  onClick={doRename}
-                                >
+                                {editError
+                                  ? <p className="bp-edit-error">{editError}</p>
+                                  : <p className="bp-edit-hint">Press <kbd>↵ enter</kbd> to save edit</p>
+                                }
+                                <button className="bp-edit-save-btn" disabled={editBusy || !editDisplayName.trim()} onClick={doRename}>
                                   {editBusy ? "Saving…" : "Save changes"}
                                 </button>
                               </div>
                             </td>
                           </tr>
                         )}
+
+                        {/* ── Tracked-names inline edit card ───────────── */}
+                        {isAliasEditing && (
+                          <tr className="bp-edit-tr">
+                            <td colSpan={6} className="bp-edit-td bp-edit-td--alias">
+                              <div className="bp-alias-card" ref={aliasCardRef}>
+                                {/* Add input */}
+                                <div className="bp-alias-add-wrap">
+                                  <input
+                                    className="bp-alias-add-input"
+                                    placeholder="Create and add tracked names"
+                                    value={newAliasInput}
+                                    autoFocus
+                                    onChange={e => setNewAliasInput(e.target.value)}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter") { e.preventDefault(); addAlias(); }
+                                      if (e.key === "Escape") { setAliasEditId(null); setAliasError(null); }
+                                    }}
+                                  />
+                                  {newAliasInput && (
+                                    <button className="bp-edit-clear" onClick={() => setNewAliasInput("")} tabIndex={-1}>
+                                      <X size={12} />
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Tracked names list */}
+                                {editAliases.length > 0 && (
+                                  <>
+                                    <div className="bp-alias-section-label">Tracked names</div>
+                                    <ul className="bp-alias-list">
+                                      {editAliases.map((alias, idx) => (
+                                        <li
+                                          key={idx}
+                                          className={`bp-alias-item${dragIdx === idx ? " bp-alias-item--dragging" : ""}${editingAliasIdx === idx ? " bp-alias-item--editing" : ""}`}
+                                          draggable={editingAliasIdx !== idx}
+                                          onDragStart={() => editingAliasIdx === null && setDragIdx(idx)}
+                                          onDragOver={e => { e.preventDefault(); }}
+                                          onDrop={e => {
+                                            e.preventDefault();
+                                            if (dragIdx === null || dragIdx === idx) return;
+                                            const next = [...editAliases];
+                                            const [moved] = next.splice(dragIdx, 1);
+                                            next.splice(idx, 0, moved);
+                                            setEditAliases(next);
+                                            setDragIdx(null);
+                                          }}
+                                          onDragEnd={() => setDragIdx(null)}
+                                        >
+                                          <span className="bp-alias-grip">⠿</span>
+
+                                          {/* Inline alias rename input OR static name */}
+                                          {editingAliasIdx === idx ? (
+                                            <input
+                                              className="bp-alias-inline-input"
+                                              value={editingAliasValue}
+                                              autoFocus
+                                              onChange={e => setEditingAliasValue(e.target.value)}
+                                              onKeyDown={e => {
+                                                if (e.key === "Enter") {
+                                                  e.preventDefault();
+                                                  const val = editingAliasValue.trim();
+                                                  if (val) {
+                                                    setEditAliases(prev => prev.map((a, i) => i === idx ? val : a));
+                                                  }
+                                                  setEditingAliasIdx(null);
+                                                }
+                                                if (e.key === "Escape") {
+                                                  setEditingAliasIdx(null);
+                                                }
+                                              }}
+                                              onBlur={() => {
+                                                const val = editingAliasValue.trim();
+                                                if (val) setEditAliases(prev => prev.map((a, i) => i === idx ? val : a));
+                                                setEditingAliasIdx(null);
+                                              }}
+                                              onClick={e => e.stopPropagation()}
+                                            />
+                                          ) : (
+                                            <span className="bp-alias-name">{alias}</span>
+                                          )}
+
+                                          {/* Pencil edit + X remove buttons */}
+                                          {editingAliasIdx !== idx && (
+                                            <div className="bp-alias-actions">
+                                              <button
+                                                className="bp-alias-edit-btn"
+                                                title="Edit tracked name"
+                                                onClick={e => {
+                                                  e.stopPropagation();
+                                                  setEditingAliasIdx(idx);
+                                                  setEditingAliasValue(alias);
+                                                }}
+                                                tabIndex={-1}
+                                              >
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                                </svg>
+                                              </button>
+                                              <button className="bp-alias-rm" onClick={() => removeAlias(idx)} tabIndex={-1}>
+                                                <X size={11} />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </>
+                                )}
+
+                                {/* Advanced: Regular Expression toggle */}
+                                <div className="bp-alias-regex-row">
+                                  <span className="bp-alias-regex-label">or Advanced: Regular Expression</span>
+                                  <button
+                                    role="switch"
+                                    aria-checked={useRegex}
+                                    className={`bp-alias-toggle${useRegex ? " bp-alias-toggle--on" : ""}`}
+                                    onClick={() => setUseRegex(v => !v)}
+                                  >
+                                    <span className="bp-alias-toggle-thumb" />
+                                  </button>
+                                </div>
+
+                                {aliasError && <p className="bp-edit-error">{aliasError}</p>}
+
+                                <button
+                                  className="bp-edit-save-btn"
+                                  disabled={aliasBusy}
+                                  onClick={doSaveAliases}
+                                >
+                                  {aliasBusy ? "Saving…" : "Save changes"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* ── Domain inline edit card ──────────────────── */}
+                        {isDomainEditing && (
+                          <tr className="bp-edit-tr">
+                            <td colSpan={6} className="bp-edit-td bp-edit-td--domain">
+                              <div className="bp-alias-card" ref={domainCardRef}>
+                                {/* Add domain input */}
+                                <div className="bp-alias-add-wrap">
+                                  <input
+                                    className="bp-alias-add-input"
+                                    placeholder="Create and add domains"
+                                    value={newDomainInput}
+                                    autoFocus
+                                    onChange={e => setNewDomainInput(e.target.value)}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter") { e.preventDefault(); addDomain(); }
+                                      if (e.key === "Escape") { setDomainEditId(null); setDomainError(null); }
+                                    }}
+                                  />
+                                  {newDomainInput && (
+                                    <button className="bp-edit-clear" onClick={() => setNewDomainInput("")} tabIndex={-1}>
+                                      <X size={12} />
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Domain list */}
+                                {editDomains.length > 0 && (
+                                  <>
+                                    <div className="bp-alias-section-label">Primary domain</div>
+                                    <ul className="bp-alias-list">
+                                      {editDomains.map((domain, idx) => (
+                                        <li
+                                          key={idx}
+                                          className={`bp-alias-item${dragDomainIdx === idx ? " bp-alias-item--dragging" : ""}${editingDomainIdx === idx ? " bp-alias-item--editing" : ""}`}
+                                          draggable={editingDomainIdx !== idx}
+                                          onDragStart={() => editingDomainIdx === null && setDragDomainIdx(idx)}
+                                          onDragOver={e => e.preventDefault()}
+                                          onDrop={e => {
+                                            e.preventDefault();
+                                            if (dragDomainIdx === null || dragDomainIdx === idx) return;
+                                            const next = [...editDomains];
+                                            const [moved] = next.splice(dragDomainIdx, 1);
+                                            next.splice(idx, 0, moved);
+                                            setEditDomains(next);
+                                            setDragDomainIdx(null);
+                                          }}
+                                          onDragEnd={() => setDragDomainIdx(null)}
+                                        >
+                                          <span className="bp-alias-grip">⠿</span>
+                                          {editingDomainIdx === idx ? (
+                                            <input
+                                              className="bp-alias-inline-input"
+                                              value={editingDomainValue}
+                                              autoFocus
+                                              onChange={e => setEditingDomainValue(e.target.value)}
+                                              onKeyDown={e => {
+                                                if (e.key === "Enter") {
+                                                  e.preventDefault();
+                                                  const val = editingDomainValue.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
+                                                  if (val) setEditDomains(prev => prev.map((d, i) => i === idx ? val : d));
+                                                  setEditingDomainIdx(null);
+                                                }
+                                                if (e.key === "Escape") setEditingDomainIdx(null);
+                                              }}
+                                              onBlur={() => {
+                                                const val = editingDomainValue.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
+                                                if (val) setEditDomains(prev => prev.map((d, i) => i === idx ? val : d));
+                                                setEditingDomainIdx(null);
+                                              }}
+                                              onClick={e => e.stopPropagation()}
+                                            />
+                                          ) : (
+                                            <span className="bp-alias-name">{domain}</span>
+                                          )}
+                                          {editingDomainIdx !== idx && (
+                                            <div className="bp-alias-actions">
+                                              <button
+                                                className="bp-alias-edit-btn"
+                                                title="Edit domain"
+                                                onClick={e => { e.stopPropagation(); setEditingDomainIdx(idx); setEditingDomainValue(domain); }}
+                                                tabIndex={-1}
+                                              >
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                                </svg>
+                                              </button>
+                                              <button className="bp-alias-rm" onClick={() => removeDomain(idx)} tabIndex={-1}>
+                                                <X size={11} />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </>
+                                )}
+
+                                {domainError && <p className="bp-edit-error" style={{ padding: "4px 12px" }}>{domainError}</p>}
+
+                                <button
+                                  className="bp-edit-save-btn"
+                                  disabled={domainBusy}
+                                  onClick={doSaveDomains}
+                                >
+                                  {domainBusy ? "Saving…" : "Save changes"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+
                         {pickerInfo?.id === brand.id && (
                           <BrandColorPicker
                             key={`picker-${brand.id}`}
