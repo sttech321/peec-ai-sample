@@ -683,6 +683,327 @@
   .bp-search-wrap { width: 100%; }
 }
 
+/* ── Clickable name cell ─────────────────────────────────────────────────── */
+.bp-td--name {
+  cursor: pointer;
+}
+.bp-td--name:hover .bp-name-text {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: #4f46e5;
+}
+.bp-row--editing .bp-td--name {
+  background: #eef2ff;
+}
+.bp-row--editing .bp-td--name .bp-name-text {
+  color: #4f46e5;
+}
+
+/* ── Inline edit card ────────────────────────────────────────────────────── */
+.bp-edit-tr { background: transparent; }
+.bp-edit-td { padding: 0 14px 10px 58px !important; border-bottom: 1px solid #f3f4f6; }
+
+.bp-edit-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+  box-shadow: 0 4px 16px -4px rgba(0,0,0,0.10);
+  animation: bp-up 0.15s cubic-bezier(0.16,1,0.3,1);
+}
+
+.bp-edit-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.bp-edit-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.bp-edit-input {
+  width: 100%;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 7px 32px 7px 10px;
+  font-size: 13px;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.bp-edit-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.10);
+}
+
+.bp-edit-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+.bp-edit-clear:hover { color: #374151; background: #f3f4f6; }
+
+.bp-edit-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+.bp-edit-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #374151;
+}
+
+.bp-edit-error {
+  font-size: 11px;
+  color: #ef4444;
+  line-height: 1.4;
+}
+
+.bp-edit-save-btn {
+  width: 100%;
+  background: #111827;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-top: 2px;
+}
+.bp-edit-save-btn:hover:not(:disabled) { background: #374151; }
+.bp-edit-save-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Tracked-names (alias) cell ──────────────────────────────────────────── */
+.bp-td--alias {
+  cursor: pointer;
+}
+.bp-td--alias:hover {
+  color: #4f46e5;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bp-td--active-edit {
+  background: #eef2ff !important;
+  color: #4f46e5 !important;
+}
+
+/* ── Tracked-names edit card ─────────────────────────────────────────────── */
+.bp-edit-td--alias  { padding-left: calc(44px + 14px + 14px) !important; }
+/* Domain card: after Brand color + Display name + Tracked names columns */
+.bp-edit-td--domain { padding-left: calc(44px + 14px + 220px + 14px) !important; }
+
+.bp-alias-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0;
+  max-width: 340px;
+  box-shadow: 0 4px 16px -4px rgba(0,0,0,0.10);
+  animation: bp-up 0.15s cubic-bezier(0.16,1,0.3,1);
+  overflow: hidden;
+}
+
+/* Add input at top */
+.bp-alias-add-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #f3f4f6;
+}
+.bp-alias-add-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 11px 32px 11px 12px;
+  font-size: 13px;
+  color: #111827;
+}
+.bp-alias-add-input::placeholder { color: #9ca3af; }
+
+/* Section label */
+.bp-alias-section-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  padding: 8px 12px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* Alias list */
+.bp-alias-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px;
+}
+.bp-alias-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin: 0 4px;
+  cursor: grab;
+  transition: background 0.1s;
+  user-select: none;
+}
+.bp-alias-item:hover { background: #f9fafb; }
+.bp-alias-item--dragging { opacity: 0.45; background: #f3f4f6; }
+
+.bp-alias-grip {
+  color: #d1d5db;
+  font-size: 14px;
+  cursor: grab;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.bp-alias-name {
+  flex: 1;
+  font-size: 13px;
+  color: #374151;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bp-alias-rm {
+  background: none;
+  border: none;
+  padding: 3px;
+  cursor: pointer;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.1s, background 0.1s;
+}
+.bp-alias-rm:hover { color: #ef4444; background: #fef2f2; }
+
+/* Pencil + X grouped on the right */
+.bp-alias-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
+  flex-shrink: 0;
+}
+.bp-alias-item:hover .bp-alias-actions { opacity: 1; }
+.bp-alias-item--editing .bp-alias-actions { display: none; }
+
+.bp-alias-edit-btn {
+  background: none;
+  border: none;
+  padding: 3px;
+  cursor: pointer;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: color 0.1s, background 0.1s;
+}
+.bp-alias-edit-btn:hover { color: #6366f1; background: #eef2ff; }
+
+/* Move rm into actions group — hide old standalone opacity */
+.bp-alias-rm {
+  opacity: 1;
+}
+.bp-alias-item:hover .bp-alias-rm { opacity: 1; }
+
+/* Inline alias name input */
+.bp-alias-inline-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  font-size: 13px;
+  color: #111827;
+  border: 1.5px solid #6366f1;
+  border-radius: 5px;
+  outline: none;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.10);
+}
+
+.bp-alias-item--editing {
+  background: #f5f3ff;
+  cursor: default;
+}
+
+/* Regex toggle row */
+.bp-alias-regex-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-top: 1px solid #f3f4f6;
+  margin-top: 4px;
+}
+.bp-alias-regex-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+.bp-alias-toggle {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 9px;
+  background: #d1d5db;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.bp-alias-toggle--on { background: #6366f1; }
+.bp-alias-toggle-thumb {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.bp-alias-toggle--on .bp-alias-toggle-thumb { left: 18px; }
+
+/* Save button inside alias card needs padding */
+.bp-alias-card .bp-edit-save-btn {
+  margin: 8px 12px 12px;
+  width: calc(100% - 24px);
+  border-radius: 7px;
+}
+
 /* ── Animations ──────────────────────────────────────────────────────────── */
 @keyframes bp-fade {
   from { opacity: 0; }
