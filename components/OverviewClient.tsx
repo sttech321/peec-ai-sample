@@ -198,7 +198,7 @@ export default function OverviewClient({
     [chatFacts, effectiveModels, effectiveDateRange],
   );
 
-  // All brands (no slice) — needed for correct SOV denominator
+  // ── Current period (date-filtered) — SOV denominator + display metrics ─────────
   const allBrands = useMemo(
     () => aggregateBrands(filteredChats, 9999, undefined, stableBrandColors),
     [filteredChats, stableBrandColors]
@@ -207,33 +207,31 @@ export default function OverviewClient({
     () => allBrands.reduce((s, b) => s + b.count, 0),
     [allBrands]
   );
+  // Quick lookup for display metrics in table rows
+  const currentPeriodMap = useMemo(() => {
+    const m = new Map<string, typeof allBrands[0]>();
+    for (const b of allBrands) m.set(b.name, b);
+    return m;
+  }, [allBrands]);
 
+  // ── 6-month pool — NO date filter, engine filter only ───────────────────────
+  // Used for stable TOP 7 selection & sorting (brands don't disappear in short windows)
+  const allBrandsFullPeriod = useMemo(
+    () => aggregateBrands(filterByEngines(chatFacts, effectiveModels), 9999, undefined, stableBrandColors),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatFacts, effectiveModels, stableBrandColors]
+  );
+  // Filtered pool (by brand selector if active)
   const brands = useMemo(() => {
-    const filtered = effectiveBrandIds === null
-      ? allBrands
-      : allBrands.filter((b) => effectiveBrandIds.includes(b.name));
-    return filtered.slice(0, 7);
-  }, [allBrands, effectiveBrandIds]);
+    return effectiveBrandIds === null
+      ? allBrandsFullPeriod
+      : allBrandsFullPeriod.filter((b) => effectiveBrandIds.includes(b.name));
+  }, [allBrandsFullPeriod, effectiveBrandIds]);
 
   const domains = useMemo(() => aggregateDomains(filteredChats, 10), [filteredChats]);
   const totalDomainCitations = useMemo(() => totalCitations(filteredChats), [filteredChats]);
 
-  const chartData = useMemo(
-    () => buildVisibilitySeries(filteredChats, brands.map((b) => b.name), resolution, effectiveDateRange),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filteredChats, brands, resolution, effectiveDateRange],
-  );
-
-  // Bar chart: aggregated visibility per brand over full date range
-  const barData = useMemo(() => {
-    const total = filteredChats.length;
-    return brands.map(b => ({
-      name:   b.name,
-      value:  total > 0 ? Math.round((b.count / total) * 100) : 0,
-      color:  b.color,
-      domain: guessBrandDomain(b.name),
-    }));
-  }, [brands, filteredChats]);
+  // chartData and barData defined after chartBrands (further below)
 
   // Prompts per date for tooltip footer
   const promptsPerDate = useMemo(() => {
@@ -314,26 +312,51 @@ export default function OverviewClient({
     list.sort((a, b) => {
       if (brandSortCol === "visibility" || brandSortCol === "sov") return dir * (b.count - a.count);
       if (brandSortCol === "sentiment") return dir * ((b.sentiment ?? 0) - (a.sentiment ?? 0));
-      if (brandSortCol === "position")  return dir * ((b.position  ?? 0) - (a.position  ?? 0));
+      if (brandSortCol === "position") {
+        const posA = a.position && a.position > 0 ? a.position : 999;
+        const posB = b.position && b.position > 0 ? b.position : 999;
+        return -dir * (posB - posA);
+      }
       return 0;
     });
     return list;
   }, [brands, brandSortCol, brandSortMode]);
 
+  // Top 7 from sorted list — chart + table both use these exact 7 brands
+  const chartBrands = useMemo(() => sortedBrands.slice(0, 7), [sortedBrands]);
+
+  // chartData + barData defined here (after chartBrands)
+  const chartData = useMemo(
+    () => buildVisibilitySeries(filteredChats, chartBrands.map((b) => b.name), resolution, effectiveDateRange),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filteredChats, chartBrands, resolution, effectiveDateRange],
+  );
+  const barData = useMemo(() => {
+    const total = filteredChats.length;
+    return chartBrands.map(b => {
+      const cb = currentPeriodMap.get(b.name);
+      return {
+        name:   b.name,
+        value:  cb && total > 0 ? Math.round((cb.count / total) * 100) : 0,
+        color:  b.color,
+        domain: guessBrandDomain(b.name),
+      };
+    });
+  }, [chartBrands, currentPeriodMap, filteredChats]);
+
   // ── Pinned own brand (Peec AI behavior) ──────────────────────────────────
-  // If no own brand is in the top-7 list, find it in allBrands and pin it at bottom
-  // with its REAL rank from allBrands (sorted by count descending).
+  // Rank = ALWAYS from 6-month Visibility High-Low (stable "#10 most visible" regardless of sort)
   const pinnedOwnBrand = useMemo(() => {
-    const ownBrandInTop7 = sortedBrands.some(b => ownBrandNames.has(b.name));
-    if (ownBrandInTop7) return null; // already visible, no need to pin
+    const ownBrandInTop7 = chartBrands.some(b => ownBrandNames.has(b.name));
+    if (ownBrandInTop7) return null;
 
-    // allBrands sorted by count desc (same as aggregateBrands output)
-    const allSorted = [...allBrands].sort((a, b) => b.count - a.count);
-    const ownIdx    = allSorted.findIndex(b => ownBrandNames.has(b.name));
-    if (ownIdx === -1) return null; // no own brand in data at all
+    // Sort 6-month pool by visibility desc — gives stable rank like Peec AI
+    const byVisDesc = [...brands].sort((a, b) => b.count - a.count);
+    const ownIdx    = byVisDesc.findIndex(b => ownBrandNames.has(b.name));
+    if (ownIdx === -1) return null;
 
-    return { brand: allSorted[ownIdx], rank: ownIdx + 1 };
-  }, [sortedBrands, allBrands, ownBrandNames]);
+    return { brand: byVisDesc[ownIdx], rank: ownIdx + 1 };
+  }, [chartBrands, brands, ownBrandNames]);
 
   const ownDomainSet = useMemo(() => {
     const set = new Set<string>();
@@ -707,37 +730,40 @@ export default function OverviewClient({
                 </tr>
               </thead>
               <tbody>
-                {/* Show max 6 when own brand is pinned at bottom, otherwise 7 */}
-                {(pinnedOwnBrand ? sortedBrands.slice(0, 6) : sortedBrands).map((b, i) => {
-                  // Visibility = chats mentioning brand / total chats × 100
+                {/* Exactly 7 brands — 6 from chartBrands if own brand pinned at bottom */}
+                {(pinnedOwnBrand ? chartBrands.slice(0, 6) : chartBrands).map((b, i) => {
+                  // Display metrics from currentPeriodMap (current date range)
+                  const cb         = currentPeriodMap.get(b.name);
+                  // Use current period metrics for display (cb), 6-month b just for ordering
                   const totalChats = filteredChats.length;
-                  const vis = totalChats > 0 ? Math.round((b.count / totalChats) * 100) : 0;
-
-                  // SOV = brand mentions / ALL brands total mentions × 100
-                  const sov = totalAllBrandCount > 0 ? Math.round((b.count / totalAllBrandCount) * 100) : 0;
-
-                  const sent = b.sentiment ? Math.round(b.sentiment) : 0;
+                  const vis  = cb && totalChats > 0         ? Math.round((cb.count / totalChats) * 100)         : 0;
+                  const sov  = cb && totalAllBrandCount > 0 ? Math.round((cb.count / totalAllBrandCount) * 100) : 0;
+                  const sent = cb?.sentiment                 ? Math.round(cb.sentiment)                          : 0;
                   const dotColor = sentimentDotColor(sent);
 
-                  // Use pre-computed totals (not re-computed per row)
                   const prevAllBrandCount = prevAllBrandCountMemo;
                   const prevTotalChats    = prevTotalChatsMemo;
-                  const pb      = prevBrands.find(p => p.name === b.name);
-                  const pVis    = prevTotalChats > 0 && pb ? Math.round((pb.count / prevTotalChats) * 100) : 0;
-                  const pSov    = prevAllBrandCount > 0 && pb ? Math.round((pb.count / prevAllBrandCount) * 100) : 0;
-                  const visDelta = vis - pVis;
-                  const sovDelta = sov - pSov;
-                  const sentDelta = pb && pb.sentiment ? Math.round(b.sentiment - pb.sentiment) : 0;
-                  const posDelta  = pb && pb.position && b.position
-                    ? parseFloat((b.position - pb.position).toFixed(1)) : 0;
+                  const pb       = prevBrands.find(p => p.name === b.name);
+                  const pVis     = prevTotalChats > 0 && pb    ? Math.round((pb.count / prevTotalChats) * 100)    : 0;
+                  const pSov     = prevAllBrandCount > 0 && pb ? Math.round((pb.count / prevAllBrandCount) * 100) : 0;
+                  const visDelta  = vis - pVis;
+                  const sovDelta  = sov - pSov;
+                  const sentDelta = pb?.sentiment && cb ? Math.round((cb.sentiment ?? 0) - pb.sentiment) : 0;
+                  const bPos      = cb?.position ?? 0;
+                  const posDelta  = pb?.position && bPos ? parseFloat((bPos - pb.position).toFixed(1)) : 0;
 
-                  // Render delta based on indicatorMode
                   const showValue = indicatorMode !== "indicators-only";
                   const showDelta = indicatorMode !== "none";
-
                   const deltaEl = (v: number, fmt: (n: number) => string) =>
                     showDelta && v !== 0 ? (
                       <span className={v > 0 ? "pd-delta-pos" : "pd-delta-neg"}>
+                        {v > 0 ? "+" : ""}{fmt(v)}
+                      </span>
+                    ) : null;
+                  // Inverted delta for Position: lower rank# = better → negative = green
+                  const deltaElInv = (v: number, fmt: (n: number) => string) =>
+                    showDelta && v !== 0 ? (
+                      <span className={v < 0 ? "pd-delta-pos" : "pd-delta-neg"}>
                         {v > 0 ? "+" : ""}{fmt(v)}
                       </span>
                     ) : null;
@@ -795,17 +821,17 @@ export default function OverviewClient({
                           {deltaEl(sentDelta, n => `${n > 0 ? "+" : ""}${n}`)}
                         </span>
                       </td>
-                      {/* Position */}
+                      {/* Position — use current period bPos */}
                       <td>
                         <span className="pd-metric-with-delta">
-                          {showValue && <span>{b.position ? `#${b.position.toFixed(1)}` : "—"}</span>}
-                          {deltaEl(posDelta, (n: number) => `${n > 0 ? "+" : ""}${n}`)}
+                          {showValue && <span>{bPos > 0 ? `#${bPos.toFixed(1)}` : "—"}</span>}
+                          {deltaElInv(posDelta, (n: number) => `${n > 0 ? "+" : ""}${n}`)}
                         </span>
                       </td>
                     </tr>
                   );
                 })}
-                {sortedBrands.length === 0 && (
+                {chartBrands.length === 0 && (
                   <tr><td colSpan={6} className="pd-empty">No brands extracted yet</td></tr>
                 )}
 

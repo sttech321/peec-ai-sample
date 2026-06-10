@@ -671,6 +671,27 @@
 .bp-btn-create:hover:not(:disabled) { background: #374151; }
 .bp-btn-create:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* ── Re-process button ───────────────────────────────────────────────────── */
+.bp-reprocess-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.bp-reprocess-btn:hover:not(:disabled) { background: #f9fafb; border-color: #d1d5db; color: #111827; }
+.bp-reprocess-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+
+@keyframes bp-spin { to { transform: rotate(360deg); } }
+
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .bp-sidebar { width: 240px; }

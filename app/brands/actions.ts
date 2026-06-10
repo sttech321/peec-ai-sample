@@ -4,7 +4,11 @@ import { db } from "../../db";
 import { brands, brandSuggestions } from "../../db/schema";
 import { and, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getActiveProjectId } from "../../lib/project-context";
+import { getActiveProjectId, getWorkspaceId } from "../../lib/project-context";
+import {
+  retroactiveBrandExtraction,
+  retroactiveExtractionAllBrands,
+} from "../../lib/retroactive-brand-extraction";
 
 export async function renameBrand(args: {
   brandId: string;
@@ -90,20 +94,66 @@ export async function acceptSuggestion(suggestionId: string) {
 
   if (!suggestion) return;
 
-  // 2. Add to brands table
-  await db.insert(brands).values({
+  // 2. Add to brands table and get the new brand ID
+  const [inserted] = await db.insert(brands).values({
     workspaceId: suggestion.workspaceId,
-    projectId: suggestion.projectId,
-    name: suggestion.name,
-    isOwn: false,
-    aliases: [suggestion.name],
-    domains: suggestion.domain ? [suggestion.domain] : [],
-  });
+    projectId:   suggestion.projectId,
+    name:        suggestion.name,
+    isOwn:       false,
+    aliases:     [suggestion.name],
+    domains:     suggestion.domain ? [suggestion.domain] : [],
+  }).returning({ id: brands.id, workspaceId: brands.workspaceId });
 
-  // 3. Remove from suggestions
+  // 3. Retroactively create brandMentions for all past chats that mention this brand
+  //    (runs in the background — doesn't block the accept action UI)
+  if (inserted) {
+    try {
+      await retroactiveBrandExtraction({
+        projectId: suggestion.projectId,
+        brand: {
+          id:          inserted.id,
+          workspaceId: inserted.workspaceId,
+          name:        suggestion.name,
+          aliases:     [suggestion.name],
+        },
+      });
+    } catch (err) {
+      // Non-fatal: retroactive extraction can fail silently
+      console.warn("[retroactive] brand extraction failed:", err);
+    }
+  }
+
+  // 4. Remove from suggestions
   await db.delete(brandSuggestions).where(eq(brandSuggestions.id, suggestionId));
 
   revalidatePath("/brands");
+  revalidatePath("/");
+  revalidatePath("/insights");
+}
+
+/**
+ * Re-process ALL past chats for the active project.
+ * Creates brandMentions for all tracked brands that were missed
+ * because they weren't tracked when the crawl originally ran.
+ */
+export async function reprocessAllBrands(): Promise<{
+  ok: boolean;
+  scanned: number;
+  created: number;
+  brandsProcessed: number;
+  error?: string;
+}> {
+  try {
+    const projectId = await getActiveProjectId();
+    const result    = await retroactiveExtractionAllBrands(projectId);
+    revalidatePath("/");
+    revalidatePath("/insights");
+    revalidatePath("/brands");
+    return { ok: true, ...result };
+  } catch (err) {
+    console.error("[reprocessAllBrands]", err);
+    return { ok: false, scanned: 0, created: 0, brandsProcessed: 0, error: String(err) };
+  }
 }
 
 export async function rejectSuggestion(suggestionId: string) {

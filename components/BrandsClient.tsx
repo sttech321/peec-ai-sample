@@ -64,6 +64,7 @@ interface Props {
   renameBrandAction?: (args: { brandId: string; displayName: string }) => Promise<{ ok: boolean; error?: string }>;
   updateBrandAliasesAction?: (args: { brandId: string; aliases: string[] }) => Promise<{ ok: boolean; error?: string }>;
   updateBrandDomainsAction?: (args: { brandId: string; domains: string[] }) => Promise<{ ok: boolean; error?: string }>;
+  reprocessAllBrandsAction?: () => Promise<{ ok: boolean; scanned: number; created: number; brandsProcessed: number; error?: string }>;
 }
 
 // ─── BrandAvatar ─────────────────────────────────────────────────────────────
@@ -266,6 +267,7 @@ function normalizeDomain(raw: string): string {
 export default function BrandsClient({
   initialBrands, initialSuggestions, projectId, workspaceId,
   updateBrandColorAction, renameBrandAction, updateBrandAliasesAction, updateBrandDomainsAction,
+  reprocessAllBrandsAction,
 }: Props) {
   const router = useRouter();
 
@@ -274,6 +276,26 @@ export default function BrandsClient({
   const [search,      setSearch]      = useState("");
   const [openMenu,    setOpenMenu]    = useState<string | null>(null);
   const [pickerInfo, setPickerInfo] = useState<{ id: string; pos: { top: number; left: number } } | null>(null);
+
+  // ── Re-process past chats state ───────────────────────────────────────────
+  const [reprocessBusy,   setReprocessBusy]   = useState(false);
+  const [reprocessResult, setReprocessResult] = useState<{ created: number; brandsProcessed: number } | null>(null);
+  const [reprocessError,  setReprocessError]  = useState<string | null>(null);
+
+  async function doReprocess() {
+    if (reprocessBusy || !reprocessAllBrandsAction) return;
+    setReprocessBusy(true);
+    setReprocessResult(null);
+    setReprocessError(null);
+    const res = await reprocessAllBrandsAction();
+    setReprocessBusy(false);
+    if (res.ok) {
+      setReprocessResult({ created: res.created, brandsProcessed: res.brandsProcessed });
+      router.refresh();
+    } else {
+      setReprocessError(res.error ?? "Re-process failed");
+    }
+  }
 
   // ── Inline display-name edit state ───────────────────────────────────────
   const [editingBrandId,  setEditingBrandId]  = useState<string | null>(null);
@@ -554,6 +576,32 @@ export default function BrandsClient({
       {/* ── Top bar (full-width) ── */}
       <div className="bp-topbar">
         <h1 className="bp-title">Your brands <span className="bp-title-count">· {brands.length}</span></h1>
+
+        {/* Re-process past chats button — shown when past chats may have missing brand data */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {reprocessResult && (
+            <span style={{ fontSize: 12, color: "#10b981" }}>
+              ✓ {reprocessResult.created} mentions found across {reprocessResult.brandsProcessed} brands
+            </span>
+          )}
+          {reprocessError && (
+            <span style={{ fontSize: 12, color: "#ef4444" }}>{reprocessError}</span>
+          )}
+          {reprocessAllBrandsAction && (
+            <button
+              className="bp-reprocess-btn"
+              onClick={doReprocess}
+              disabled={reprocessBusy}
+              title="Scan all past chat responses and create brand mentions for tracked brands"
+            >
+              {reprocessBusy ? (
+                <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: "bp-spin 0.8s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg> Processing…</>
+              ) : (
+                <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Re-process past chats</>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Two-column body ── */}

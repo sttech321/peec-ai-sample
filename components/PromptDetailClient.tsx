@@ -267,23 +267,33 @@ export default function PromptDetailClient({
     [chatFacts, selectedModels, dateRange],
   );
 
-  // Full ranking of every brand seen for this prompt — drives both the top 7
-  // table and any overflow rows for pinned competitors that don't make the cut.
+  // ── 6-month brand pool — engine-filtered only, no date filter ────────────────
+  // Stable brand selection: top brands from full 6-month history, not just current window
+  const fullRankingFullPeriod = useMemo(
+    () => aggregateBrands(filterByEngines(chatFacts, selectedModels), 500, undefined, stableBrandColors),
+    [chatFacts, selectedModels, stableBrandColors],
+  );
+
+  // Current period ranking — for display metrics (vis%, SOV%, sentiment, position)
   const fullRanking = useMemo(
     () => aggregateBrands(filteredChats, 500, undefined, stableBrandColors),
     [filteredChats, stableBrandColors],
   );
 
-  // Real rank (1-indexed) by brand name, for the "#36" overflow label.
-  const rankByName = useMemo(() => {
-    const m = new Map<string, number>();
-    fullRanking.forEach((b, i) => m.set(b.name, i + 1));
+  // Quick lookup: current period metrics by brand name
+  const currentPeriodMap = useMemo(() => {
+    const m = new Map<string, typeof fullRanking[0]>();
+    for (const b of fullRanking) m.set(b.name, b);
     return m;
   }, [fullRanking]);
 
-  // Pinned brands are *always* shown: tracked-own brands by default, plus any
-  // competitor(s) the user selected in the Brands dropdown. Per spec the
-  // dropdown is "one at a time" but we tolerate any number — they all overflow.
+  // Real rank (1-indexed) in 6-month visibility High-Low — for pinned brand rank display
+  const rankByName = useMemo(() => {
+    const m = new Map<string, number>();
+    fullRankingFullPeriod.forEach((b, i) => m.set(b.name, i + 1));
+    return m;
+  }, [fullRankingFullPeriod]);
+
   const pinnedNames = useMemo(() => {
     const names = new Set<string>();
     for (const b of projectBrands) if (b.isOwn) names.add(b.name);
@@ -291,17 +301,15 @@ export default function PromptDetailClient({
     return names;
   }, [projectBrands, selectedBrands]);
 
-  // top7 respects selectedBrands filter — unchecked brands are hidden from the table.
-  // Own brand (isOwn=true) always appears regardless of filter.
+  // top7 from 6-month pool — stable across date range changes
   const top7 = useMemo(() => {
     const ownBrandNames = new Set(projectBrands.filter((b) => b.isOwn).map((b) => b.name));
     const visible = selectedBrands === null
-      ? fullRanking
-      : fullRanking.filter((b) => selectedBrands.includes(b.name) || ownBrandNames.has(b.name));
+      ? fullRankingFullPeriod
+      : fullRankingFullPeriod.filter((b) => selectedBrands.includes(b.name) || ownBrandNames.has(b.name));
     return visible.slice(0, 7);
-  }, [fullRanking, selectedBrands, projectBrands]);
+  }, [fullRankingFullPeriod, selectedBrands, projectBrands]);
 
-  // Show exactly top 7 — no overflow/pinned section beyond 7 brands.
   const brands = useMemo(() => top7, [top7]);
 
   const domains = useMemo(() => aggregateDomains(filteredChats, 10), [filteredChats]);
@@ -315,11 +323,16 @@ export default function PromptDetailClient({
   // Bar chart + tooltips + dynamic label (matching Overview design)
   const barData = useMemo(() => {
     const total = filteredChats.length;
-    return brands.map(b => ({
-      name: b.name, value: total > 0 ? Math.round((b.count / total) * 100) : 0,
-      color: b.color, domain: guessBrandDomain(b.name),
-    }));
-  }, [brands, filteredChats]);
+    return brands.map(b => {
+      const cb = currentPeriodMap.get(b.name);
+      return {
+        name: b.name,
+        value: cb && total > 0 ? Math.round((cb.count / total) * 100) : 0,
+        color: b.color,
+        domain: guessBrandDomain(b.name),
+      };
+    });
+  }, [brands, currentPeriodMap, filteredChats]);
 
   const promptsPerDate = useMemo(() => {
     const map = new Map<string, number>();
@@ -398,7 +411,11 @@ export default function PromptDetailClient({
       if (brandSortCol === "visibility") return dir * (b.count - a.count);
       if (brandSortCol === "sov")        return dir * ((sowMap.get(b.name) ?? 0) - (sowMap.get(a.name) ?? 0));
       if (brandSortCol === "sentiment")  return dir * ((b.sentiment ?? 0) - (a.sentiment ?? 0));
-      if (brandSortCol === "position")   return dir * ((b.position ?? 0) - (a.position ?? 0));
+      if (brandSortCol === "position") {
+        const posA = a.position && a.position > 0 ? a.position : 999;
+        const posB = b.position && b.position > 0 ? b.position : 999;
+        return -dir * (posB - posA); // lower position# = better rank → invert
+      }
       return 0;
     });
     return list;
@@ -551,7 +568,8 @@ export default function PromptDetailClient({
   }
   const insight = visibilityInsight(brandVisibilityPct, sourceVisibilityPct);
 
-  const totalMentions = brands.reduce((s, b) => s + b.count, 0);
+  // totalMentions from current period (not 6-month)
+  const totalMentions = brands.reduce((s, b) => s + (currentPeriodMap.get(b.name)?.count ?? 0), 0);
   const maxDomainCount = domains.length > 0 ? domains[0].count : 1;
 
   const competitorDomainSet = useMemo(() => {
@@ -930,19 +948,23 @@ export default function PromptDetailClient({
               </thead>
               <tbody>
                 {sortedBrands.map((b, i) => {
-                  const vis = filteredChats.length > 0 ? Math.round((b.count / filteredChats.length) * 100) : 0;
-                  const sov = Math.round(sowMap.get(b.name) ?? 0);
+                  // Use current period metrics for display (b is from 6-month pool)
+                  const cb       = currentPeriodMap.get(b.name);
+                  const vis      = cb && filteredChats.length > 0 ? Math.round((cb.count / filteredChats.length) * 100) : 0;
+                  const sov      = Math.round(sowMap.get(b.name) ?? 0);
+                  const cbSent   = cb?.sentiment ?? 0;
+                  const cbPos    = cb?.position  ?? 0;
                   const prevData = prevByName.map.get(b.name);
-                  const prevVis = prevByName.total > 0 ? Math.round(((prevData?.count ?? 0) / prevByName.total) * 100) : 0;
-                  const prevSov = Math.round(prevSowMap.get(b.name) ?? 0);
-                  const visDelta = formatDelta(vis - prevVis);
-                  const sovDelta = formatDelta(sov - prevSov);
-                  const sentDelta = formatDelta(b.sentiment - (prevData?.sentiment ?? b.sentiment));
-                  const posDelta = formatDelta((prevData?.position ?? b.position) - b.position, "");
-                  const realRank = rankByName.get(b.name) ?? i + 1;
+                  const prevVis  = prevByName.total > 0 ? Math.round(((prevData?.count ?? 0) / prevByName.total) * 100) : 0;
+                  const prevSov  = Math.round(prevSowMap.get(b.name) ?? 0);
+                  const visDelta  = formatDelta(vis - prevVis);
+                  const sovDelta  = formatDelta(sov - prevSov);
+                  const sentDelta = formatDelta(cbSent - (prevData?.sentiment ?? cbSent));
+                  const posDelta  = formatDelta((prevData?.position ?? cbPos) - cbPos, "");
+                  const realRank  = rankByName.get(b.name) ?? i + 1;
                   const showValue = indicatorMode !== "indicators-only";
                   const showDelta = indicatorMode !== "none";
-                  const dotColor = b.sentiment >= 65 ? "#10b981" : b.sentiment >= 50 ? "#eab308" : b.sentiment > 0 ? "#ef4444" : "#cbd5e1";
+                  const dotColor  = cbSent >= 70 ? "#10b981" : cbSent >= 40 ? "#f59e0b" : cbSent > 0 ? "#ef4444" : "#cbd5e1";
                   return (
                     <tr key={b.name} onMouseEnter={() => setHoveredBrand(b.name)} onMouseLeave={() => setHoveredBrand(null)}>
                       <td className="pd-rank">
@@ -976,12 +998,12 @@ export default function PromptDetailClient({
                       </td>
                       <td className="pd-td-num">
                         <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", marginRight: 4 }} />
-                        {showValue && <span className="pd-vis-value">{b.sentiment ? b.sentiment.toFixed(0) : "—"}</span>}
-                        {showDelta && dateRange.preset !== "all" && b.sentiment > 0 && <span className={`pd-delta pd-delta-${sentDelta.cls}`}>{sentDelta.text}</span>}
+                        {showValue && <span className="pd-vis-value">{cbSent > 0 ? cbSent.toFixed(0) : "—"}</span>}
+                        {showDelta && dateRange.preset !== "all" && cbSent > 0 && <span className={`pd-delta pd-delta-${sentDelta.cls}`}>{sentDelta.text}</span>}
                       </td>
                       <td className="pd-td-num">
-                        {showValue && <span className="pd-vis-value">#{b.position ? b.position.toFixed(1) : "—"}</span>}
-                        {showDelta && dateRange.preset !== "all" && b.position > 0 && <span className={`pd-delta pd-delta-${posDelta.cls}`}>{posDelta.text}</span>}
+                        {showValue && <span className="pd-vis-value">{cbPos > 0 ? `#${cbPos.toFixed(1)}` : "—"}</span>}
+                        {showDelta && dateRange.preset !== "all" && cbPos > 0 && <span className={`pd-delta pd-delta-${posDelta.cls}`}>{posDelta.text}</span>}
                       </td>
                     </tr>
                   );
