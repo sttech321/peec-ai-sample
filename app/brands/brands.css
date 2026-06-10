@@ -699,20 +699,31 @@
   color: #4f46e5;
 }
 
-/* ── Inline edit card ────────────────────────────────────────────────────── */
-.bp-edit-tr { background: transparent; }
-.bp-edit-td { padding: 0 14px 10px 58px !important; border-bottom: 1px solid #f3f4f6; }
+/* ── Inline edit popup — overlay, 0-height row so nothing pushes down ──────── */
+.bp-edit-tr { height: 0; line-height: 0; }
+.bp-edit-td {
+  padding: 0 !important;
+  border: none !important;
+  height: 0 !important;
+  overflow: visible;
+  position: relative;
+}
 
+/* Floating card matches Peec AI popup design exactly */
 .bp-edit-card {
+  position: absolute;
+  top: 2px;
+  left: 44px;
+  z-index: 200;
+  width: 300px;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-width: 320px;
-  box-shadow: 0 4px 16px -4px rgba(0,0,0,0.10);
+  gap: 10px;
+  box-shadow: 0 8px 24px -4px rgba(0,0,0,0.13), 0 2px 6px rgba(0,0,0,0.06);
   animation: bp-up 0.15s cubic-bezier(0.16,1,0.3,1);
 }
 
@@ -731,18 +742,16 @@
 .bp-edit-input {
   width: 100%;
   background: #fff;
-  border: 1px solid #d1d5db;
+  border: 1.5px solid #6366f1;
   border-radius: 8px;
   padding: 7px 32px 7px 10px;
   font-size: 13px;
   color: #111827;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.08);
+  transition: border-color 0.15s;
 }
-.bp-edit-input:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.10);
-}
+.bp-edit-input:focus { border-color: #4f46e5; }
 
 .bp-edit-clear {
   position: absolute;
@@ -783,6 +792,7 @@
   line-height: 1.4;
 }
 
+/* Save button — full width at bottom, dark */
 .bp-edit-save-btn {
   width: 100%;
   background: #111827;
@@ -794,15 +804,16 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
-  margin-top: 2px;
 }
 .bp-edit-save-btn:hover:not(:disabled) { background: #374151; }
 .bp-edit-save-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* Alias card: absolute positioned under Tracked names column */
+.bp-edit-td--alias  { padding: 0 !important; border: none !important; height: 0 !important; overflow: visible; position: relative; }
+.bp-edit-td--domain { padding: 0 !important; border: none !important; height: 0 !important; overflow: visible; position: relative; }
+
 /* ── Tracked-names (alias) cell ──────────────────────────────────────────── */
-.bp-td--alias {
-  cursor: pointer;
-}
+.bp-td--alias { cursor: pointer; }
 .bp-td--alias:hover {
   color: #4f46e5;
   text-decoration: underline;
@@ -813,18 +824,18 @@
   color: #4f46e5 !important;
 }
 
-/* ── Tracked-names edit card ─────────────────────────────────────────────── */
-.bp-edit-td--alias  { padding-left: calc(44px + 14px + 14px) !important; }
-/* Domain card: after Brand color + Display name + Tracked names columns */
-.bp-edit-td--domain { padding-left: calc(44px + 14px + 220px + 14px) !important; }
-
 .bp-alias-card {
+  /* Floating overlay — same as display name card */
+  position: absolute;
+  top: 2px;
+  left: 0;
+  z-index: 200;
+  width: 300px;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 0;
-  max-width: 340px;
-  box-shadow: 0 4px 16px -4px rgba(0,0,0,0.10);
+  box-shadow: 0 8px 24px -4px rgba(0,0,0,0.13), 0 2px 6px rgba(0,0,0,0.06);
   animation: bp-up 0.15s cubic-bezier(0.16,1,0.3,1);
   overflow: hidden;
 }
@@ -887,11 +898,13 @@
 .bp-alias-name {
   flex: 1;
   font-size: 13px;
-  color: #374151;
+  font-weight: 500;
+  color: #111827;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  user-select: text;
 }
 .bp-alias-rm {
   background: none;
@@ -997,9 +1010,9 @@
 }
 .bp-alias-toggle--on .bp-alias-toggle-thumb { left: 18px; }
 
-/* Save button inside alias card needs padding */
+/* Save button inside alias card — full width with margin */
 .bp-alias-card .bp-edit-save-btn {
-  margin: 8px 12px 12px;
+  margin: 4px 12px 12px;
   width: calc(100% - 24px);
   border-radius: 7px;
 }

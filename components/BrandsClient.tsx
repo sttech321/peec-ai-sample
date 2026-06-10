@@ -331,6 +331,12 @@ export default function BrandsClient({
   const aliasCardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Always reset inline item edit when alias card opens for a new brand
+    setEditingAliasIdx(null);
+    setEditingAliasValue("");
+  }, [aliasEditId]);
+
+  useEffect(() => {
     if (!aliasEditId) return;
     const handler = (e: MouseEvent) => {
       if (aliasCardRef.current && !aliasCardRef.current.contains(e.target as Node)) {
@@ -347,7 +353,8 @@ export default function BrandsClient({
     setNewAliasInput("");
     setUseRegex(false);
     setAliasError(null);
-    setEditingAliasIdx(null);
+    setEditingAliasIdx(null);    // reset inline item edit
+    setEditingAliasValue("");
     setEditingBrandId(null);       // close display-name card if open
     setOpenMenu(null);
     setPickerInfo(null);
@@ -663,7 +670,7 @@ export default function BrandsClient({
                         {isAliasEditing && (
                           <tr className="bp-edit-tr">
                             <td colSpan={6} className="bp-edit-td bp-edit-td--alias">
-                              <div className="bp-alias-card" ref={aliasCardRef}>
+                              <div className="bp-alias-card" ref={aliasCardRef} style={{ left: "calc(44px + 14px + 300px + 14px)" }}>
                                 {/* Add input */}
                                 <div className="bp-alias-add-wrap">
                                   <input
@@ -800,7 +807,7 @@ export default function BrandsClient({
                         {isDomainEditing && (
                           <tr className="bp-edit-tr">
                             <td colSpan={6} className="bp-edit-td bp-edit-td--domain">
-                              <div className="bp-alias-card" ref={domainCardRef}>
+                              <div className="bp-alias-card" ref={domainCardRef} style={{ left: "calc(44px + 14px + 300px + 14px + 220px + 14px)" }}>
                                 {/* Add domain input */}
                                 <div className="bp-alias-add-wrap">
                                   <input
