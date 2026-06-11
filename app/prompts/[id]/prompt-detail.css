@@ -993,15 +993,16 @@
   font-weight: 600;
 }
 
-.pd-type-corporate { background: #fff7ed; color: #ea580c; }
-.pd-type-ugc { background: #eff6ff; color: #2563eb; }
-.pd-type-other { background: #f0fdf4; color: #16a34a; }
-.pd-type-reference { background: #faf5ff; color: #9333ea; }
-.pd-type-you { background: #fef2f2; color: #dc2626; }
-.pd-type-competitor { background: #f0fdfa; color: #0d9488; }
-.pd-type-editorial { background: #fefce8; color: #ca8a04; }
-.pd-type-institutional { background: #fdf2f8; color: #db2777; }
-.pd-type-related { background: #ecfeff; color: #0891b2; }
+/* Badge colors match DOMAIN_TYPE_COLORS dots exactly */
+.pd-type-you         { background: #f0fdf4; color: #16a34a; }   /* green  — #16a34a */
+.pd-type-competitor  { background: #fef2f2; color: #dc2626; }   /* red    — #ef4444 */
+.pd-type-corporate   { background: #fff7ed; color: #c2410c; }   /* orange — #f97316 */
+.pd-type-editorial   { background: #fefce8; color: #a16207; }   /* yellow — #eab308 */
+.pd-type-reference   { background: #faf5ff; color: #9333ea; }   /* purple — #a855f7 */
+.pd-type-ugc         { background: #eff6ff; color: #1d4ed8; }   /* blue   — #3b82f6 */
+.pd-type-institutional{ background: #fdf2f8; color: #db2777; }  /* pink   — #ec4899 */
+.pd-type-other       { background: #f8fafc; color: #64748b; }   /* gray   — #94a3b8 */
+.pd-type-related     { background: #ecfeff; color: #0891b2; }   /* cyan   — #06b6d4 */
 
 /* ── Domain Types Card ───────────────────────────────────────────────────── */
 .pd-domain-types-card {
