@@ -114,7 +114,7 @@ export default function InviteProjectsDropdown({ invitedProjects, switchAction, 
   };
 
   return (
-    <div ref={ref} style={{ position: "relative", zIndex: 9999 }}>
+    <div ref={ref} style={{ position: "relative"/* , zIndex: 9999 */ }}>
       <button
         onClick={() => { setOpen(v => !v); setError(null); }}
         style={{

@@ -82,6 +82,8 @@ export default function OverviewClient({
   const [chatFeatureFilters, setChatFeatureFilters] = useState<Set<string>>(new Set());
   const [colSettingsOpen, setColSettingsOpen]     = useState(false);
   const colSettingsRef                            = useRef<HTMLDivElement>(null);
+  const [chatExportOpen, setChatExportOpen]       = useState(false);
+  const chatExportRef                             = useRef<HTMLDivElement>(null);
 
   const DEFAULT_COLS = { mentions: true, sources: true, features: true, position: true, created: true, citations: false };
   const [visibleCols, setVisibleCols] = useState({ ...DEFAULT_COLS });
@@ -531,6 +533,59 @@ export default function OverviewClient({
     }
     setExportMenuOpen(false);
   }, [buildExportRows]);
+
+  // ── All Chats export ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!chatExportOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (chatExportRef.current && !chatExportRef.current.contains(e.target as Node))
+        setChatExportOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [chatExportOpen]);
+
+  const handleChatExport = useCallback((format: "csv" | "xlsx" | "json") => {
+    // Export ALL filtered chats (not just current page)
+    const rows = filteredChatRows.map((c) => ({
+      id:                  c.id,
+      promptId:            c.query ?? "",
+      model:               c.engine,
+      assistant:           c.rawResponse ?? "",
+      mentions:            c.brandsFound.join(", "),
+      sources:             c.sourcesFound.map(s => s.domain).join(", "),
+      content_in_sources:  c.sourcesFound.map(s => s.title ?? s.url ?? "").filter(Boolean).join(", "),
+      citations:           c.sourcesFound.length,
+      position:            c.avgPosition > 0 ? c.avgPosition.toFixed(1) : "",
+      created:             c.runDate,
+    }));
+
+    const date  = new Date().toISOString().slice(0, 10);
+    const fname = `chatsexport${date}from-${date}`;
+
+    if (format === "json") {
+      const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `${fname}.json`; a.click();
+    } else if (format === "csv") {
+      const cols  = Object.keys(rows[0] ?? {});
+      const lines = [cols.join(","), ...rows.map(r => cols.map(c => {
+        const v = String((r as Record<string, unknown>)[c] ?? "");
+        return v.includes(",") || v.includes('"') || v.includes("\n")
+          ? `"${v.replace(/"/g, '""')}"`
+          : v;
+      }).join(","))];
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `${fname}.csv`; a.click();
+    } else {
+      const ws = xlsxUtils.json_to_sheet(rows);
+      const wb = xlsxUtils.book_new();
+      xlsxUtils.book_append_sheet(wb, ws, "All Chats");
+      xlsxWriteFile(wb, `${fname}.xlsx`);
+    }
+    setChatExportOpen(false);
+  }, [filteredChatRows]);
 
   return (
     <div className="prompt-detail-page">
@@ -1265,6 +1320,31 @@ export default function OverviewClient({
               searchable
             />
 
+            {/* All Chats export button */}
+            <div ref={chatExportRef} style={{ position: "relative" }}>
+              <button
+                className={`ac-col-btn ${chatExportOpen ? "ac-col-btn--active" : ""}`}
+                title="Export chats"
+                onClick={() => setChatExportOpen(v => !v)}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </button>
+              {chatExportOpen && (
+                <div className="pd-export-menu">
+                  <div className="pd-export-label">Export format</div>
+                  {(["CSV", "XLSX", "JSON"] as const).map(fmt => (
+                    <button
+                      key={fmt}
+                      className="pd-export-option"
+                      onClick={() => handleChatExport(fmt.toLowerCase() as "csv" | "xlsx" | "json")}
+                    >
+                      {fmt}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Column settings icon */}
             <div ref={colSettingsRef} style={{ position: "relative" }}>
               <button
@@ -1315,6 +1395,18 @@ export default function OverviewClient({
                 </div>
               )}
             </div>
+
+            {/* Expand button — navigates to Ranking page */}
+            <button
+              className="ac-col-btn"
+              title="View Rankings"
+              onClick={() => router.push("/ranking")}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 480 480" fill="none" aria-hidden="true">
+                <path d="M120 260.01v60C120 342.09 137.91 360 159.99 360h60" stroke="currentColor" strokeWidth="39.9" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M260.01 120h60C342.09 120 360 137.91 360 159.99v60" stroke="currentColor" strokeWidth="39.9" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
           </div>
         </div>
 
