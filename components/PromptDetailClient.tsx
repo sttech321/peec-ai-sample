@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { utils as xlsxUtils, writeFile as xlsxWriteFile } from "xlsx";
 import { useRouter } from "next/navigation";
 import {
   LineChart, Line, BarChart, Bar, Cell,
@@ -128,6 +129,8 @@ export default function PromptDetailClient({
   const indicatorPanelRef                           = useRef<HTMLDivElement>(null);
   const [hoveredBrand, setHoveredBrand]   = useState<string | null>(null);
   const [pickerInfo, setPickerInfo]       = useState<{ name: string; pos: { top: number; left: number } } | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -137,6 +140,17 @@ export default function PromptDetailClient({
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
+
+  // Close export menu on outside click
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node))
+        setExportMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [exportMenuOpen]);
 
   function openPickerAt(name: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -644,6 +658,69 @@ export default function PromptDetailClient({
   );
   const totalTypeCounts = Object.values(categoryStats).reduce((s, v) => s + v.count, 0);
 
+  // ── Export helpers ────────────────────────────────────────────────────────
+  function buildExportRows() {
+    const total     = filteredChats.length;
+    const prevTotal = filteredPrevious.length;
+    const allByVisDesc = [...fullRankingFullPeriod].sort((a, b) =>
+      (currentPeriodMap.get(b.name)?.count ?? 0) - (currentPeriodMap.get(a.name)?.count ?? 0)
+    );
+    const totalSOV = allByVisDesc.reduce((s, b) => s + (currentPeriodMap.get(b.name)?.count ?? 0), 0);
+    const prevSOV  = prevFullRanking.reduce((s, b) => s + b.count, 0);
+
+    return allByVisDesc.map((b, idx) => {
+      const cb  = currentPeriodMap.get(b.name);
+      const pb  = prevFullRanking.find(p => p.name === b.name);
+      const vis  = cb && total > 0     ? cb.count / total     : 0;
+      const pVis = pb && prevTotal > 0  ? pb.count / prevTotal  : 0;
+      const sov  = cb && totalSOV > 0  ? cb.count / totalSOV   : 0;
+      const pSov = pb && prevSOV > 0   ? pb.count / prevSOV    : 0;
+      return {
+        rank:                 idx + 1,
+        brand_id:             `brand_${b.name.toLowerCase().replace(/\s+/g, "_").slice(0, 20)}`,
+        brand:                b.name,
+        domain:               brandDomainByName.get(b.name) ?? guessBrandDomain(b.name),
+        days_to_process:      0,
+        is_processing:        false,
+        visibility:           parseFloat(vis.toFixed(4)),
+        visibility_delta:     parseFloat((vis - pVis).toFixed(4)),
+        share_of_voice:       parseFloat(sov.toFixed(4)),
+        share_of_voice_delta: parseFloat((sov - pSov).toFixed(4)),
+        sentiment:            cb?.sentiment ? Math.round(cb.sentiment) : "",
+        sentiment_delta:      pb?.sentiment && cb?.sentiment ? Math.round(cb.sentiment - pb.sentiment) : "",
+        position:             cb?.position  ? parseFloat(cb.position.toFixed(2)) : "",
+        position_delta:       pb?.position  && cb?.position ? parseFloat((cb.position - pb.position).toFixed(2)) : "",
+      };
+    });
+  }
+
+  function handleExport(format: "csv" | "xlsx" | "json") {
+    const rows  = buildExportRows();
+    const date  = new Date().toISOString().slice(0, 10);
+    const fname = `top-brandsexportfrom-${date}`;
+
+    if (format === "json") {
+      const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `${fname}.json`; a.click();
+    } else if (format === "csv") {
+      const cols  = Object.keys(rows[0] ?? {});
+      const lines = [cols.join(","), ...rows.map(r => cols.map(c => {
+        const v = String((r as Record<string, unknown>)[c] ?? "");
+        return v.includes(",") ? `"${v}"` : v;
+      }).join(","))];
+      const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `${fname}.csv`; a.click();
+    } else {
+      const ws = xlsxUtils.json_to_sheet(rows);
+      const wb = xlsxUtils.book_new();
+      xlsxUtils.book_append_sheet(wb, ws, "Top Brands");
+      xlsxWriteFile(wb, `${fname}.xlsx`);
+    }
+    setExportMenuOpen(false);
+  }
+
   const createdDate = new Date(prompt.createdAt);
   const diffDays = Math.floor((Date.now() - createdDate.getTime()) / 86400000);
   const timeAgo = diffDays > 0 ? `${diffDays} day${diffDays > 1 ? "s" : ""} ago` : "today";
@@ -947,8 +1024,31 @@ export default function PromptDetailClient({
                     </div>
                   )}
                 </div>
-                <button className="pd-brands-action-btn" title="Export"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
-                <button className="pd-brands-action-btn" title="Refresh"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+                {/* Export button + dropdown */}
+                <div ref={exportMenuRef} style={{ position: "relative" }}>
+                  <button
+                    className={`pd-brands-action-btn ${exportMenuOpen ? "pd-brands-action-btn--active" : ""}`}
+                    title="Export"
+                    onClick={() => setExportMenuOpen(v => !v)}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  </button>
+                  {exportMenuOpen && (
+                    <div className="pd-export-menu">
+                      <div className="pd-export-label">Export format</div>
+                      {(["CSV", "XLSX", "JSON"] as const).map(fmt => (
+                        <button
+                          key={fmt}
+                          className="pd-export-option"
+                          onClick={() => handleExport(fmt.toLowerCase() as "csv" | "xlsx" | "json")}
+                        >
+                          {fmt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button className="pd-brands-action-btn" title="Refresh"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 480 480" fill="none" aria-hidden="true"><path d="M120 260.01v60C120 342.09 137.91 360 159.99 360h60" stroke="currentColor" strokeWidth="39.9" strokeLinecap="round" strokeLinejoin="round"/><path d="M260.01 120h60C342.09 120 360 137.91 360 159.99v60" stroke="currentColor" strokeWidth="39.9" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
               </div>
             </div>
 
