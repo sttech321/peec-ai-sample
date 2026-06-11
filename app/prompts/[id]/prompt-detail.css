@@ -610,41 +610,72 @@
   font-size: 11px;
 }
 
-/* ── Sort dropdown menu ─────────────────────────────────────── */
+/* ── Sort dropdown menu — Peec AI design ───────────────────── */
 .pd-brands-sort-menu {
   position: absolute;
-  top: calc(100% + 4px);
-  min-width: 190px;
+  top: calc(100% + 6px);
+  min-width: 200px;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
   z-index: 300;
-  padding: 6px 0;
+  padding: 6px 0 4px;
   overflow: hidden;
 }
 .pd-sort-label {
   font-size: 11px;
   font-weight: 500;
   color: #9ca3af;
-  padding: 6px 14px 4px;
+  padding: 4px 12px 6px;
   letter-spacing: 0;
+  text-transform: none;
 }
 .pd-sort-option {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 7px 12px;
   font-size: 13px;
   font-weight: 400;
   color: #374151;
   cursor: pointer;
   transition: background 0.1s;
+  white-space: nowrap;
 }
-.pd-sort-option:hover { background: #f9fafb; }
-.pd-sort-opt-icon { font-size: 12px; color: #6b7280; width: 16px; text-align: center; flex-shrink: 0; }
-.pd-sort-check { color: #2563eb; font-size: 12px; font-weight: 600; margin-left: 4px; }
-.pd-sort-active { color: #2563eb; }
+.pd-sort-option:hover { background: #f5f5f5; }
+/* Active state: text + icon in indigo */
+.pd-sort-active { color: #4f46e5; font-weight: 500; }
+.pd-sort-active .pd-sort-opt-icon { color: #4f46e5; }
+.pd-sort-opt-icon {
+  font-size: 13px;
+  color: #9ca3af;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  font-style: normal;
+}
+/* "Value" keyword styling */
+.pd-sort-value-keyword {
+  color: #9ca3af;
+  font-weight: 400;
+  margin-right: 1px;
+}
+.pd-sort-active .pd-sort-value-keyword { color: #4f46e5; }
+/* Checkmark on right */
+.pd-sort-check {
+  color: #4f46e5;
+  font-size: 13px;
+  font-weight: 600;
+  margin-left: auto;
+  padding-left: 8px;
+}
+/* Divider between Value options and trend options */
+.pd-sort-divider {
+  height: 1px;
+  background: #f3f4f6;
+  margin: 4px 0;
+}
 
 /* ── Table rows ─────────────────────────────────────────────── */
 .pd-brands-table tbody tr {

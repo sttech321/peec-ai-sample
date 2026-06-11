@@ -314,25 +314,7 @@ export default function PromptDetailClient({
 
   const domains = useMemo(() => aggregateDomains(filteredChats, 10), [filteredChats]);
   const totalDomainCitations = useMemo(() => totalCitations(filteredChats), [filteredChats]);
-
-  const chartData = useMemo(
-    () => buildVisibilitySeries(filteredChats, brands.map((b) => b.name), resolution, dateRange),
-    [filteredChats, brands, resolution, dateRange],
-  );
-
-  // Bar chart + tooltips + dynamic label (matching Overview design)
-  const barData = useMemo(() => {
-    const total = filteredChats.length;
-    return brands.map(b => {
-      const cb = currentPeriodMap.get(b.name);
-      return {
-        name: b.name,
-        value: cb && total > 0 ? Math.round((cb.count / total) * 100) : 0,
-        color: b.color,
-        domain: guessBrandDomain(b.name),
-      };
-    });
-  }, [brands, currentPeriodMap, filteredChats]);
+  // chartData and barData defined AFTER pinnedOwnBrand + chartBrandsForDisplay (further below)
 
   const promptsPerDate = useMemo(() => {
     const map = new Map<string, number>();
@@ -403,23 +385,96 @@ export default function PromptDetailClient({
     return m;
   }, [filteredPrevious]);
 
-  // Sorted brands (respects user-selected sort column)
+  // ── Step 1: TOP 7 POOL — always 7 most visible brands (current period, high-low)
+  // Pool stays same regardless of sort direction; sort only changes display ORDER
+  const top7Pool = useMemo(() => {
+    const byVisDesc = [...brands].sort((a, b) => {
+      const ca = currentPeriodMap.get(a.name);
+      const cb = currentPeriodMap.get(b.name);
+      return (cb?.count ?? 0) - (ca?.count ?? 0);
+    });
+    return byVisDesc;
+  }, [brands, currentPeriodMap]);
+
+  // ── Step 2: SORT — reorder top7Pool by user's selected column/direction
   const sortedBrands = useMemo(() => {
-    const list = [...brands];
-    const dir = (brandSortMode === "high-low" || brandSortMode === "negative-trend") ? -1 : 1;
+    const list = [...top7Pool];
+    // dir=1 for HIGH-LOW (descending: highest first)
+    // dir=-1 for LOW-HIGH (ascending: lowest first)
+    const dir = (brandSortMode === "high-low" || brandSortMode === "negative-trend") ? 1 : -1;
     list.sort((a, b) => {
-      if (brandSortCol === "visibility") return dir * (b.count - a.count);
+      const ca = currentPeriodMap.get(a.name);
+      const cb = currentPeriodMap.get(b.name);
+      if (brandSortCol === "visibility") return dir * ((cb?.count ?? 0) - (ca?.count ?? 0));
       if (brandSortCol === "sov")        return dir * ((sowMap.get(b.name) ?? 0) - (sowMap.get(a.name) ?? 0));
-      if (brandSortCol === "sentiment")  return dir * ((b.sentiment ?? 0) - (a.sentiment ?? 0));
+      if (brandSortCol === "sentiment")  return dir * ((cb?.sentiment ?? 0) - (ca?.sentiment ?? 0));
       if (brandSortCol === "position") {
-        const posA = a.position && a.position > 0 ? a.position : 999;
-        const posB = b.position && b.position > 0 ? b.position : 999;
-        return -dir * (posB - posA); // lower position# = better rank → invert
+        const posA = ca?.position && ca.position > 0 ? ca.position : 999;
+        const posB = cb?.position && cb.position > 0 ? cb.position : 999;
+        return -dir * (posB - posA);
       }
       return 0;
     });
     return list;
-  }, [brands, brandSortCol, brandSortMode, sowMap]);
+  }, [top7Pool, brandSortCol, brandSortMode, sowMap, currentPeriodMap]);
+
+  // ── Pinned own brand (always visible even if not in top 7) ──────────────────
+  const ownBrandNamesSet = useMemo(
+    () => new Set(projectBrands.filter(b => b.isOwn).map(b => b.name)),
+    [projectBrands]
+  );
+
+  const pinnedOwnBrand = useMemo(() => {
+    const ownInTop7 = sortedBrands.some(b => ownBrandNamesSet.has(b.name));
+    if (ownInTop7) return null;
+
+    const ownProjectBrand = projectBrands.find(b => b.isOwn);
+    if (!ownProjectBrand) return null;
+    const ownName = ownProjectBrand.name;
+
+    // Rank from current period visibility (High-Low)
+    const currentByVisDesc = [...(fullRanking)].sort((a, b) => b.count - a.count);
+    const ownIdx = currentByVisDesc.findIndex(b => b.name === ownName);
+    const rank = ownIdx === -1 ? currentByVisDesc.length + 1 : ownIdx + 1;
+
+    const brand6m = fullRankingFullPeriod.find(b => b.name === ownName);
+    const stableColor = stableBrandColors[ownName] ?? "#6366f1";
+    const brandForDisplay = brand6m ?? { name: ownName, count: 0, sentiment: 0, position: 0, color: stableColor };
+
+    return { brand: brandForDisplay, rank };
+  }, [sortedBrands, ownBrandNamesSet, projectBrands, fullRanking, fullRankingFullPeriod, stableBrandColors]);
+
+  // Chart shows top 6 + own brand when pinned (same 7 lines as table)
+  const chartBrandsForDisplay = useMemo(() => {
+    if (!pinnedOwnBrand) return sortedBrands;
+    return [...sortedBrands.slice(0, 6), pinnedOwnBrand.brand];
+  }, [sortedBrands, pinnedOwnBrand]);
+
+  // chartData + barData defined here (after chartBrandsForDisplay + pinnedOwnBrand)
+  const chartData = useMemo(() => {
+    const series = buildVisibilitySeries(filteredChats, chartBrandsForDisplay.map((b) => b.name), resolution, dateRange);
+    if (pinnedOwnBrand) {
+      const ownName = pinnedOwnBrand.brand.name;
+      return series.map(point => ({
+        ...point,
+        [ownName]: (point as Record<string, unknown>)[ownName] ?? 0,
+      }));
+    }
+    return series;
+  }, [filteredChats, chartBrandsForDisplay, pinnedOwnBrand, resolution, dateRange]);
+
+  const barData = useMemo(() => {
+    const total = filteredChats.length;
+    return chartBrandsForDisplay.map(b => {
+      const cb = currentPeriodMap.get(b.name);
+      return {
+        name: b.name,
+        value: cb && total > 0 ? Math.round((cb.count / total) * 100) : 0,
+        color: b.color,
+        domain: guessBrandDomain(b.name),
+      };
+    });
+  }, [chartBrandsForDisplay, currentPeriodMap, filteredChats]);
 
   // ── Common Terms from rawResponse (bigrams, for Fanout Queries section) ──────
   const commonTerms = useMemo(() => {
@@ -794,17 +849,19 @@ export default function PromptDetailClient({
                       );
                     }}
                   />
-                  {brands.map((b) => {
+                  {chartBrandsForDisplay.map((b) => {
                     const isHov = hoveredBrand === b.name;
                     const faded = hoveredBrand !== null && !isHov;
+                    const isOwn = ownBrandNamesSet.has(b.name);
                     return (
                       <Line
                         key={b.name}
                         type="monotone"
                         dataKey={b.name}
                         stroke={b.color}
-                        strokeWidth={isHov ? 2.8 : 1.8}
+                        strokeWidth={isHov ? 2.8 : isOwn ? 2.0 : 1.8}
                         strokeOpacity={faded ? 0.1 : 1}
+                        strokeDasharray={isOwn ? "5 3" : undefined}
                         dot={{ r: isHov ? 3.5 : 2.5, fill: b.color, strokeWidth: 0, fillOpacity: faded ? 0.1 : 1 }}
                         activeDot={{ r: isHov ? 5 : 4, strokeWidth: 0, opacity: faded ? 0 : 1 }}
                         isAnimationActive={false}
@@ -923,9 +980,25 @@ export default function PromptDetailClient({
                         {menuOpen && (
                           <div className="pd-brands-sort-menu" style={{ right: menuRight ? 0 : "auto", left: menuRight ? "auto" : 0 }} onClick={e => e.stopPropagation()}>
                             <div className="pd-sort-label">Sort by</div>
+                            {/* Value-based sorts */}
                             {([
-                              { mode: "high-low", icon: "↓", label: "Value  High - low" },
-                              { mode: "low-high", icon: "↑", label: "Value  Low - high" },
+                              { mode: "high-low", icon: "↓", keyword: "Value", direction: "High - low" },
+                              { mode: "low-high", icon: "↑", keyword: "Value", direction: "Low - high" },
+                            ] as { mode: BrandSortMode; icon: string; keyword: string; direction: string }[]).map(opt => {
+                              const checked = brandSortCol === col && brandSortMode === opt.mode;
+                              return (
+                                <div key={opt.mode} className={`pd-sort-option ${checked ? "pd-sort-active" : ""}`}
+                                  onClick={() => { setBrandSortCol(col); setBrandSortMode(opt.mode); setOpenBrandMenu(null); }}>
+                                  <span className="pd-sort-opt-icon">{opt.icon}</span>
+                                  <span className="pd-sort-value-keyword">{opt.keyword}</span>
+                                  <span style={{ flex: 1 }}>{opt.direction}</span>
+                                  {checked && <span className="pd-sort-check">✓</span>}
+                                </div>
+                              );
+                            })}
+                            <div className="pd-sort-divider" />
+                            {/* Trend-based sorts */}
+                            {([
                               { mode: "positive-trend", icon: "↗", label: "Positive trend" },
                               { mode: "negative-trend", icon: "↘", label: "Negative trend" },
                             ] as { mode: BrandSortMode; icon: string; label: string }[]).map(opt => {
@@ -947,7 +1020,7 @@ export default function PromptDetailClient({
                 </tr>
               </thead>
               <tbody>
-                {sortedBrands.map((b, i) => {
+                {(pinnedOwnBrand ? sortedBrands.slice(0, 6) : sortedBrands).map((b, i) => {
                   // Use current period metrics for display (b is from 6-month pool)
                   const cb       = currentPeriodMap.get(b.name);
                   const vis      = cb && filteredChats.length > 0 ? Math.round((cb.count / filteredChats.length) * 100) : 0;
@@ -1013,6 +1086,62 @@ export default function PromptDetailClient({
                     {isScanning ? "Querying engines — brands will appear once responses are parsed…" : "No brands extracted yet."}
                   </td></tr>
                 )}
+
+                {/* ── Pinned own brand row — always visible even outside top 7 ── */}
+                {pinnedOwnBrand && (() => {
+                  const b        = pinnedOwnBrand.brand;
+                  const cb       = currentPeriodMap.get(b.name);
+                  const total    = filteredChats.length;
+                  const vis      = cb && total > 0 ? Math.round((cb.count / total) * 100) : 0;
+                  const sov      = Math.round(sowMap.get(b.name) ?? 0);
+                  const cbSent   = cb?.sentiment ?? 0;
+                  const cbPos    = cb?.position  ?? 0;
+                  const dotColor = cbSent >= 70 ? "#10b981" : cbSent >= 40 ? "#f59e0b" : cbSent > 0 ? "#ef4444" : "#cbd5e1";
+                  const showValue = indicatorMode !== "indicators-only";
+                  return (
+                    <>
+                      <tr className="pd-pinned-separator"><td colSpan={6} /></tr>
+                      <tr
+                        className="pd-pinned-row"
+                        onMouseEnter={() => setHoveredBrand(b.name)}
+                        onMouseLeave={() => setHoveredBrand(null)}
+                      >
+                        <td className="pd-rank">
+                          {hoveredBrand === b.name ? (
+                            <span className="pd-rank-dot pd-rank-dot--clickable" style={{ background: b.color }}
+                              title="Change brand color" onClick={e => openPickerAt(b.name, e)} />
+                          ) : pinnedOwnBrand.rank}
+                          {pickerInfo?.name === b.name && (
+                            <BrandColorPicker color={b.color} position={pickerInfo.pos}
+                              onChange={color => {
+                                setLocalColorOverrides(prev => ({ ...prev, [b.name]: color }));
+                                updateBrandColorByNameAction?.(b.name, color);
+                              }}
+                              onClose={() => setPickerInfo(null)} />
+                          )}
+                        </td>
+                        <td className="pd-brand-cell">
+                          <DomainFavicon domain={brandDomainByName.get(b.name) ?? guessBrandDomain(b.name)} size={16} />
+                          {b.name}
+                          <span className="pd-brand-you-badge">You</span>
+                        </td>
+                        <td className="pd-td-num">
+                          {showValue && <span className="pd-vis-value">{vis}%</span>}
+                        </td>
+                        <td className="pd-td-num">
+                          {showValue && <span className="pd-vis-value">{sov}%</span>}
+                        </td>
+                        <td className="pd-td-num">
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", marginRight: 4 }} />
+                          {showValue && <span className="pd-vis-value">{cbSent > 0 ? cbSent.toFixed(0) : "—"}</span>}
+                        </td>
+                        <td className="pd-td-num">
+                          {showValue && <span className="pd-vis-value">{cbPos > 0 ? `#${cbPos.toFixed(1)}` : "—"}</span>}
+                        </td>
+                      </tr>
+                    </>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
