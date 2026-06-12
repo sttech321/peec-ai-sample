@@ -275,7 +275,7 @@ export default function DomainDetailClient({
                           {payload.map((p) => (
                             <div key={String(p.dataKey)} className="ch-tooltip-row">
                               <span className="ch-tooltip-dot" style={{ background: p.color as string }} />
-                              <span className="ch-tooltip-name">Retrievals</span>
+                              <span className="ch-tooltip-name">{String(p.dataKey)}</span>
                               <span className="ch-tooltip-val">{String(p.value)}</span>
                             </div>
                           ))}
@@ -287,6 +287,13 @@ export default function DomainDetailClient({
                     stroke={CHART_COLOR} strokeWidth={2} dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
+              {/* Legend */}
+              <div className="dd-chart-legend">
+                <span className="dd-legend-chip">
+                  <span className="dd-legend-dot" style={{ background: CHART_COLOR }} />
+                  {domain}
+                </span>
+              </div>
             </div>
 
             {/* URL Types panel */}
