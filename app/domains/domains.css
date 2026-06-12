@@ -1,3 +1,35 @@
+/* ── Bookmark column ───────────────────────────────────────────────── */
+.domains-th-bm {
+  width: 32px;
+  padding: 0 4px !important;
+}
+.domains-td-bm {
+  width: 32px;
+  padding: 0 4px !important;
+  cursor: pointer;
+  text-align: center;
+  color: #cbd5e1;
+  transition: color 0.12s;
+}
+.domains-td-bm:hover { color: #f97316; }
+
+.domains-bookmark-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.domains-bookmark-filter:hover { border-color: #f97316; color: #f97316; }
+.domains-bookmark-filter--active { border-color: #f97316; color: #f97316; background: #fff7ed; }
+
 /* ── Domains page extras ───────────────────────────────────────────── */
 .domains-table {
   font-size: 12.5px;

@@ -27,6 +27,8 @@ interface Props {
   availableEngines?: string[];
   initialDomainTypeOverrides?: Record<string, string>;
   updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
+  initialDomainBookmarks?: string[];
+  updateDomainBookmarkAction?: (domain: string, bookmarked: boolean) => Promise<{ ok: boolean; error?: string }>;
 }
 
 
@@ -35,6 +37,7 @@ export default function DomainsWrapper({
   availableTags, ownDomains, competitorDomains,
   addBrandAction, availableEngines,
   initialDomainTypeOverrides, updateDomainTypeOverrideAction,
+  initialDomainBookmarks, updateDomainBookmarkAction,
 }: Props) {
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => makeDR("30"));
   const [selectedModels, setSelectedModels] = useState<string[]>(
@@ -62,6 +65,8 @@ export default function DomainsWrapper({
         externalModels={selectedModels}
         initialDomainTypeOverrides={initialDomainTypeOverrides}
         updateDomainTypeOverrideAction={updateDomainTypeOverrideAction}
+        initialDomainBookmarks={initialDomainBookmarks}
+        updateDomainBookmarkAction={updateDomainBookmarkAction}
       />
     </>
   );

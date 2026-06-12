@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Bookmark, ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import EngineIcon from "./EngineIcon";
 import DomainFavicon from "./DomainFavicon";
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
@@ -37,6 +38,8 @@ interface Props {
   externalModels?: string[];
   initialDomainTypeOverrides?: Record<string, string>;
   updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
+  initialDomainBookmarks?: string[];
+  updateDomainBookmarkAction?: (domain: string, bookmarked: boolean) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const PAGE_SIZE = 20;
@@ -91,7 +94,10 @@ export default function DomainsClient({
   externalModels,
   initialDomainTypeOverrides,
   updateDomainTypeOverrideAction,
+  initialDomainBookmarks,
+  updateDomainBookmarkAction,
 }: Props) {
+  const router = useRouter();
   const [resolution, setResolution] = useState<Resolution>("W");
   const [internalDateRange, setInternalDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
   // Legend hover + hidden domains
@@ -113,6 +119,10 @@ export default function DomainsClient({
     new Map(Object.entries(initialDomainTypeOverrides ?? {}))
   );
   const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
+  const [bookmarks, setBookmarks] = useState<Set<string>>(
+    () => new Set(initialDomainBookmarks ?? [])
+  );
+  const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
 
   const allEngines = useMemo(() => {
     const set = new Set<string>();
@@ -137,6 +147,17 @@ export default function DomainsClient({
   async function handleTypeReset(domain: string) {
     setTypeOverrides(prev => { const m = new Map(prev); m.delete(domain); return m; });
     await updateDomainTypeOverrideAction?.(domain, null);
+  }
+
+  async function handleBookmark(domain: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const next = !bookmarks.has(domain);
+    setBookmarks(prev => {
+      const s = new Set(prev);
+      if (next) s.add(domain); else s.delete(domain);
+      return s;
+    });
+    await updateDomainBookmarkAction?.(domain, next);
   }
 
   const ownDomainSet = useMemo(() => new Set(ownDomains), [ownDomains]);
@@ -259,6 +280,7 @@ export default function DomainsClient({
   const tableRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     let rows = brandScopedDomains;
+    if (showBookmarkedOnly) rows = rows.filter((d) => bookmarks.has(d.domain));
     const effectiveDomainTypeFilter = gapAnalysis ? "Competitor" : domainTypeFilter;
     if (effectiveDomainTypeFilter) {
       rows = rows.filter((d) => domainTypeFor.get(d.domain) === effectiveDomainTypeFilter);
@@ -302,7 +324,7 @@ export default function DomainsClient({
         : (bv as number) - (av as number);
     });
     return sorted;
-  }, [brandScopedDomains, search, domainTypeFilter, gapAnalysis, domainTypeFor, sortKey, sortDir]);
+  }, [brandScopedDomains, search, domainTypeFilter, gapAnalysis, domainTypeFor, sortKey, sortDir, showBookmarkedOnly, bookmarks]);
 
   const totalPages = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -589,6 +611,15 @@ export default function DomainsClient({
           />
         </div>
         <div className="urls-controls-right">
+          {bookmarks.size > 0 && (
+            <button
+              className={`domains-bookmark-filter ${showBookmarkedOnly ? "domains-bookmark-filter--active" : ""}`}
+              onClick={() => { setShowBookmarkedOnly(v => !v); setPage(1); }}
+            >
+              <Bookmark size={12} fill={showBookmarkedOnly ? "#f97316" : "none"} color={showBookmarkedOnly ? "#f97316" : "#64748b"} />
+              Bookmarked
+            </button>
+          )}
           <button
             className={`gap-analysis-toggle ${gapAnalysis ? "gap-analysis-toggle--active" : ""}`}
             onClick={() => {
@@ -646,6 +677,7 @@ export default function DomainsClient({
         <table className="urls-table domains-table">
           <thead>
             <tr>
+              <th className="domains-th-bm" />
               <th className="domains-th-rank">#</th>
               <th
                 className="domains-th-source"
@@ -688,8 +720,20 @@ export default function DomainsClient({
               const retrievedDelta = formatDeltaPct(d.retrievedShare - d.retrievedSharePrev);
               const retrievalDelta = formatDeltaRate(d.retrievalRate - d.retrievalRatePrev);
               const citationDelta = formatDeltaRate(d.citationRate - d.citationRatePrev);
+              const isBookmarked = bookmarks.has(d.domain);
               return (
-                <tr key={d.domain}>
+                <tr
+                  key={d.domain}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => router.push("/domains/" + encodeURIComponent(d.domain))}
+                >
+                  <td className="domains-td-bm" onClick={(e) => handleBookmark(d.domain, e)}>
+                    <Bookmark
+                      size={13}
+                      fill={isBookmarked ? "#f97316" : "none"}
+                      color={isBookmarked ? "#f97316" : "#cbd5e1"}
+                    />
+                  </td>
                   <td className="domains-td-rank">{rank}</td>
                   <td className="domains-td-source">
                     <img
@@ -701,7 +745,7 @@ export default function DomainsClient({
                     />
                     <span className="domains-source-name">{d.domain}</span>
                   </td>
-                  <td style={{ position: "relative" }}>
+                  <td style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
                     <span
                       className="urls-pill"
                       style={{

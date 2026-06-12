@@ -1,0 +1,169 @@
+/* ── URL Detail page ────────────────────────────────────────────────── */
+
+.ud-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.ud-header-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ud-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 4px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 640px;
+}
+
+.ud-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ud-url-link {
+  font-size: 12px;
+  color: #64748b;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 520px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ud-url-link:hover { color: #6366f1; text-decoration: underline; }
+
+.ud-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* KPI bar */
+.ud-kpi-bar {
+  display: flex;
+  gap: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.ud-kpi {
+  flex: 1;
+  padding: 14px 18px;
+  border-right: 1px solid #f1f5f9;
+}
+
+.ud-kpi:last-child { border-right: none; }
+
+.ud-kpi-label {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.ud-kpi-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ud-kpi-val .urls-num-delta {
+  font-size: 11.5px;
+}
+
+/* Overview: chart + engines side by side */
+.ud-overview {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1100px) {
+  .ud-overview { grid-template-columns: 1fr; }
+}
+
+.ud-chart-card {
+  padding: 16px 18px 12px;
+}
+
+.ud-chart-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.ud-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.ud-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ud-engines-card {
+  padding: 16px 18px;
+}
+
+.ud-engines-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ud-engine-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.ud-engine-name {
+  width: 100px;
+  font-weight: 500;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ud-engine-count {
+  width: 32px;
+  text-align: right;
+  font-weight: 600;
+  color: #0f172a;
+  flex-shrink: 0;
+}
