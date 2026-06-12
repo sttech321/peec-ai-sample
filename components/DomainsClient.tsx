@@ -1,18 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
-import EngineIcon from "./EngineIcon";
+import {
+  Bookmark, ChevronDown, ChevronLeft, ChevronRight, Search,
+  Check, SlidersHorizontal, Upload, Settings, RotateCcw,
+} from "lucide-react";
 import DomainFavicon from "./DomainFavicon";
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
-import BrandsDropdown from "./BrandsDropdown";
 import { ChatFact, Resolution, filterByEngines, filterByDateRange } from "../lib/chat-aggregations";
 import {
   aggregateDomainsFull,
-  buildDomainShareSeries,
   buildDomainCountSeries,
   classifyDomain,
   DOMAIN_TYPES,
@@ -37,11 +38,21 @@ interface Props {
   externalModels?: string[];
   initialDomainTypeOverrides?: Record<string, string>;
   updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
+  initialDomainBookmarks?: string[];
+  updateDomainBookmarkAction?: (domain: string, bookmarked: boolean) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const PAGE_SIZE = 20;
 const LINE_COLORS = ["#7c4a1e", "#f97316", "#a855f7", "#ef4444", "#475569"];
 
+// ── Column config ─────────────────────────────────────────────────────────────
+const DOM_COL_DEFAULT = new Set(["domainType", "retrieved", "retrievalRate", "citationRate"]);
+const DOM_COL_LABELS: Record<string, string> = {
+  domainType: "Domain type", retrieved: "Retrieved",
+  retrievalRate: "Retrieval rate", citationRate: "Citation rate", retrievals: "Retrievals",
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function previousPeriod(range: DateRangeValue): { start: Date; end: Date } {
   const span = range.end.getTime() - range.start.getTime();
   return {
@@ -53,19 +64,13 @@ function previousPeriod(range: DateRangeValue): { start: Date; end: Date } {
 function formatDeltaPct(diff: number): { text: string; tone: "up" | "down" | "flat" } {
   if (!isFinite(diff) || Math.abs(diff) < 0.05) return { text: "0.0%", tone: "flat" };
   const sign = diff > 0 ? "+" : "";
-  return {
-    text: `${sign}${diff.toFixed(1)}%`,
-    tone: diff > 0 ? "up" : "down",
-  };
+  return { text: `${sign}${diff.toFixed(1)}%`, tone: diff > 0 ? "up" : "down" };
 }
 
 function formatDeltaRate(diff: number): { text: string; tone: "up" | "down" | "flat" } {
   if (!isFinite(diff) || Math.abs(diff) < 0.05) return { text: "0.0", tone: "flat" };
   const sign = diff > 0 ? "+" : "";
-  return {
-    text: `${sign}${diff.toFixed(1)}`,
-    tone: diff > 0 ? "up" : "down",
-  };
+  return { text: `${sign}${diff.toFixed(1)}`, tone: diff > 0 ? "up" : "down" };
 }
 
 function faviconUrl(domain: string): string {
@@ -73,14 +78,182 @@ function faviconUrl(domain: string): string {
 }
 
 function shortDomainLabel(domain: string): string {
-  // Display the second-level label like "thriveagency" from "thriveagency.com"
   const parts = domain.split(".");
   if (parts.length < 2) return domain;
   return parts[parts.length - 2];
 }
 
-type SortKey = "rank" | "domain" | "retrieved" | "retrievalRate" | "citationRate";
+function toggleArr<T>(arr: T[], item: T): T[] {
+  return arr.includes(item) ? arr.filter((v) => v !== item) : [...arr, item];
+}
 
+type SortKey = "rank" | "domain" | "retrieved" | "retrievalRate" | "citationRate";
+type IndicatorMode = "default" | "indicatorsOnly" | "none";
+
+// ── Filter dropdown (same visual as URL page; uses ud-fdrop* CSS) ─────────────
+function DomFilterDropdown({
+  allLabel,
+  searchPlaceholder,
+  items,
+  selected,
+  mode,
+  onToggle,
+  onAll,
+  onMode,
+  renderItem,
+  noModeToggle,
+}: {
+  allLabel: string;
+  searchPlaceholder?: string;
+  items: string[];
+  selected: string[];
+  mode: "or" | "and";
+  onToggle: (v: string) => void;
+  onAll: () => void;
+  onMode: (m: "or" | "and") => void;
+  renderItem?: (v: string) => React.ReactNode;
+  noModeToggle?: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const visible = search.trim()
+    ? items.filter((i) => i.toLowerCase().includes(search.toLowerCase()))
+    : items;
+  const allActive = selected.length === 0;
+
+  return (
+    <div className="ud-fdrop">
+      {searchPlaceholder && (
+        <div className="ud-fdrop-search">
+          <Search size={12} style={{ color: "#94a3b8", flexShrink: 0 }} />
+          <input
+            autoFocus
+            placeholder={searchPlaceholder}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
+      <div className="ud-fdrop-all" onClick={onAll}>
+        <span>{allLabel}</span>
+        {allActive && <Check size={13} className="ud-fdrop-check-mark" />}
+      </div>
+      {!noModeToggle && (
+        <div className="ud-fdrop-modes">
+          <div role="button" className={`ud-fdrop-mode ${mode === "or" ? "active" : ""}`}
+            onClick={() => onMode("or")}>Or</div>
+          <div role="button" className={`ud-fdrop-mode ${mode === "and" ? "active" : ""}`}
+            onClick={() => onMode("and")}>And</div>
+        </div>
+      )}
+      <div className="ud-fdrop-list">
+        {visible.map((item) => {
+          const checked = selected.includes(item);
+          return (
+            <div key={item} className="ud-fdrop-item" onClick={() => onToggle(item)}>
+              <span className={`ud-fdrop-cb ${checked ? "checked" : ""}`}>
+                {checked && <Check size={9} strokeWidth={3} />}
+              </span>
+              {renderItem ? renderItem(item) : <span className="ud-fdrop-label">{item}</span>}
+            </div>
+          );
+        })}
+        {visible.length === 0 && <div className="ud-fdrop-empty">No results</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── Column selector popup ─────────────────────────────────────────────────────
+function DomColSelector({
+  visible, onToggle, onReset,
+}: {
+  visible: Set<string>;
+  onToggle: (k: string) => void;
+  onReset: () => void;
+}) {
+  const ACTIVE_COLS = ["domainType", "retrieved", "retrievalRate", "citationRate"];
+  const AVAIL_COLS = ["retrievals"];
+  return (
+    <div className="ud-col-selector dom-col-selector">
+      <div className="ud-col-section-label">Fixed columns</div>
+      {["#", "Source"].map((k) => (
+        <div key={k} className="ud-col-item">
+          <span className="ud-fdrop-cb checked" style={{ opacity: 0.45, cursor: "not-allowed" }}>
+            <Check size={9} strokeWidth={3} />
+          </span>
+          <span className="ud-fdrop-label">{k}</span>
+        </div>
+      ))}
+      <div className="ud-col-divider" />
+      <div className="ud-col-section-label">Active columns</div>
+      {ACTIVE_COLS.map((k) => (
+        <div key={k} className="ud-col-item" onClick={() => onToggle(k)}>
+          <span className={`ud-fdrop-cb ${visible.has(k) ? "checked" : ""}`}>
+            {visible.has(k) && <Check size={9} strokeWidth={3} />}
+          </span>
+          <span className="ud-fdrop-label">{DOM_COL_LABELS[k]}</span>
+        </div>
+      ))}
+      <div className="ud-col-divider" />
+      <div className="ud-col-section-label">Available columns</div>
+      {AVAIL_COLS.map((k) => (
+        <div key={k} className="ud-col-item" onClick={() => onToggle(k)}>
+          <span className={`ud-fdrop-cb ${visible.has(k) ? "checked" : ""}`}>
+            {visible.has(k) && <Check size={9} strokeWidth={3} />}
+          </span>
+          <span className="ud-fdrop-label">{DOM_COL_LABELS[k]}</span>
+        </div>
+      ))}
+      <div className="ud-col-divider" />
+      <div role="button" className="ud-col-reset" onClick={onReset}>
+        <RotateCcw size={12} /> Reset to default
+      </div>
+    </div>
+  );
+}
+
+// ── Export popup ──────────────────────────────────────────────────────────────
+function DomExportMenu({ onExport }: { onExport: (fmt: "csv" | "xlsx" | "json") => void }) {
+  return (
+    <div className="ud-export-menu dom-export-menu">
+      <div className="ud-export-label">Export format</div>
+      {(["CSV", "XLSX", "JSON"] as const).map((fmt) => (
+        <div key={fmt} role="button" className="ud-export-item"
+          onClick={() => onExport(fmt.toLowerCase() as "csv" | "xlsx" | "json")}>
+          {fmt}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Indicators popup ──────────────────────────────────────────────────────────
+function DomIndicatorsMenu({
+  value, onChange,
+}: {
+  value: IndicatorMode;
+  onChange: (v: IndicatorMode) => void;
+}) {
+  const opts: { key: IndicatorMode; label: string }[] = [
+    { key: "default", label: "Default" },
+    { key: "indicatorsOnly", label: "Indicators only" },
+    { key: "none", label: "None" },
+  ];
+  return (
+    <div className="dom-indicators-menu">
+      <div className="ud-export-label">Change indicators</div>
+      {opts.map((o) => (
+        <div key={o.key} role="button" className="dom-indicator-item"
+          onClick={() => onChange(o.key)}>
+          <span>{o.label}</span>
+          {value === o.key && <Check size={13} style={{ color: "#2563eb" }} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export default function DomainsClient({
   chatFacts,
   projectName,
@@ -91,18 +264,15 @@ export default function DomainsClient({
   externalModels,
   initialDomainTypeOverrides,
   updateDomainTypeOverrideAction,
+  initialDomainBookmarks,
+  updateDomainBookmarkAction,
 }: Props) {
+  const router = useRouter();
   const [resolution, setResolution] = useState<Resolution>("W");
   const [internalDateRange, setInternalDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
-  // Legend hover + hidden domains
   const [hoveredDomain, setHoveredDomain] = useState<string | null>(null);
   const [hiddenDomains, setHiddenDomains] = useState<Set<string>>(new Set());
-  // Use external filter (from PageFilterBar) if provided, otherwise internal
   const dateRange = externalDateRange ?? internalDateRange;
-  const [selectedBrands, setSelectedBrands] = useState<string[] | null>(null);
-  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
-  const [domainTypeFilter, setDomainTypeFilter] = useState<DomainType | null>(null);
-  const [domainTypeOpen, setDomainTypeOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("retrieved");
@@ -113,6 +283,31 @@ export default function DomainsClient({
     new Map(Object.entries(initialDomainTypeOverrides ?? {}))
   );
   const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
+  const [bookmarks, setBookmarks] = useState<Set<string>>(
+    () => new Set(initialDomainBookmarks ?? [])
+  );
+  const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
+
+  // ── NEW: Domains table filter state ─────────────────────────────────────────
+  const [domMenuOpen, setDomMenuOpen] = useState<
+    "brands" | "types" | "columns" | "export" | "indicators" | null
+  >(null);
+  const [domBrandFilters, setDomBrandFilters] = useState<string[]>([]);
+  const [domBrandMode, setDomBrandMode] = useState<"or" | "and">("or");
+  const [domTypeFilters, setDomTypeFilters] = useState<DomainType[]>([]);
+  const [domCols, setDomCols] = useState<Set<string>>(new Set(DOM_COL_DEFAULT));
+  const [domIndicators, setDomIndicators] = useState<IndicatorMode>("default");
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    if (!domMenuOpen) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as Element;
+      if (!target.closest(".ud-filter-wrapper")) setDomMenuOpen(null);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [domMenuOpen]);
 
   const allEngines = useMemo(() => {
     const set = new Set<string>();
@@ -120,14 +315,7 @@ export default function DomainsClient({
     return Array.from(set);
   }, [chatFacts]);
   const [internalModels, setInternalModels] = useState<string[]>(allEngines);
-  // Use external models filter if provided, otherwise internal
   const selectedModels = externalModels?.length ? externalModels : internalModels;
-
-  const toggleModel = (m: string) => {
-    setInternalModels((prev) =>
-      prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m],
-    );
-  };
 
   async function handleTypeOverride(domain: string, type: string) {
     setTypeOverrides(prev => new Map(prev).set(domain, type));
@@ -139,8 +327,23 @@ export default function DomainsClient({
     await updateDomainTypeOverrideAction?.(domain, null);
   }
 
+  async function handleBookmark(domain: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const next = !bookmarks.has(domain);
+    setBookmarks(prev => {
+      const s = new Set(prev);
+      if (next) s.add(domain); else s.delete(domain);
+      return s;
+    });
+    await updateDomainBookmarkAction?.(domain, next);
+  }
+
   const ownDomainSet = useMemo(() => new Set(ownDomains), [ownDomains]);
   const competitorDomainSet = useMemo(() => new Set(competitorDomains), [competitorDomains]);
+  const ownBrandNames = useMemo(
+    () => new Set(projectBrands.filter((b) => b.isOwn).map((b) => b.name)),
+    [projectBrands]
+  );
 
   const filteredCurrent = useMemo(
     () => filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange),
@@ -154,7 +357,6 @@ export default function DomainsClient({
     );
   }, [chatFacts, selectedModels, dateRange]);
 
-  // ── Aggregate
   const allDomains = useMemo(
     () => aggregateDomainsFull(filteredCurrent, filteredPrevious),
     [filteredCurrent, filteredPrevious],
@@ -187,37 +389,45 @@ export default function DomainsClient({
       .filter((r) => r.citations > 0);
   }, [allDomains, domainTypeFor]);
 
-  // ── Brand-selection narrows table (filter to chats that contain selected brands)
-  // We can't easily re-filter aggregateDomainsFull post-hoc by brand without recomputing,
-  // so when brands are selected, recompute over chats that contain a selected brand.
+  // ── Brand filter (updated to support Or/And + new domBrandFilters state) ────
   const brandFilteredCurrent = useMemo(() => {
-    if (selectedBrands === null) return filteredCurrent;
-    const brandSet = new Set(selectedBrands);
-    return filteredCurrent.filter((c) => c.brands.some((b) => brandSet.has(b.name)));
-  }, [filteredCurrent, selectedBrands]);
+    if (domBrandFilters.length === 0) return filteredCurrent;
+    if (domBrandMode === "or") {
+      const brandSet = new Set(domBrandFilters);
+      return filteredCurrent.filter((c) => c.brands.some((b) => brandSet.has(b.name)));
+    } else {
+      return filteredCurrent.filter((c) =>
+        domBrandFilters.every((name) => c.brands.some((b) => b.name === name))
+      );
+    }
+  }, [filteredCurrent, domBrandFilters, domBrandMode]);
 
   const brandFilteredPrevious = useMemo(() => {
-    if (selectedBrands === null) return filteredPrevious;
-    const brandSet = new Set(selectedBrands);
-    return filteredPrevious.filter((c) => c.brands.some((b) => brandSet.has(b.name)));
-  }, [filteredPrevious, selectedBrands]);
+    if (domBrandFilters.length === 0) return filteredPrevious;
+    if (domBrandMode === "or") {
+      const brandSet = new Set(domBrandFilters);
+      return filteredPrevious.filter((c) => c.brands.some((b) => brandSet.has(b.name)));
+    } else {
+      return filteredPrevious.filter((c) =>
+        domBrandFilters.every((name) => c.brands.some((b) => b.name === name))
+      );
+    }
+  }, [filteredPrevious, domBrandFilters, domBrandMode]);
 
   const brandScopedDomains = useMemo(
     () =>
-      selectedBrands === null
+      domBrandFilters.length === 0
         ? allDomains
         : aggregateDomainsFull(brandFilteredCurrent, brandFilteredPrevious),
-    [allDomains, selectedBrands, brandFilteredCurrent, brandFilteredPrevious],
+    [allDomains, domBrandFilters, brandFilteredCurrent, brandFilteredPrevious],
   );
 
-  // ── Top 5 fuel the chart (excluding user-hidden domains)
-  const allTopDomains  = useMemo(() => brandScopedDomains.slice(0, 5), [brandScopedDomains]);
-  const topDomains     = useMemo(
+  const allTopDomains = useMemo(() => brandScopedDomains.slice(0, 5), [brandScopedDomains]);
+  const topDomains = useMemo(
     () => allTopDomains.filter(d => !hiddenDomains.has(d.domain)),
     [allTopDomains, hiddenDomains],
   );
 
-  // ── Domain Movers
   const moversData = useMemo(() => {
     switch (moverTab) {
       case "top":
@@ -243,7 +453,7 @@ export default function DomainsClient({
     () => Math.max(1, ...moversData.map((d) => d.citations)),
     [moversData],
   );
-  // Count-based series (Peec AI: "Source retrievals over time" shows raw counts)
+
   const chartData = useMemo(
     () =>
       buildDomainCountSeries(
@@ -255,44 +465,32 @@ export default function DomainsClient({
     [brandFilteredCurrent, topDomains, resolution, dateRange],
   );
 
-  // ── Table rows
+  // ── Table rows (updated for multi-type filter) ────────────────────────────
   const tableRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     let rows = brandScopedDomains;
-    const effectiveDomainTypeFilter = gapAnalysis ? "Competitor" : domainTypeFilter;
-    if (effectiveDomainTypeFilter) {
-      rows = rows.filter((d) => domainTypeFor.get(d.domain) === effectiveDomainTypeFilter);
+    if (showBookmarkedOnly) rows = rows.filter((d) => bookmarks.has(d.domain));
+
+    // Domain type filter: gapAnalysis forces "Competitor", else use multi-select
+    const effectiveTypeFilters = gapAnalysis
+      ? (["Competitor"] as DomainType[])
+      : domTypeFilters;
+    if (effectiveTypeFilters.length > 0) {
+      rows = rows.filter((d) => effectiveTypeFilters.includes(domainTypeFor.get(d.domain) ?? "Other" as DomainType));
     }
-    if (q) {
-      rows = rows.filter((d) => d.domain.toLowerCase().includes(q));
-    }
-    // Sort
+
+    if (q) rows = rows.filter((d) => d.domain.toLowerCase().includes(q));
+
     const sorted = [...rows];
     sorted.sort((a, b) => {
       let av: number | string = 0;
       let bv: number | string = 0;
       switch (sortKey) {
-        case "domain":
-          av = a.domain;
-          bv = b.domain;
-          break;
-        case "retrieved":
-          av = a.retrievedShare;
-          bv = b.retrievedShare;
-          break;
-        case "retrievalRate":
-          av = a.retrievalRate;
-          bv = b.retrievalRate;
-          break;
-        case "citationRate":
-          av = a.citationRate;
-          bv = b.citationRate;
-          break;
-        case "rank":
-        default:
-          av = a.citations;
-          bv = b.citations;
-          break;
+        case "domain": av = a.domain; bv = b.domain; break;
+        case "retrieved": av = a.retrievedShare; bv = b.retrievedShare; break;
+        case "retrievalRate": av = a.retrievalRate; bv = b.retrievalRate; break;
+        case "citationRate": av = a.citationRate; bv = b.citationRate; break;
+        case "rank": default: av = a.citations; bv = b.citations; break;
       }
       if (typeof av === "string" && typeof bv === "string") {
         return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
@@ -302,7 +500,7 @@ export default function DomainsClient({
         : (bv as number) - (av as number);
     });
     return sorted;
-  }, [brandScopedDomains, search, domainTypeFilter, gapAnalysis, domainTypeFor, sortKey, sortDir]);
+  }, [brandScopedDomains, search, domTypeFilters, gapAnalysis, domainTypeFor, sortKey, sortDir, showBookmarkedOnly, bookmarks]);
 
   const totalPages = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -324,13 +522,69 @@ export default function DomainsClient({
   }, [totalPages]);
 
   const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("desc"); }
   };
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  function exportAs(fmt: "csv" | "xlsx" | "json") {
+    setDomMenuOpen(null);
+    const rows = pageRows.map((d) => ({
+      source: d.domain,
+      domainType: domainTypeFor.get(d.domain) ?? "Other",
+      retrieved: d.retrievedShare.toFixed(1) + "%",
+      retrievalRate: d.retrievalRate.toFixed(1),
+      citationRate: d.citationRate.toFixed(1),
+      retrievals: d.citations,
+    }));
+    let content: string;
+    let filename: string;
+    let type: string;
+    if (fmt === "json") {
+      content = JSON.stringify(rows, null, 2);
+      filename = "domains.json";
+      type = "application/json";
+    } else {
+      const headers = ["Source", "Domain Type", "Retrieved", "Retrieval rate", "Citation rate", "Retrievals"];
+      const lines = [
+        headers,
+        ...rows.map((r) => [r.source, r.domainType, r.retrieved, r.retrievalRate, r.citationRate, String(r.retrievals)]),
+      ];
+      content = lines.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+      filename = `domains.${fmt}`;
+      type = "text/csv";
+    }
+    const a = document.createElement("a");
+    a.href = `data:${type};charset=utf-8,` + encodeURIComponent(content);
+    a.download = filename;
+    a.click();
+  }
+
+  // Filter label helpers
+  const brandLabel = domBrandFilters.length === 0
+    ? "All Brands"
+    : `${domBrandFilters.length} Brand${domBrandFilters.length !== 1 ? "s" : ""}`;
+  const typeLabel = domTypeFilters.length === 0
+    ? "All Domain types"
+    : `${domTypeFilters.length} Type${domTypeFilters.length !== 1 ? "s" : ""}`;
+
+  // All brand names from projectBrands
+  const allBrandNames = useMemo(
+    () => projectBrands.map((b) => b.name).sort(),
+    [projectBrands]
+  );
+
+  // ── Delta display helper ────────────────────────────────────────────────────
+  function showDelta(delta: { text: string; tone: "up" | "down" | "flat" }) {
+    if (domIndicators === "none") return null;
+    if (delta.tone === "flat") return null;
+    return <span className={`urls-num-delta tone-${delta.tone}`}>{delta.text}</span>;
+  }
+
+  function showPrimary(val: string) {
+    if (domIndicators === "indicatorsOnly") return null;
+    return <span className="urls-num-primary">{val}</span>;
+  }
 
   return (
     <div className="ins-page">
@@ -346,9 +600,9 @@ export default function DomainsClient({
         How often each domain appears in AI generated discussions
       </p>
 
+      {/* ── Chart + Domain Types overview ── */}
       <div className="urls-overview">
         <div className="ins-chart-card urls-chart-card">
-          {/* ── Chart header — matching Peec AI style ── */}
           <div className="ins-chart-header">
             <div className="urls-chart-title">Source retrievals over time</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -358,34 +612,21 @@ export default function DomainsClient({
                     key={r}
                     className={`pd-res-btn ${resolution === r ? "pd-res-active" : ""}`}
                     onClick={() => setResolution(r)}
-                  >
-                    {r}
-                  </button>
+                  >{r}</button>
                 ))}
               </div>
               <button className="ch-dots-btn" title="Chart options">···</button>
             </div>
           </div>
 
-          {/* ── Line chart — raw counts, matching Peec AI ── */}
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="4 4" stroke="rgba(0,0,0,0.05)" horizontal vertical={false} />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 10, fill: "#94a3b8" }}
-                axisLine={{ stroke: "#e5e7eb" }}
-                tickLine={false}
-                dy={6}
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: "#94a3b8" }}
-                axisLine={false}
-                tickLine={false}
-                width={42}
-                domain={[0, "auto"]}
-                tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
-              />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94a3b8" }}
+                axisLine={{ stroke: "#e5e7eb" }} tickLine={false} dy={6} />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false}
+                width={42} domain={[0, "auto"]}
+                tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`} />
               <Tooltip
                 wrapperStyle={{ zIndex: 100, pointerEvents: "none" }}
                 position={{ y: 8 }}
@@ -411,9 +652,9 @@ export default function DomainsClient({
                 }}
               />
               {topDomains.map((d, i) => {
-                const color   = LINE_COLORS[i % LINE_COLORS.length];
+                const color = LINE_COLORS[i % LINE_COLORS.length];
                 const isHover = hoveredDomain === d.domain;
-                const faded   = hoveredDomain !== null && !isHover;
+                const faded = hoveredDomain !== null && !isHover;
                 return (
                   <Line
                     key={d.domain}
@@ -432,14 +673,13 @@ export default function DomainsClient({
             </LineChart>
           </ResponsiveContainer>
 
-          {/* ── Legend ── */}
           <div className="urls-legend">
             {allTopDomains.length === 0 && (
               <span className="urls-legend-empty">No domains retrieved in this window.</span>
             )}
             {allTopDomains.map((d, i) => {
-              const color   = LINE_COLORS[i % LINE_COLORS.length];
-              const hidden  = hiddenDomains.has(d.domain);
+              const color = LINE_COLORS[i % LINE_COLORS.length];
+              const hidden = hiddenDomains.has(d.domain);
               const isHover = hoveredDomain === d.domain;
               return (
                 <span
@@ -452,11 +692,7 @@ export default function DomainsClient({
                 >
                   <span className="urls-legend-dot" style={{ background: hidden ? "#cbd5e1" : color }} />
                   <span className="urls-legend-label">{shortDomainLabel(d.domain)}</span>
-                  {/* Full domain tooltip on hover */}
-                  {isHover && (
-                    <span className="urls-legend-full-domain">{d.domain}</span>
-                  )}
-                  {/* × button to toggle domain visibility */}
+                  {isHover && <span className="urls-legend-full-domain">{d.domain}</span>}
                   {isHover && (
                     <button
                       className="urls-legend-remove"
@@ -470,9 +706,7 @@ export default function DomainsClient({
                         });
                       }}
                       title={hidden ? "Show domain" : "Hide domain"}
-                    >
-                      ×
-                    </button>
+                    >×</button>
                   )}
                 </span>
               );
@@ -483,17 +717,17 @@ export default function DomainsClient({
         <div className="ins-chart-card urls-types-card">
           <div className="urls-types-header">
             <div className="urls-chart-title">Domain types</div>
-            <div className="urls-types-total">
-              Total retrievals: {totalCit.toLocaleString()}
-            </div>
+            <div className="urls-types-total">Total retrievals: {totalCit.toLocaleString()}</div>
           </div>
           <div className="urls-types-list">
             {typeBreakdown.map((row) => (
               <div
                 key={row.type}
-                className={`urls-type-row ${domainTypeFilter === row.type ? "active" : ""}`}
+                className={`urls-type-row ${domTypeFilters.includes(row.type) ? "active" : ""}`}
                 onClick={() => {
-                  setDomainTypeFilter(domainTypeFilter === row.type ? null : row.type);
+                  setDomTypeFilters((prev) =>
+                    prev.includes(row.type) ? prev.filter(t => t !== row.type) : [...prev, row.type]
+                  );
                   setPage(1);
                 }}
               >
@@ -512,10 +746,7 @@ export default function DomainsClient({
                     }}
                   />
                   <span className="urls-type-bar-label">
-                    <span
-                      className="urls-type-dot"
-                      style={{ background: DOMAIN_TYPE_COLORS[row.type] }}
-                    />
+                    <span className="urls-type-dot" style={{ background: DOMAIN_TYPE_COLORS[row.type] }} />
                     {row.type}
                   </span>
                 </span>
@@ -526,7 +757,7 @@ export default function DomainsClient({
         </div>
       </div>
 
-      {/* Domain Movers */}
+      {/* ── Domain Movers ── */}
       <h2 className="urls-section-title">Domain Movers</h2>
       <p className="urls-section-subtitle">
         Domains with the most significant changes in AI citations
@@ -570,116 +801,189 @@ export default function DomainsClient({
         </div>
       </div>
 
+      {/* ── Domains table section ─────────────────────────────────────────── */}
       <h2 className="urls-section-title">Domains</h2>
       <p className="urls-section-subtitle">
         Detailed breakdown of domain visibility across AI responses
       </p>
 
-      <div className="urls-controls">
-        <div className="urls-search">
-          <Search size={14} className="urls-search-icon" />
-          <input
-            type="text"
-            placeholder="Search"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
+      {/* ── Filter bar ── */}
+      <div className="dom-section-controls">
+        {/* Left: search + bookmark */}
+        <div className="dom-left-controls">
+          <div className="urls-search">
+            <Search size={14} className="urls-search-icon" />
+            <input
+              type="text"
+              placeholder="Search"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
+          </div>
+          {bookmarks.size > 0 && (
+            <button
+              className={`domains-bookmark-filter ${showBookmarkedOnly ? "domains-bookmark-filter--active" : ""}`}
+              onClick={() => { setShowBookmarkedOnly(v => !v); setPage(1); }}
+            >
+              <Bookmark size={12} fill={showBookmarkedOnly ? "#f97316" : "none"}
+                color={showBookmarkedOnly ? "#f97316" : "#64748b"} />
+              Bookmarked
+            </button>
+          )}
         </div>
-        <div className="urls-controls-right">
+
+        {/* Right: Gap Analysis + filter chips */}
+        <div className="dom-right-controls">
+          {/* Gap Analysis toggle */}
           <button
             className={`gap-analysis-toggle ${gapAnalysis ? "gap-analysis-toggle--active" : ""}`}
-            onClick={() => {
-              setGapAnalysis((g) => !g);
-              setPage(1);
-            }}
+            onClick={() => { setGapAnalysis((g) => !g); setPage(1); }}
           >
             <span className="gap-analysis-dot" />
             Gap Analysis
           </button>
-          <div className="ins-filter-wrapper">
+
+          {/* All Brands */}
+          <div className="ud-filter-wrapper">
             <button
-              className="pd-filter-chip"
-              onClick={() => setDomainTypeOpen((o) => !o)}
-            >
-              {domainTypeFilter ?? "All Domain Types"} <ChevronDown size={11} />
+              className={`pd-filter-chip ${domBrandFilters.length > 0 ? "active" : ""}`}
+              onClick={() => setDomMenuOpen((m) => m === "brands" ? null : "brands")}>
+              {brandLabel} <ChevronDown size={11} />
             </button>
-            {domainTypeOpen && (
-              <div className="ins-popover">
-                <div className="ins-popover-list">
-                  <button
-                    className="ins-popover-row"
-                    onClick={() => {
-                      setDomainTypeFilter(null);
-                      setDomainTypeOpen(false);
-                    }}
-                  >
-                    All Domain Types
-                  </button>
-                  {DOMAIN_TYPES.map((d) => (
-                    <button
-                      key={d}
-                      className={`ins-popover-row ${domainTypeFilter === d ? "active" : ""}`}
-                      onClick={() => {
-                        setDomainTypeFilter(d);
-                        setDomainTypeOpen(false);
-                        setPage(1);
-                      }}
-                    >
-                      <span
-                        className="urls-type-dot"
-                        style={{ background: DOMAIN_TYPE_COLORS[d] }}
-                      />
-                      {d}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {domMenuOpen === "brands" && (
+              <DomFilterDropdown
+                allLabel="All Brands"
+                searchPlaceholder="Search brands..."
+                items={allBrandNames}
+                selected={domBrandFilters}
+                mode={domBrandMode}
+                onToggle={(v) => { setDomBrandFilters((f) => toggleArr(f, v)); setPage(1); }}
+                onAll={() => { setDomBrandFilters([]); setPage(1); }}
+                onMode={setDomBrandMode}
+                renderItem={(item) => (
+                  <span className="ud-fdrop-label">
+                    {item}
+                    {ownBrandNames.has(item) && <span className="ud-badge-you">You</span>}
+                  </span>
+                )}
+              />
+            )}
+          </div>
+
+          {/* All Domain types */}
+          <div className="ud-filter-wrapper">
+            <button
+              className={`pd-filter-chip ${domTypeFilters.length > 0 ? "active" : ""}`}
+              onClick={() => setDomMenuOpen((m) => m === "types" ? null : "types")}>
+              {typeLabel} <ChevronDown size={11} />
+            </button>
+            {domMenuOpen === "types" && (
+              <DomFilterDropdown
+                allLabel="All Domain types"
+                searchPlaceholder="Search or create type"
+                items={DOMAIN_TYPES as unknown as string[]}
+                selected={domTypeFilters as unknown as string[]}
+                mode="or"
+                noModeToggle
+                onToggle={(v) => {
+                  setDomTypeFilters((f) => toggleArr(f, v as DomainType));
+                  setPage(1);
+                }}
+                onAll={() => { setDomTypeFilters([]); setPage(1); }}
+                onMode={() => {}}
+                renderItem={(item) => {
+                  const color = (DOMAIN_TYPE_COLORS as Record<string, string>)[item] ?? "#64748b";
+                  return (
+                    <span className="ud-fdrop-label">
+                      <span className="dom-type-pill"
+                        style={{ color, background: `${color}1A`, borderColor: `${color}33` }}>
+                        {item}
+                      </span>
+                    </span>
+                  );
+                }}
+              />
+            )}
+          </div>
+
+          {/* Column selector */}
+          <div className="ud-filter-wrapper">
+            <button className="ud-icon-btn" title="Columns"
+              onClick={() => setDomMenuOpen((m) => m === "columns" ? null : "columns")}>
+              <SlidersHorizontal size={14} />
+            </button>
+            {domMenuOpen === "columns" && (
+              <DomColSelector
+                visible={domCols}
+                onToggle={(k) => setDomCols((s) => {
+                  const next = new Set(s);
+                  if (next.has(k)) next.delete(k); else next.add(k);
+                  return next;
+                })}
+                onReset={() => setDomCols(new Set(DOM_COL_DEFAULT))}
+              />
+            )}
+          </div>
+
+          {/* Export */}
+          <div className="ud-filter-wrapper">
+            <button className="ud-icon-btn" title="Export"
+              onClick={() => setDomMenuOpen((m) => m === "export" ? null : "export")}>
+              <Upload size={14} />
+            </button>
+            {domMenuOpen === "export" && <DomExportMenu onExport={exportAs} />}
+          </div>
+
+          {/* Indicators */}
+          <div className="ud-filter-wrapper">
+            <button
+              className={`ud-icon-btn ${domIndicators !== "default" ? "ud-icon-btn--active" : ""}`}
+              title="Change indicators"
+              onClick={() => setDomMenuOpen((m) => m === "indicators" ? null : "indicators")}>
+              <Settings size={14} />
+            </button>
+            {domMenuOpen === "indicators" && (
+              <DomIndicatorsMenu value={domIndicators} onChange={(v) => { setDomIndicators(v); setDomMenuOpen(null); }} />
             )}
           </div>
         </div>
       </div>
 
+      {/* ── Domains table ── */}
       <div className="urls-table-wrap">
         <table className="urls-table domains-table">
           <thead>
             <tr>
+              <th className="domains-th-bm" />
               <th className="domains-th-rank">#</th>
-              <th
-                className="domains-th-source"
-                onClick={() => toggleSort("domain")}
-              >
+              <th className="domains-th-source" onClick={() => toggleSort("domain")}>
                 Source <ChevronDown size={10} className="domains-sort-arrow" />
               </th>
-              <th>Domain Type</th>
-              <th
-                className="urls-th-num"
-                onClick={() => toggleSort("retrieved")}
-              >
-                Retrieved <ChevronDown size={10} className="domains-sort-arrow" />
-              </th>
-              <th
-                className="urls-th-num"
-                onClick={() => toggleSort("retrievalRate")}
-              >
-                Retrieval rate <ChevronDown size={10} className="domains-sort-arrow" />
-              </th>
-              <th
-                className="urls-th-num"
-                onClick={() => toggleSort("citationRate")}
-              >
-                Citation rate <ChevronDown size={10} className="domains-sort-arrow" />
-              </th>
+              {domCols.has("domainType") && <th>Domain type</th>}
+              {domCols.has("retrieved") && (
+                <th className="urls-th-num" onClick={() => toggleSort("retrieved")}>
+                  Retrieved <ChevronDown size={10} className="domains-sort-arrow" />
+                </th>
+              )}
+              {domCols.has("retrievalRate") && (
+                <th className="urls-th-num" onClick={() => toggleSort("retrievalRate")}>
+                  Retrieval rate <ChevronDown size={10} className="domains-sort-arrow" />
+                </th>
+              )}
+              {domCols.has("citationRate") && (
+                <th className="urls-th-num" onClick={() => toggleSort("citationRate")}>
+                  Citation rate <ChevronDown size={10} className="domains-sort-arrow" />
+                </th>
+              )}
+              {domCols.has("retrievals") && (
+                <th className="urls-th-num">Retrievals</th>
+              )}
             </tr>
           </thead>
           <tbody>
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={6} className="urls-empty">
-                  No domains match your filters.
-                </td>
+                <td colSpan={8} className="urls-empty">No domains match your filters.</td>
               </tr>
             )}
             {pageRows.map((d, i) => {
@@ -688,70 +992,77 @@ export default function DomainsClient({
               const retrievedDelta = formatDeltaPct(d.retrievedShare - d.retrievedSharePrev);
               const retrievalDelta = formatDeltaRate(d.retrievalRate - d.retrievalRatePrev);
               const citationDelta = formatDeltaRate(d.citationRate - d.citationRatePrev);
+              const isBookmarked = bookmarks.has(d.domain);
               return (
-                <tr key={d.domain}>
+                <tr
+                  key={d.domain}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => router.push("/domains/" + encodeURIComponent(d.domain))}
+                >
+                  <td className="domains-td-bm" onClick={(e) => handleBookmark(d.domain, e)}>
+                    <Bookmark
+                      size={13}
+                      fill={isBookmarked ? "#f97316" : "none"}
+                      color={isBookmarked ? "#f97316" : "#cbd5e1"}
+                    />
+                  </td>
                   <td className="domains-td-rank">{rank}</td>
                   <td className="domains-td-source">
-                    <img
-                      src={faviconUrl(d.domain)}
-                      alt=""
-                      width={16}
-                      height={16}
-                      className="urls-favicon"
-                    />
+                    <img src={faviconUrl(d.domain)} alt="" width={16} height={16} className="urls-favicon" />
                     <span className="domains-source-name">{d.domain}</span>
                   </td>
-                  <td style={{ position: "relative" }}>
-                    <span
-                      className="urls-pill"
-                      style={{
-                        color: (DOMAIN_TYPE_COLORS as Record<string, string>)[dt] ?? "#64748b",
-                        background: `${(DOMAIN_TYPE_COLORS as Record<string, string>)[dt] ?? "#64748b"}1A`,
-                        cursor: "pointer",
-                        userSelect: "none",
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenTypeDropdown(openTypeDropdown === d.domain ? null : d.domain);
-                      }}
-                    >
-                      {dt}
-                    </span>
-                    {openTypeDropdown === d.domain && (
-                      <TypeDropdown
-                        domain={d.domain}
-                        currentType={dt}
-                        defaultType={classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet)}
-                        onSelect={(type) => handleTypeOverride(d.domain, type)}
-                        onReset={() => handleTypeReset(d.domain)}
-                        onClose={() => setOpenTypeDropdown(null)}
-                      />
-                    )}
-                  </td>
-                  <td className="urls-td-num">
-                    <span className="urls-num-primary">{d.retrievedShare.toFixed(1)}%</span>
-                    {retrievedDelta.tone !== "flat" && (
-                      <span className={`urls-num-delta tone-${retrievedDelta.tone}`}>
-                        {retrievedDelta.text}
+                  {domCols.has("domainType") && (
+                    <td style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+                      <span
+                        className="urls-pill"
+                        style={{
+                          color: (DOMAIN_TYPE_COLORS as Record<string, string>)[dt] ?? "#64748b",
+                          background: `${(DOMAIN_TYPE_COLORS as Record<string, string>)[dt] ?? "#64748b"}1A`,
+                          cursor: "pointer",
+                          userSelect: "none",
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenTypeDropdown(openTypeDropdown === d.domain ? null : d.domain);
+                        }}
+                      >
+                        {dt}
                       </span>
-                    )}
-                  </td>
-                  <td className="urls-td-num">
-                    <span className="urls-num-primary">{d.retrievalRate.toFixed(1)}</span>
-                    {retrievalDelta.tone !== "flat" && (
-                      <span className={`urls-num-delta tone-${retrievalDelta.tone}`}>
-                        {retrievalDelta.text}
-                      </span>
-                    )}
-                  </td>
-                  <td className="urls-td-num">
-                    <span className="urls-num-primary">{d.citationRate.toFixed(1)}</span>
-                    {citationDelta.tone !== "flat" && (
-                      <span className={`urls-num-delta tone-${citationDelta.tone}`}>
-                        {citationDelta.text}
-                      </span>
-                    )}
-                  </td>
+                      {openTypeDropdown === d.domain && (
+                        <TypeDropdown
+                          domain={d.domain}
+                          currentType={dt}
+                          defaultType={classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet)}
+                          onSelect={(type) => handleTypeOverride(d.domain, type)}
+                          onReset={() => handleTypeReset(d.domain)}
+                          onClose={() => setOpenTypeDropdown(null)}
+                        />
+                      )}
+                    </td>
+                  )}
+                  {domCols.has("retrieved") && (
+                    <td className="urls-td-num">
+                      {showPrimary(d.retrievedShare.toFixed(1) + "%")}
+                      {showDelta(retrievedDelta)}
+                    </td>
+                  )}
+                  {domCols.has("retrievalRate") && (
+                    <td className="urls-td-num">
+                      {showPrimary(d.retrievalRate.toFixed(1))}
+                      {showDelta(retrievalDelta)}
+                    </td>
+                  )}
+                  {domCols.has("citationRate") && (
+                    <td className="urls-td-num">
+                      {showPrimary(d.citationRate.toFixed(1))}
+                      {showDelta(citationDelta)}
+                    </td>
+                  )}
+                  {domCols.has("retrievals") && (
+                    <td className="urls-td-num">
+                      <span className="urls-num-primary">{d.citations.toLocaleString()}</span>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -759,6 +1070,7 @@ export default function DomainsClient({
         </table>
       </div>
 
+      {/* ── Pagination ── */}
       <div className="urls-pagination">
         <div className="urls-pagination-controls">
           <button

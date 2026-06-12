@@ -87,6 +87,7 @@ export const projects = pgTable("projects", {
   timezone: varchar("timezone", { length: 100 }).default("America/New_York"),
   hiddenBrandIds: text("hidden_brand_ids").array().default([]).notNull(),
   domainTypeOverrides: jsonb("domain_type_overrides").default({}).notNull(),
+  domainBookmarks: jsonb("domain_bookmarks").default([]).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => ({

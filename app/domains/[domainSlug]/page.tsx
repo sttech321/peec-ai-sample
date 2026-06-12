@@ -1,20 +1,25 @@
-import DashboardLayout from "../../components/DashboardLayout";
-import DomainsWrapper from "../../components/DomainsWrapper";
-import { db } from "../../db";
-import { projects, brands, brandProfiles } from "../../db/schema";
+import DashboardLayout from "../../../components/DashboardLayout";
+import DomainDetailClient from "../../../components/DomainDetailClient";
+import { db } from "../../../db";
+import { projects, brands, brandProfiles } from "../../../db/schema";
 import { eq, and } from "drizzle-orm";
-import { getActiveProjectId } from "../../lib/project-context";
-import { fetchChatFacts, fetchProjectBrands } from "../../lib/chat-facts-server";
-import { getPageFilterData } from "../../lib/page-filter-data";
-import { addBrand, getDomainTypeOverrides, updateDomainTypeOverride, getDomainBookmarks, updateDomainBookmark } from "../actions/brands";
-import type { BrandProfile } from "../../lib/brand-profile-types";
-import "../prompts/[id]/prompt-detail.css";
-import "../prompts/prompts-comparison.css";
-import "../insights/insights.css";
-import "../urls/urls.css";
-import "./domains.css";
+import { getActiveProjectId } from "../../../lib/project-context";
+import { fetchChatFacts, fetchProjectBrands } from "../../../lib/chat-facts-server";
+import { getDomainTypeOverrides, getDomainBookmarks, updateDomainTypeOverride, updateDomainBookmark } from "../../actions/brands";
+import type { BrandProfile } from "../../../lib/brand-profile-types";
+import "../../prompts/[id]/prompt-detail.css";
+import "../../insights/insights.css";
+import "../../urls/urls.css";
+import "../domains.css";
+import "./domain-detail.css";
 
-export default async function DomainsPage() {
+export default async function DomainDetailPage({
+  params,
+}: {
+  params: Promise<{ domainSlug: string }>;
+}) {
+  const { domainSlug } = await params;
+  const domain = decodeURIComponent(domainSlug);
   const activeProjectId = await getActiveProjectId();
 
   const [projectRecord] = await db
@@ -24,7 +29,7 @@ export default async function DomainsPage() {
     .limit(1);
   const projectName = projectRecord?.name || "General";
 
-  const [ownBrand] = await db
+  const [ownBrandRow] = await db
     .select({ name: brands.name, domains: brands.domains })
     .from(brands)
     .where(and(eq(brands.projectId, activeProjectId), eq(brands.isOwn, true)))
@@ -49,37 +54,37 @@ export default async function DomainsPage() {
       .limit(1);
     const data = profileRow?.data as Partial<BrandProfile> | undefined;
     if (data?.domain) profileDomain = String(data.domain).trim().toLowerCase();
-  } catch (err) {
-    console.warn("[DomainsPage] brand profile read failed:", err);
-  }
+  } catch {}
 
   const ownDomains: string[] = [];
   if (profileDomain) ownDomains.push(profileDomain);
-  for (const d of ownBrand?.domains ?? []) ownDomains.push(d.toLowerCase());
+  for (const d of ownBrandRow?.domains ?? []) ownDomains.push(d.toLowerCase());
 
-  const [chatFacts, projectBrands, filterData, domainTypeOverrides, domainBookmarks] = await Promise.all([
+  const [allChatFacts, projectBrands, domainTypeOverrides, domainBookmarks] = await Promise.all([
     fetchChatFacts({ projectId: activeProjectId }),
     fetchProjectBrands(activeProjectId),
-    getPageFilterData(activeProjectId),
     getDomainTypeOverrides(),
     getDomainBookmarks(),
   ]);
 
-  // Derive available engines from actual data (dynamic, not hardcoded)
-  const availableEngines = [...new Set(chatFacts.map((c) => c.engine))].sort();
+  // Pre-filter to chats that reference this domain
+  const chatFacts = allChatFacts.filter((c) =>
+    c.sources.some((s) => s.domain.toLowerCase() === domain.toLowerCase())
+  );
+
+  const ownBrandName = ownBrandRow?.name ?? projectBrands.find((b) => b.isOwn)?.name ?? null;
 
   return (
     <DashboardLayout currentPath="/domains">
-      <DomainsWrapper
+      <DomainDetailClient
+        domain={domain}
         projectName={projectName}
         chatFacts={chatFacts}
+        allChatFacts={allChatFacts}
         projectBrands={projectBrands}
-        filterBrands={filterData.projectBrands}
-        availableTags={filterData.availableTags}
+        ownBrand={ownBrandName}
         ownDomains={ownDomains}
         competitorDomains={competitorDomains}
-        addBrandAction={addBrand}
-        availableEngines={availableEngines}
         initialDomainTypeOverrides={domainTypeOverrides}
         updateDomainTypeOverrideAction={updateDomainTypeOverride}
         initialDomainBookmarks={domainBookmarks}

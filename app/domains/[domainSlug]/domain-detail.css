@@ -1,0 +1,205 @@
+/* ── Domain Detail page ─────────────────────────────────────────────── */
+
+/* Chart legend */
+.dd-chart-legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.dd-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.dd-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.urls-breadcrumb-sep {
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.dd-bookmark-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: opacity 0.12s;
+  margin-left: 4px;
+}
+
+.dd-bookmark-btn:hover { opacity: 0.7; }
+
+/* Domain header */
+.dd-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.dd-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.2;
+}
+
+/* Tabs */
+.dd-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 20px;
+}
+
+.dd-tab {
+  padding: 8px 18px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #64748b;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.12s, border-color 0.12s;
+  margin-bottom: -1px;
+}
+
+.dd-tab:hover { color: #0f172a; }
+
+.dd-tab--active {
+  color: #0f172a;
+  border-bottom-color: #f97316;
+  font-weight: 600;
+}
+
+/* URL table cells (domain detail variant) */
+.dd-urls-table .dd-td-url {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 260px;
+  max-width: 420px;
+}
+
+.dd-url-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 400px;
+}
+
+.dd-url-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 400px;
+}
+
+/* Brand mentioned badge */
+.dd-mentioned {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.dd-mentioned--yes {
+  color: #16a34a;
+  background: #f0fdf4;
+}
+
+.dd-mentioned--no {
+  color: #94a3b8;
+  background: #f1f5f9;
+}
+
+/* Chats tab */
+.dd-chats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dd-chat-row {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.dd-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.dd-chat-engine {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.dd-chat-query {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0f172a;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dd-chat-date {
+  font-size: 11.5px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.dd-chat-snippet {
+  font-size: 12.5px;
+  color: #475569;
+  line-height: 1.55;
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+/* Pagination total text */
+.urls-pagination-total {
+  font-size: 12px;
+  color: #94a3b8;
+}

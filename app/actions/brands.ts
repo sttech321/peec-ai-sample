@@ -170,6 +170,54 @@ export async function updateBrandColorByName(
 }
 
 /**
+ * Load all domain bookmarks for the active project.
+ */
+export async function getDomainBookmarks(): Promise<string[]> {
+  const projectId = await getActiveProjectId();
+  const workspaceId = await getWorkspaceId();
+  try {
+    const [row] = await db
+      .select({ bookmarks: projects.domainBookmarks })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)))
+      .limit(1);
+    return (row?.bookmarks ?? []) as string[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Toggle bookmark for a single domain.
+ * bookmarked = true → add, false → remove
+ */
+export async function updateDomainBookmark(
+  domain: string,
+  bookmarked: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const projectId = await getActiveProjectId();
+  const workspaceId = await getWorkspaceId();
+  try {
+    const [row] = await db
+      .select({ bookmarks: projects.domainBookmarks })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)))
+      .limit(1);
+    const current = ((row?.bookmarks ?? []) as string[]);
+    const updated = bookmarked
+      ? [...new Set([...current, domain])]
+      : current.filter((d) => d !== domain);
+    await db
+      .update(projects)
+      .set({ domainBookmarks: updated })
+      .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+/**
  * Load all saved brand colors for the active project.
  * Returns { [brandName]: hexColor }
  */
