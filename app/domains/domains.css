@@ -82,3 +82,390 @@
   font-weight: 500;
   color: #0f172a;
 }
+
+/* ── Filter bar layout ─────────────────────────────────────────────── */
+.dom-section-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dom-left-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dom-right-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Active state for pd-filter-chip in domains context */
+.pd-filter-chip.active {
+  border-color: #2563eb;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.gap-analysis-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: inherit;
+}
+.gap-analysis-toggle:hover { border-color: #94a3b8; color: #334155; }
+.gap-analysis-toggle--active { border-color: #f97316; color: #f97316; background: #fff7ed; }
+
+.gap-analysis-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f97316;
+  flex-shrink: 0;
+}
+
+/* ── Shared filter wrapper (positioned parent for dropdowns) ───────── */
+.ud-filter-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+/* ── Icon buttons ──────────────────────────────────────────────────── */
+.ud-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: inherit;
+}
+.ud-icon-btn:hover { border-color: #94a3b8; color: #334155; }
+.ud-icon-btn--active { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+
+/* ── Floating dropdown card ────────────────────────────────────────── */
+.ud-fdrop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 400;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 28px -5px rgba(0,0,0,0.12);
+  min-width: 230px;
+  max-width: 290px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Search field inside dropdown */
+.ud-fdrop-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+  flex-shrink: 0;
+}
+.ud-fdrop-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 12.5px;
+  color: #0f172a;
+  background: transparent;
+  font-family: inherit;
+}
+.ud-fdrop-search input::placeholder { color: #94a3b8; }
+
+/* "All" option row */
+.ud-fdrop-all {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+  transition: background 0.1s;
+  flex-shrink: 0;
+}
+.ud-fdrop-all:hover { background: #f8fafc; }
+.ud-fdrop-check-mark { color: #2563eb; flex-shrink: 0; }
+
+/* Or/And mode toggle — <div role="button"> to avoid Tailwind Preflight reset */
+.ud-fdrop-modes {
+  display: flex;
+  align-items: stretch;
+  padding: 8px 12px;
+  gap: 0;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+  flex-shrink: 0;
+}
+.ud-fdrop-mode {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.ud-fdrop-mode:first-child { border-radius: 5px 0 0 5px; }
+.ud-fdrop-mode:last-child { border-radius: 0 5px 5px 0; }
+.ud-fdrop-mode.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+/* Scrollable items list */
+.ud-fdrop-list {
+  overflow-y: auto;
+  max-height: 220px;
+  padding: 4px 0;
+}
+
+.ud-fdrop-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.ud-fdrop-item:hover { background: #f8fafc; }
+
+/* Checkbox circle */
+.ud-fdrop-cb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  border-radius: 4px;
+  border: 1.5px solid #94a3b8;
+  background: #ffffff;
+  flex-shrink: 0;
+  color: #ffffff;
+}
+.ud-fdrop-cb.checked { background: #2563eb; border-color: #2563eb; }
+
+.ud-fdrop-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ud-fdrop-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+/* [You] badge */
+.ud-badge-you {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ── Domain type colored pill ──────────────────────────────────────── */
+.dom-type-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* ── Column selector popup ─────────────────────────────────────────── */
+.ud-col-selector {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  z-index: 400;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 28px -5px rgba(0,0,0,0.12);
+  min-width: 210px;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ud-col-section-label {
+  padding: 5px 12px 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.ud-col-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.ud-col-item:hover { background: #f8fafc; }
+
+.ud-col-divider {
+  height: 1px;
+  background: #f1f5f9;
+  margin: 5px 0;
+}
+
+.ud-col-reset {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.1s;
+  user-select: none;
+}
+.ud-col-reset:hover { color: #2563eb; }
+
+/* ── Export popup ──────────────────────────────────────────────────── */
+.ud-export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  z-index: 400;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 28px -5px rgba(0,0,0,0.12);
+  min-width: 160px;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ud-export-label {
+  padding: 5px 12px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.ud-export-item {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+}
+.ud-export-item:hover { background: #f8fafc; }
+
+/* dom-export-menu: same as ud-export-menu but alias */
+.dom-export-menu { }
+
+/* ── Indicators popup ──────────────────────────────────────────────── */
+.dom-indicators-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  z-index: 400;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 28px -5px rgba(0,0,0,0.12);
+  min-width: 190px;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dom-indicator-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+}
+.dom-indicator-item:hover { background: #f8fafc; }
+
+/* ── Delta tone classes (reuse urls-num-* conventions) ─────────────── */
+.urls-num-primary {
+  color: #0f172a;
+  font-weight: 500;
+}
+.urls-num-delta {
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 4px;
+}
+.urls-num-delta.tone-up { color: #16a34a; }
+.urls-num-delta.tone-down { color: #dc2626; }
+.urls-num-delta.tone-flat { color: #94a3b8; }
+
+/* Right-side filter dropdowns: open leftward to stay in viewport */
+.dom-right-controls .ud-fdrop {
+  left: auto;
+  right: 0;
+}
