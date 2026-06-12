@@ -7,7 +7,7 @@ import { brands, brandSuggestions, brandMentions, projects } from "../../db/sche
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import { updateBrandColor } from "../actions/brands";
-import { renameBrand, updateBrandAliases, updateBrandDomains } from "./actions";
+import { renameBrand, updateBrandAliases, updateBrandDomains, reprocessAllBrands } from "./actions";
 import "./brands.css";
 
 export default async function BrandsPage() {
@@ -69,6 +69,7 @@ export default async function BrandsPage() {
           renameBrandAction={renameBrand}
           updateBrandAliasesAction={updateBrandAliases}
           updateBrandDomainsAction={updateBrandDomains}
+          reprocessAllBrandsAction={reprocessAllBrands}
         />
       </DashboardLayout>
     </BrandsModalProvider>

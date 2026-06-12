@@ -128,7 +128,7 @@ export default async function DashboardLayout({
       <main className="flex-1 flex flex-col overflow-hidden relative bg-white">
 
         {/* Header */}
-        <header className="h-14 flex items-center justify-between px-6 border-b border-zinc-200 shrink-0 bg-white" style={{ position: "relative", zIndex: 50, overflow: "visible" }}>
+        <header className="h-14 flex items-center justify-between px-6 border-b border-zinc-200 shrink-0 bg-white" style={{ position: "relative", /* zIndex: 40, */ overflow: "visible" }}>
           <div className="flex items-center space-x-3">
             {headerAction && (
               <div>

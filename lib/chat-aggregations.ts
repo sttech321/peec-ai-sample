@@ -128,17 +128,19 @@ export function aggregateDomains(chats: ChatFact[], topN: number): DomainAgg[] {
   const map = new Map<string, { count: number; category: string | null }>();
   for (const c of chats) {
     for (const s of c.sources) {
-      const key = `${s.domain}::${s.category ?? ""}`;
+      const key = s.domain;
       let entry = map.get(key);
       if (!entry) {
         entry = { count: 0, category: s.category };
         map.set(key, entry);
       }
       entry.count += 1;
+      // keep first non-null category as the representative type for this domain
+      if (!entry.category && s.category) entry.category = s.category;
     }
   }
   return Array.from(map.entries())
-    .map(([key, v]) => ({ domain: key.split("::")[0], count: v.count, category: v.category }))
+    .map(([domain, v]) => ({ domain, count: v.count, category: v.category }))
     .sort((a, b) => b.count - a.count)
     .slice(0, topN);
 }

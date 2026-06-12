@@ -349,6 +349,22 @@ body {
   white-space: nowrap;
   margin-left: auto;
 }
+/* Own brand row in tooltip — visually distinguished */
+.ch-tooltip-row--own {
+  border-top: 1px solid #f3f4f6;
+  margin-top: 3px;
+  padding-top: 5px;
+}
+.ch-tooltip-you {
+  font-size: 9px;
+  font-weight: 700;
+  color: #059669;
+  background: rgba(16,185,129,0.10);
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .ch-tooltip-footer {
   margin-top: 6px;
   padding-top: 5px;
