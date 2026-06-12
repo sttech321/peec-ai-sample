@@ -35,6 +35,8 @@ interface Props {
   competitorDomains: string[];
   externalDateRange?: DateRangeValue;
   externalModels?: string[];
+  initialDomainTypeOverrides?: Record<string, string>;
+  updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const PAGE_SIZE = 20;
@@ -87,6 +89,8 @@ export default function DomainsClient({
   competitorDomains,
   externalDateRange,
   externalModels,
+  initialDomainTypeOverrides,
+  updateDomainTypeOverrideAction,
 }: Props) {
   const [resolution, setResolution] = useState<Resolution>("W");
   const [internalDateRange, setInternalDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
@@ -105,7 +109,9 @@ export default function DomainsClient({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [moverTab, setMoverTab] = useState<"top" | "trending" | "losing" | "new">("top");
   const [gapAnalysis, setGapAnalysis] = useState(false);
-  const [typeOverrides, setTypeOverrides] = useState<Map<string, string>>(new Map());
+  const [typeOverrides, setTypeOverrides] = useState<Map<string, string>>(() =>
+    new Map(Object.entries(initialDomainTypeOverrides ?? {}))
+  );
   const [openTypeDropdown, setOpenTypeDropdown] = useState<string | null>(null);
 
   const allEngines = useMemo(() => {
@@ -122,6 +128,16 @@ export default function DomainsClient({
       prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m],
     );
   };
+
+  async function handleTypeOverride(domain: string, type: string) {
+    setTypeOverrides(prev => new Map(prev).set(domain, type));
+    await updateDomainTypeOverrideAction?.(domain, type);
+  }
+
+  async function handleTypeReset(domain: string) {
+    setTypeOverrides(prev => { const m = new Map(prev); m.delete(domain); return m; });
+    await updateDomainTypeOverrideAction?.(domain, null);
+  }
 
   const ownDomainSet = useMemo(() => new Set(ownDomains), [ownDomains]);
   const competitorDomainSet = useMemo(() => new Set(competitorDomains), [competitorDomains]);
@@ -706,8 +722,8 @@ export default function DomainsClient({
                         domain={d.domain}
                         currentType={dt}
                         defaultType={classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet)}
-                        onSelect={(type) => setTypeOverrides((prev) => new Map(prev).set(d.domain, type))}
-                        onReset={() => setTypeOverrides((prev) => { const m = new Map(prev); m.delete(d.domain); return m; })}
+                        onSelect={(type) => handleTypeOverride(d.domain, type)}
+                        onReset={() => handleTypeReset(d.domain)}
                         onClose={() => setOpenTypeDropdown(null)}
                       />
                     )}

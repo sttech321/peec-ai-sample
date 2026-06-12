@@ -25,6 +25,8 @@ interface Props {
   competitorDomains: string[];
   addBrandAction: (name: string) => Promise<{ ok: boolean; error?: string }>;
   availableEngines?: string[];
+  initialDomainTypeOverrides?: Record<string, string>;
+  updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
 }
 
 
@@ -32,6 +34,7 @@ export default function DomainsWrapper({
   projectName, chatFacts, projectBrands, filterBrands,
   availableTags, ownDomains, competitorDomains,
   addBrandAction, availableEngines,
+  initialDomainTypeOverrides, updateDomainTypeOverrideAction,
 }: Props) {
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => makeDR("30"));
   const [selectedModels, setSelectedModels] = useState<string[]>(
@@ -57,6 +60,8 @@ export default function DomainsWrapper({
         competitorDomains={competitorDomains}
         externalDateRange={dateRange}
         externalModels={selectedModels}
+        initialDomainTypeOverrides={initialDomainTypeOverrides}
+        updateDomainTypeOverrideAction={updateDomainTypeOverrideAction}
       />
     </>
   );

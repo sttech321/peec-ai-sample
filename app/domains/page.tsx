@@ -6,7 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { getActiveProjectId } from "../../lib/project-context";
 import { fetchChatFacts, fetchProjectBrands } from "../../lib/chat-facts-server";
 import { getPageFilterData } from "../../lib/page-filter-data";
-import { addBrand } from "../actions/brands";
+import { addBrand, getDomainTypeOverrides, updateDomainTypeOverride } from "../actions/brands";
 import type { BrandProfile } from "../../lib/brand-profile-types";
 import "../prompts/[id]/prompt-detail.css";
 import "../prompts/prompts-comparison.css";
@@ -57,10 +57,11 @@ export default async function DomainsPage() {
   if (profileDomain) ownDomains.push(profileDomain);
   for (const d of ownBrand?.domains ?? []) ownDomains.push(d.toLowerCase());
 
-  const [chatFacts, projectBrands, filterData] = await Promise.all([
+  const [chatFacts, projectBrands, filterData, domainTypeOverrides] = await Promise.all([
     fetchChatFacts({ projectId: activeProjectId }),
     fetchProjectBrands(activeProjectId),
     getPageFilterData(activeProjectId),
+    getDomainTypeOverrides(),
   ]);
 
   // Derive available engines from actual data (dynamic, not hardcoded)
@@ -78,6 +79,8 @@ export default async function DomainsPage() {
         competitorDomains={competitorDomains}
         addBrandAction={addBrand}
         availableEngines={availableEngines}
+        initialDomainTypeOverrides={domainTypeOverrides}
+        updateDomainTypeOverrideAction={updateDomainTypeOverride}
       />
     </DashboardLayout>
   );
