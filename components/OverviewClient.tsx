@@ -1658,7 +1658,7 @@ export default function OverviewClient({
                 );
               })}
               {chatTotalPages > 5 && chatPage < chatTotalPages - 2 && <span className="ac-page-ellipsis">…</span>}
-              {chatTotalPages > 5 && (
+              {chatTotalPages > 5 && chatPage < chatTotalPages - 2 && (
                 <button
                   className={`ac-page-btn ${chatPage === chatTotalPages ? "ac-page-btn--active" : ""}`}
                   onClick={() => setChatPage(chatTotalPages)}
