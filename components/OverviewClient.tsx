@@ -11,6 +11,11 @@ import {
 import {
   Settings, ChevronDown, Copy, Download, ImageIcon, MoreHorizontal,
 } from "lucide-react";
+import {
+  HiMiniChevronUp, HiMiniChevronDown,
+  HiOutlineChevronDown, HiOutlineChevronUp,
+  HiOutlineArrowTrendingUp, HiOutlineArrowTrendingDown,
+} from "react-icons/hi2";
 import ChatModal from "./ChatModal";
 import EngineIcon from "./EngineIcon";
 import DomainFavicon from "./DomainFavicon";
@@ -49,6 +54,15 @@ interface Props {
   updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
   brandColorOverrides?: Record<string, string>;
   onBrandColorChange?: (brandName: string, color: string) => void;
+}
+
+function SortIcon({ sortDir }: { sortDir: "asc" | "desc" | null }) {
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", lineHeight: 1, gap: "1px" }}>
+      <HiMiniChevronUp  size={8} style={{ opacity: sortDir === "asc"  ? 1 : sortDir === "desc" ? 0.22 : 0.38 }} />
+      <HiMiniChevronDown size={8} style={{ opacity: sortDir === "desc" ? 1 : sortDir === "asc"  ? 0.22 : 0.38 }} />
+    </span>
+  );
 }
 
 export default function OverviewClient({
@@ -1002,12 +1016,9 @@ export default function OverviewClient({
                     };
                     const isActive   = brandSortCol === col;
                     const menuOpen   = openBrandMenu === col;
-                    // SOV always shows trending arrow (fixed icon in Peec AI)
-                    const headerIcon = col === "sov"
-                      ? "↗"
-                      : isActive
-                        ? (brandSortMode === "high-low" || brandSortMode === "negative-trend" ? "↓" : "↑")
-                        : "↕";
+                    const sortDir: "asc" | "desc" | null = isActive
+                      ? (brandSortMode === "high-low" || brandSortMode === "negative-trend" ? "desc" : "asc")
+                      : null;
                     // Right-align sort menu for last 2 columns to avoid overflow
                     const menuRight = colIdx >= 2;
                     return (
@@ -1017,8 +1028,8 @@ export default function OverviewClient({
                           onClick={(e) => { e.stopPropagation(); setOpenBrandMenu(menuOpen ? null : col); }}
                         >
                           {labels[col]}
-                          <span className={`pd-th-arrow ${col === "sov" ? "pd-th-arrow--trend" : ""}`}>
-                            {headerIcon}
+                          <span className="pd-th-arrow">
+                            <SortIcon sortDir={sortDir} />
                           </span>
                           <InfoTooltip text={tooltipTexts[col]} />
                         </span>
@@ -1032,9 +1043,9 @@ export default function OverviewClient({
                             <div className="pd-sort-label">Sort by</div>
                             {/* Value-based sorts */}
                             {([
-                              { mode: "high-low", icon: "↓", keyword: "Value", direction: "High - low" },
-                              { mode: "low-high", icon: "↑", keyword: "Value", direction: "Low - high" },
-                            ] as { mode: BrandSortMode; icon: string; keyword: string; direction: string }[]).map(opt => {
+                              { mode: "high-low" as BrandSortMode, icon: <HiOutlineChevronDown size={13} />, keyword: "Value", direction: "High - low" },
+                              { mode: "low-high" as BrandSortMode, icon: <HiOutlineChevronUp size={13} />, keyword: "Value", direction: "Low - high" },
+                            ]).map(opt => {
                               const isChecked = brandSortCol === col && brandSortMode === opt.mode;
                               return (
                                 <div
@@ -1053,9 +1064,9 @@ export default function OverviewClient({
                             <div className="pd-sort-divider" />
                             {/* Trend-based sorts */}
                             {([
-                              { mode: "positive-trend", icon: "↗", label: "Positive trend" },
-                              { mode: "negative-trend", icon: "↘", label: "Negative trend" },
-                            ] as { mode: BrandSortMode; icon: string; label: string }[]).map(opt => {
+                              { mode: "positive-trend" as BrandSortMode, icon: <HiOutlineArrowTrendingUp size={13} />, label: "Positive trend" },
+                              { mode: "negative-trend" as BrandSortMode, icon: <HiOutlineArrowTrendingDown size={13} />, label: "Negative trend" },
+                            ]).map(opt => {
                               const isChecked = brandSortCol === col && brandSortMode === opt.mode;
                               return (
                                 <div

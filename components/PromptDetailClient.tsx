@@ -10,6 +10,11 @@ import {
 import {
   Settings, MessageSquare, Play, Loader2, Copy, Download, ImageIcon, MoreHorizontal,
 } from "lucide-react";
+import {
+  HiMiniChevronUp, HiMiniChevronDown,
+  HiOutlineChevronDown, HiOutlineChevronUp,
+  HiOutlineArrowTrendingUp, HiOutlineArrowTrendingDown,
+} from "react-icons/hi2";
 import BrandColorPicker from "./BrandColorPicker";
 import ChatModal from "./ChatModal";
 import EngineIcon from "./EngineIcon";
@@ -94,6 +99,15 @@ function formatTimeAgo(dateStr: string): string {
   return `${Math.floor(diffHr / 24)} day ago`;
 }
 
+
+function SortIcon({ sortDir }: { sortDir: "asc" | "desc" | null }) {
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", lineHeight: 1, gap: "1px" }}>
+      <HiMiniChevronUp  size={8} style={{ opacity: sortDir === "asc"  ? 1 : sortDir === "desc" ? 0.22 : 0.38 }} />
+      <HiMiniChevronDown size={8} style={{ opacity: sortDir === "desc" ? 1 : sortDir === "asc"  ? 0.22 : 0.38 }} />
+    </span>
+  );
+}
 
 export default function PromptDetailClient({
   prompt, chatFacts, projectBrands, availableTags, selectedTagIds,
@@ -1164,13 +1178,15 @@ export default function PromptDetailClient({
                     };
                     const isActive = brandSortCol === col;
                     const menuOpen = openBrandMenu === col;
-                    const icon = col === "sov" ? "↗" : isActive ? (brandSortMode === "high-low" || brandSortMode === "negative-trend" ? "↓" : "↑") : "↕";
+                    const sortDir: "asc" | "desc" | null = isActive
+                      ? (brandSortMode === "high-low" || brandSortMode === "negative-trend" ? "desc" : "asc")
+                      : null;
                     const menuRight = colIdx >= 2;
                     return (
                       <th key={col} style={{ position: "relative" }}>
                         <span className={`pd-brands-th-btn ${isActive || menuOpen ? "pd-brands-th-active" : ""}`}
                           onClick={e => { e.stopPropagation(); setOpenBrandMenu(menuOpen ? null : col); }}>
-                          {lbls[col]} <span className={`pd-th-arrow ${col === "sov" ? "pd-th-arrow--trend" : ""}`}>{icon}</span>
+                          {lbls[col]} <span className="pd-th-arrow"><SortIcon sortDir={sortDir} /></span>
                           <InfoTooltip text={tips[col]} />
                         </span>
                         {menuOpen && (
@@ -1178,9 +1194,9 @@ export default function PromptDetailClient({
                             <div className="pd-sort-label">Sort by</div>
                             {/* Value-based sorts */}
                             {([
-                              { mode: "high-low", icon: "↓", keyword: "Value", direction: "High - low" },
-                              { mode: "low-high", icon: "↑", keyword: "Value", direction: "Low - high" },
-                            ] as { mode: BrandSortMode; icon: string; keyword: string; direction: string }[]).map(opt => {
+                              { mode: "high-low" as BrandSortMode, icon: <HiOutlineChevronDown size={13} />, keyword: "Value", direction: "High - low" },
+                              { mode: "low-high" as BrandSortMode, icon: <HiOutlineChevronUp size={13} />, keyword: "Value", direction: "Low - high" },
+                            ]).map(opt => {
                               const checked = brandSortCol === col && brandSortMode === opt.mode;
                               return (
                                 <div key={opt.mode} className={`pd-sort-option ${checked ? "pd-sort-active" : ""}`}
@@ -1195,9 +1211,9 @@ export default function PromptDetailClient({
                             <div className="pd-sort-divider" />
                             {/* Trend-based sorts */}
                             {([
-                              { mode: "positive-trend", icon: "↗", label: "Positive trend" },
-                              { mode: "negative-trend", icon: "↘", label: "Negative trend" },
-                            ] as { mode: BrandSortMode; icon: string; label: string }[]).map(opt => {
+                              { mode: "positive-trend" as BrandSortMode, icon: <HiOutlineArrowTrendingUp size={13} />, label: "Positive trend" },
+                              { mode: "negative-trend" as BrandSortMode, icon: <HiOutlineArrowTrendingDown size={13} />, label: "Negative trend" },
+                            ]).map(opt => {
                               const checked = brandSortCol === col && brandSortMode === opt.mode;
                               return (
                                 <div key={opt.mode} className={`pd-sort-option ${checked ? "pd-sort-active" : ""}`}
