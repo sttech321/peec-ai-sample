@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useEffect, useState } from "react";
 import { RefreshCw, FileText, X, ChevronRight, ChevronDown, Check, Search } from "lucide-react";
 import { fetchRobotsTxt } from "../app/crawlability/actions";
+import { guessBrandDomain } from "../lib/brand-domain";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -330,6 +331,14 @@ function UrlTester({ domain, robotsContent }: { domain: string; robotsContent: s
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
+export interface CrawlabilityBrand {
+  id: string;
+  name: string;
+  color: string | null;
+  domains: string[];
+  isOwn: boolean;
+}
+
 export interface CrawlabilityProps {
   domain: string | null;
   robotsTxtContent: string | null;
@@ -337,6 +346,7 @@ export interface CrawlabilityProps {
   projectName: string;
   fetchError: string | null;
   fetchedAt?: string;
+  brands?: CrawlabilityBrand[];
 }
 
 function formatFetchedAt(iso: string): string {
@@ -357,6 +367,7 @@ export default function CrawlabilityClient({
   projectName,
   fetchError,
   fetchedAt,
+  brands: projectBrands = [],
 }: CrawlabilityProps) {
   const [tab, setTab] = useState<"crawlability" | "tester">("crawlability");
   const [search, setSearch] = useState("");
@@ -376,8 +387,13 @@ export default function CrawlabilityClient({
   const [platformOpen, setPlatformOpen] = useState(false);
   const [typeOpen, setTypeOpen] = useState(false);
   const [botsOpen, setBotsOpen] = useState(false);
+  const [brandOpen, setBrandOpen] = useState(false);
   const [sortCol, setSortCol] = useState<"bot" | "type" | "platform" | "status" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Brand switcher state — tracks which brand's robots.txt is currently displayed
+  const [activeBrandName, setActiveBrandName] = useState<string>(projectName);
+  const [activeDomain, setActiveDomain] = useState<string>(domain ?? "");
 
   function toggleSort(col: "bot" | "type" | "platform" | "status") {
     if (sortCol === col) {
@@ -441,15 +457,34 @@ export default function CrawlabilityClient({
   const hasFilters = platformFilters.size > 0 || typeFilters.size > 0 || botFilters.size > 0 || statusFilter !== "all";
 
   async function handleReload() {
-    if (!domain) return;
+    const domainToFetch = activeDomain || domain;
+    if (!domainToFetch) return;
     setReloading(true);
     try {
-      const result = await fetchRobotsTxt(domain);
+      const result = await fetchRobotsTxt(domainToFetch);
       setLocalContent(result.content);
       setLocalError(result.error);
       setLastFetchedAt(new Date().toISOString());
     } catch {
       setLocalError("Failed to reload");
+    }
+    setReloading(false);
+  }
+
+  async function handleBrandSwitch(brand: CrawlabilityBrand) {
+    setBrandOpen(false);
+    const brandDomain = brand.domains[0] ?? guessBrandDomain(brand.name);
+    setActiveBrandName(brand.name);
+    setActiveDomain(brandDomain);
+    setSelectedBot(null);
+    setReloading(true);
+    try {
+      const result = await fetchRobotsTxt(brandDomain);
+      setLocalContent(result.content);
+      setLocalError(result.error);
+      setLastFetchedAt(new Date().toISOString());
+    } catch {
+      setLocalError("Failed to load robots.txt");
     }
     setReloading(false);
   }
@@ -571,6 +606,16 @@ export default function CrawlabilityClient({
     setShowModal(true);
   }
 
+  const brandDropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (brandDropdownRef.current && !brandDropdownRef.current.contains(e.target as Node))
+        setBrandOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
   return (
     <div className="cw-page">
 
@@ -578,15 +623,41 @@ export default function CrawlabilityClient({
       <div className="cw-topbar">
         {/* Left: filter chips */}
         <div className="cw-filters">
-          {/* Project name chip */}
-          <div style={{ position: "relative" }}>
-            <button className="cw-chip cw-chip-project">
+          {/* Brand Switcher chip */}
+          <div ref={brandDropdownRef} style={{ position: "relative" }}>
+            <button
+              className="cw-chip cw-chip-project"
+              onClick={() => setBrandOpen(v => !v)}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              {domain && <img src={`https://www.google.com/s2/favicons?sz=32&domain=${domain}`} alt="" style={{ width: 12, height: 12, borderRadius: 2 }}
+              {activeDomain && <img src={`https://www.google.com/s2/favicons?sz=32&domain=${activeDomain}`} alt="" style={{ width: 12, height: 12, borderRadius: 2 }}
                 onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}
-              {projectName}
+              {activeBrandName}
               <ChevronDown size={11} />
             </button>
+            {brandOpen && projectBrands.length > 0 && (
+              <div className="cw-dropdown cw-dropdown-multiselect" style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 40, minWidth: 220, maxHeight: 320, overflowY: "auto" }}>
+                {projectBrands.map(brand => {
+                  const bDomain = brand.domains[0] ?? guessBrandDomain(brand.name);
+                  const isActive = brand.name === activeBrandName;
+                  return (
+                    <div
+                      key={brand.id}
+                      className="cw-dropdown-check-item cw-dropdown-check-item-hoverable"
+                      onClick={() => handleBrandSwitch(brand)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`https://www.google.com/s2/favicons?sz=32&domain=${bDomain}`} alt=""
+                        style={{ width: 14, height: 14, borderRadius: 2, flexShrink: 0 }}
+                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                      <span style={{ flex: 1 }}>{brand.name}</span>
+                      {isActive && <Check size={12} style={{ color: "#3b82f6", flexShrink: 0 }} />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* All Platforms — multi-select */}
@@ -809,13 +880,13 @@ export default function CrawlabilityClient({
       </div>
 
       {tab === "tester" ? (
-        <UrlTester domain={domain ?? "example.com"} robotsContent={localContent} />
+        <UrlTester domain={activeDomain || domain || "example.com"} robotsContent={localContent} />
       ) : (
         <>
           {/* Summary card */}
           <div className="cw-summary-card">
             <p className="cw-heading">
-              {projectName} — {restricted} bots with restrictions, {fullyOpen} fully open
+              {activeBrandName} — {restricted} bots with restrictions, {fullyOpen} fully open
             </p>
             <p className="cw-subheading">
               Review which AI crawlers can access your site and how your robots.txt policies compare to competitors.
@@ -965,8 +1036,9 @@ export default function CrawlabilityClient({
                     className="cw-tester-btn"
                     style={{ marginTop: 8, alignSelf: "center" }}
                     onClick={async () => {
-                      if (!domain) return;
-                      const result = await fetchRobotsTxt(domain);
+                      const d = activeDomain || domain;
+                      if (!d) return;
+                      const result = await fetchRobotsTxt(d);
                       setLocalContent(result.content);
                       setLocalError(result.error);
                       setLastFetchedAt(new Date().toISOString());
