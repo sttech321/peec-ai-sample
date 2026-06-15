@@ -436,7 +436,7 @@ export default function ChatsPageClient({ ownBrandName }: Props) {
                 );
               })}
               {totalPages > 5 && chatPage < totalPages - 2 && <span className="ac-page-ellipsis">…</span>}
-              {totalPages > 5 && (
+              {totalPages > 5 && chatPage < totalPages - 2 && (
                 <button className={`ac-page-btn ${chatPage === totalPages ? "ac-page-btn--active" : ""}`} onClick={() => setChatPage(totalPages)}>
                   {totalPages}
                 </button>

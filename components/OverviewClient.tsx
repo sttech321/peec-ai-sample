@@ -179,6 +179,16 @@ export default function OverviewClient({
     [projectBrands],
   );
 
+  const brandDomainMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const b of projectBrands) {
+      if (b.domains && b.domains.length > 0 && b.domains[0]) {
+        m.set(b.name, b.domains[0]);
+      }
+    }
+    return m;
+  }, [projectBrands]);
+
   function sentimentDotColor(score: number): string {
     if (score >= 65) return "#10b981";
     if (score >= 50) return "#eab308";
@@ -1154,7 +1164,7 @@ export default function OverviewClient({
                         )}
                       </td>
                       <td className="pd-brand-cell">
-                        <DomainFavicon domain={guessBrandDomain(b.name)} size={16} />
+                        <DomainFavicon domain={brandDomainMap.get(b.name) ?? guessBrandDomain(b.name)} size={16} />
                         {b.name}
                       </td>
                       {/* Visibility */}
@@ -1251,7 +1261,7 @@ export default function OverviewClient({
                           )}
                         </td>
                         <td className="pd-brand-cell">
-                          <DomainFavicon domain={guessBrandDomain(b.name)} size={16} />
+                          <DomainFavicon domain={brandDomainMap.get(b.name) ?? guessBrandDomain(b.name)} size={16} />
                           {b.name}
                         </td>
                         <td><span className="pd-metric-with-delta">
@@ -1658,7 +1668,7 @@ export default function OverviewClient({
                 );
               })}
               {chatTotalPages > 5 && chatPage < chatTotalPages - 2 && <span className="ac-page-ellipsis">…</span>}
-              {chatTotalPages > 5 && (
+              {chatTotalPages > 5 && chatPage < chatTotalPages - 2 && (
                 <button
                   className={`ac-page-btn ${chatPage === chatTotalPages ? "ac-page-btn--active" : ""}`}
                   onClick={() => setChatPage(chatTotalPages)}

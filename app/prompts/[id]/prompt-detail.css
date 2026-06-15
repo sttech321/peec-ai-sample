@@ -1374,6 +1374,7 @@
 }
 .cfd-trigger:hover { border-color: #d1d5db; background: #f9fafb; }
 .cfd-trigger--active { background: #111827; color: #fff; border-color: #111827; }
+.cfd-trigger--active:hover { background: #27272a; border-color: #27272a; color: #fff; }
 
 .cfd-dropdown {
   position: absolute;
@@ -1751,6 +1752,7 @@
 .ac-page-btn:hover:not(:disabled) { background: #f9fafb; border-color: #d1d5db; }
 .ac-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .ac-page-btn--active { background: #111827; color: #fff; border-color: #111827; }
+.ac-page-btn.ac-page-btn--active:hover { background: #27272a; border-color: #27272a; color: #fff; }
 .ac-page-ellipsis { font-size: 13px; color: #9ca3af; padding: 0 2px; }
 
 /* ── Recent Chats Scrolling Cards ────────────────────────────────────────── */
