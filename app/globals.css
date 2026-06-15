@@ -425,3 +425,63 @@ body {
   transition: all 0.12s;
 }
 .ch-dots-btn:hover { border-color: #d1d5db; color: #374151; background: #f9fafb; }
+
+/* ── Chart download dropdown (shared by Overview + Prompt Detail) ────── */
+.ch-chart-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.ch-chart-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 400;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 28px -5px rgba(0,0,0,0.12);
+  min-width: 190px;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ch-chart-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+  transition: background 0.1s;
+}
+.ch-chart-menu-item:hover { background: #f8fafc; }
+
+/* Export-only title — hidden in normal view, shown during html2canvas capture */
+.ch-chart-export-title {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+}
+.ch-export-metric {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.ch-export-period {
+  font-size: 12.5px;
+  color: #94a3b8;
+}
+
+/* During image capture: hide normal header, show export title */
+.pd-chart-card[data-exporting] .pd-chart-header { display: none; }
+.pd-chart-card[data-exporting] .ch-chart-export-title { display: flex; }

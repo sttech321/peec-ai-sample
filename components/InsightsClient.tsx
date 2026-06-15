@@ -6,7 +6,7 @@ import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
-import { Check, ChevronDown, Grid2X2, RotateCcw, Search } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, Grid2X2, ImageIcon, MoreHorizontal, RotateCcw, Search } from "lucide-react";
 import EngineIcon from "./EngineIcon";
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
 import BrandsDropdown from "./BrandsDropdown";
@@ -125,6 +125,10 @@ export default function InsightsClient({
   const [matrixTab, setMatrixTab] = useState<"visibility" | "sentiment" | "position" | "sov">("visibility");
   // Chart tab — separate from matrix tab
   const [chartTab, setChartTab] = useState<"visibility" | "sentiment" | "position" | "sov">("visibility");
+  // Chart download menu
+  const [chartMenuOpen, setChartMenuOpen] = useState(false);
+  const chartCardRef = useRef<HTMLDivElement>(null);
+  const chartMenuRef = useRef<HTMLDivElement>(null);
   // Rankings tab — separate from chart + matrix tabs
   const [rankingsTab, setRankingsTab] = useState<"visibility" | "sentiment" | "position" | "sov">("visibility");
 
@@ -177,6 +181,8 @@ export default function InsightsClient({
         setColSelectorOpen(false);
       if (rankingsGroupByRef.current && !rankingsGroupByRef.current.contains(e.target as Node))
         setRankingsGroupByOpen(false);
+      if (chartMenuRef.current && !chartMenuRef.current.contains(e.target as Node))
+        setChartMenuOpen(false);
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -290,6 +296,96 @@ export default function InsightsClient({
       __domain__: domainData[i]?.[ownDomain] ?? 0,
     }));
   }, [chartTab, chartData, sentimentData, positionData, sovData, domainData, ownDomain]);
+
+  // ── Chart export helpers ─────────────────────────────────────────────
+
+  function fmtExportDate(d: Date): string {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  function fmtExportDateFull(d: Date): string {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+  const exportDateLabel = `${fmtExportDate(dateRange.start)} - ${fmtExportDateFull(dateRange.end)}`;
+  const exportDaysLabel = dateRange.preset === "all"
+    ? "All time"
+    : `${Math.round((dateRange.end.getTime() - dateRange.start.getTime()) / 86400000)} days`;
+  const exportResLabel = resolution === "D" ? "Daily" : resolution === "W" ? "Weekly" : "Monthly";
+  const exportTabLabel = chartTab.charAt(0).toUpperCase() + chartTab.slice(1);
+
+  function exportChartCsv() {
+    setChartMenuOpen(false);
+    const dates = mergedChartData.map((d) => String(d.date));
+    const valueSuffix = chartTab === "position" ? "" : "%";
+    const rows = chartBrands.map((brand) => [
+      brand,
+      ...mergedChartData.map((d) => {
+        const v = (d as Record<string, unknown>)[brand];
+        return v !== undefined && isFinite(Number(v))
+          ? `${Number(v).toFixed(2)}${valueSuffix}`
+          : "";
+      }),
+    ]);
+    const csv = [["brand", ...dates], ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const today = new Date().toISOString().split("T")[0];
+    const a = document.createElement("a");
+    a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+    a.download = `${chartTab}_export_from-${today}.csv`;
+    a.click();
+  }
+
+  async function saveChartAsImage() {
+    setChartMenuOpen(false);
+    const card = chartCardRef.current;
+    if (!card) return;
+    card.setAttribute("data-exporting", "true");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const a = document.createElement("a");
+      a.download = `${chartTab}.png`;
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    } finally {
+      card.removeAttribute("data-exporting");
+    }
+  }
+
+  async function copyChartToClipboard() {
+    setChartMenuOpen(false);
+    const card = chartCardRef.current;
+    if (!card) return;
+    card.setAttribute("data-exporting", "true");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        } catch {
+          // fallback: download if clipboard API not available
+          const a = document.createElement("a");
+          a.download = `${chartTab}.png`;
+          a.href = canvas.toDataURL("image/png");
+          a.click();
+        }
+      }, "image/png");
+    } finally {
+      card.removeAttribute("data-exporting");
+    }
+  }
 
   // ── Performance matrix ──────────────────────────────────────────────
   const matrixBrands = useMemo(() => {
@@ -500,7 +596,12 @@ export default function InsightsClient({
         <h2 className="ins-section-title">Your brand insights</h2>
         <p className="ins-section-subtitle">How your brand metrics change over time</p>
 
-        <div className="ins-chart-card">
+        <div className="ins-chart-card" ref={chartCardRef}>
+          {/* Export-only header: hidden in normal UI, shown during image capture */}
+          <div className="ins-chart-export-title">
+            <span className="ins-export-metric">{exportTabLabel} · {exportDateLabel}</span>
+            <span className="ins-export-period">{exportDaysLabel} · {exportResLabel}</span>
+          </div>
           <div className="ins-chart-header">
             {/* 4 functional tab buttons */}
             <div className="ins-chart-tabs">
@@ -531,6 +632,32 @@ export default function InsightsClient({
                     {r}
                   </button>
                 ))}
+              </div>
+              {/* ··· Chart download menu */}
+              <div className="ins-chart-menu-wrap" ref={chartMenuRef}>
+                <button
+                  className="ch-dots-btn ins-chart-dots"
+                  title="Export options"
+                  onClick={() => setChartMenuOpen((o) => !o)}
+                >
+                  <MoreHorizontal size={15} />
+                </button>
+                {chartMenuOpen && (
+                  <div className="ins-chart-menu">
+                    <button className="ins-chart-menu-item" onClick={exportChartCsv}>
+                      <Download size={13} />
+                      Export CSV
+                    </button>
+                    <button className="ins-chart-menu-item" onClick={saveChartAsImage}>
+                      <ImageIcon size={13} />
+                      Save as image
+                    </button>
+                    <button className="ins-chart-menu-item" onClick={copyChartToClipboard}>
+                      <Copy size={13} />
+                      Copy to clipboard
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

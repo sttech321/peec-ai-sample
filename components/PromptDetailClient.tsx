@@ -8,7 +8,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
-  Settings, MessageSquare, Play, Loader2,
+  Settings, MessageSquare, Play, Loader2, Copy, Download, ImageIcon, MoreHorizontal,
 } from "lucide-react";
 import BrandColorPicker from "./BrandColorPicker";
 import ChatModal from "./ChatModal";
@@ -151,6 +151,20 @@ export default function PromptDetailClient({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [exportMenuOpen]);
+
+  // Chart download menu
+  const [chartMenuOpen, setChartMenuOpen] = useState(false);
+  const chartCardRef = useRef<HTMLDivElement>(null);
+  const chartMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!chartMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (chartMenuRef.current && !chartMenuRef.current.contains(e.target as Node))
+        setChartMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [chartMenuOpen]);
 
   function openPickerAt(name: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -489,6 +503,64 @@ export default function PromptDetailClient({
       };
     });
   }, [chartBrandsForDisplay, currentPeriodMap, filteredChats]);
+
+  // ── Chart export ──────────────────────────────────────────────────────────
+  const chartExportDateLabel = `${dateRange.start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${dateRange.end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  const chartExportDaysLabel = dateRange.preset === "all"
+    ? "All time"
+    : `${Math.round((dateRange.end.getTime() - dateRange.start.getTime()) / 86400000)} days`;
+  const chartExportResLabel = resolution === "D" ? "Daily" : resolution === "W" ? "Weekly" : "Monthly";
+
+  function exportChartCsv() {
+    setChartMenuOpen(false);
+    const dates = chartData.map((d) => String(d.date));
+    const rows = chartBrandsForDisplay.map((b) => [
+      b.name,
+      ...chartData.map((d) => {
+        const v = (d as Record<string, unknown>)[b.name];
+        return v !== undefined && isFinite(Number(v)) ? `${Number(v).toFixed(2)}%` : "";
+      }),
+    ]);
+    const csv = [["brand", ...dates], ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const today = new Date().toISOString().split("T")[0];
+    const a = document.createElement("a");
+    a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+    a.download = `visibility_export_from-${today}.csv`;
+    a.click();
+  }
+
+  async function saveChartAsImage() {
+    setChartMenuOpen(false);
+    const card = chartCardRef.current;
+    if (!card) return;
+    card.setAttribute("data-exporting", "true");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, { backgroundColor: "#ffffff", scale: 2, useCORS: true, logging: false });
+      const a = document.createElement("a");
+      a.download = "visibility.png";
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    } finally { card.removeAttribute("data-exporting"); }
+  }
+
+  async function copyChartToClipboard() {
+    setChartMenuOpen(false);
+    const card = chartCardRef.current;
+    if (!card) return;
+    card.setAttribute("data-exporting", "true");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, { backgroundColor: "#ffffff", scale: 2, useCORS: true, logging: false });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); }
+        catch { const a = document.createElement("a"); a.download = "visibility.png"; a.href = canvas.toDataURL("image/png"); a.click(); }
+      }, "image/png");
+    } finally { card.removeAttribute("data-exporting"); }
+  }
 
   // ── Common Terms from rawResponse (bigrams, for Fanout Queries section) ──────
   const commonTerms = useMemo(() => {
@@ -878,7 +950,12 @@ export default function PromptDetailClient({
 
         <div className="pd-overview-grid">
           {/* ── Visibility Chart ───────────────────────────── */}
-          <div className="pd-chart-card">
+          <div className="pd-chart-card" ref={chartCardRef}>
+            {/* Export-only title (hidden in UI, shown during image capture) */}
+            <div className="ch-chart-export-title">
+              <span className="ch-export-metric">Visibility · {chartExportDateLabel}</span>
+              <span className="ch-export-period">{chartExportDaysLabel} · {chartExportResLabel}</span>
+            </div>
             <div className="pd-chart-header">
               <div className="pd-chart-label">
                 Visibility <InfoTooltip text="% of chats mentioning each brand over time." />
@@ -892,7 +969,26 @@ export default function PromptDetailClient({
                     ))}
                   </div>
                 )}
-                <button className="ch-dots-btn" title="Chart options">···</button>
+                {/* Chart download menu */}
+                <div className="ch-chart-menu-wrap" ref={chartMenuRef}>
+                  <button className="ch-dots-btn" title="Export options"
+                    onClick={() => setChartMenuOpen((o) => !o)}>
+                    <MoreHorizontal size={15} />
+                  </button>
+                  {chartMenuOpen && (
+                    <div className="ch-chart-menu">
+                      <button className="ch-chart-menu-item" onClick={exportChartCsv}>
+                        <Download size={13} /> Export CSV
+                      </button>
+                      <button className="ch-chart-menu-item" onClick={saveChartAsImage}>
+                        <ImageIcon size={13} /> Save as image
+                      </button>
+                      <button className="ch-chart-menu-item" onClick={copyChartToClipboard}>
+                        <Copy size={13} /> Copy to clipboard
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
