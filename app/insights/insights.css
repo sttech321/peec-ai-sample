@@ -780,6 +780,7 @@
   transition: background 0.1s;
 }
 .ins-axis-option:hover:not(:disabled) { background: #f9fafb; }
+.ins-axis-option:disabled { opacity: 0.35; cursor: not-allowed; }
 .ins-axis-option--active { color: #2563eb; font-weight: 500; }
 .ins-axis-icon { font-size: 13px; color: #9ca3af; width: 16px; text-align: center; flex-shrink: 0; }
 
