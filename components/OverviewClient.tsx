@@ -1307,14 +1307,18 @@ export default function OverviewClient({
                   const defaultType = classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet);
                   const typeLabel = typeOverrides.get(d.domain) ?? defaultType;
                   return (
-                    <tr key={i}>
+                    <tr
+                      key={i}
+                      className="pd-domain-row"
+                      onClick={() => router.push("/domains/" + encodeURIComponent(d.domain))}
+                    >
                       <td className="pd-domain-cell">
                         <DomainFavicon domain={d.domain} size={16} />
                         {d.domain}
                       </td>
                       <td>{pct}%</td>
                       <td>{rate}</td>
-                      <td style={{ position: "relative" }}>
+                      <td style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
                         <span
                           className={`pd-type-badge pd-type-${typeLabel.toLowerCase()}`}
                           style={{ cursor: "pointer", userSelect: "none" }}

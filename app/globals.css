@@ -388,40 +388,48 @@ body {
 
 /* ── Chart type toggle + "..." button ──────────────────────────────────── */
 .ch-view-toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 2px;
 }
+
 .ch-view-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid #e5e7eb;
+  width: 28px;
+  height: 28px;
+  border: none;
   border-radius: 6px;
-  background: #fff;
-  color: #9ca3af;
+  background: transparent;
+  color: #94a3b8;
   cursor: pointer;
-  transition: all 0.12s;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
 }
-.ch-view-btn:hover { border-color: #d1d5db; color: #374151; }
-.ch-view-btn--active { background: #111827; color: #fff; border-color: #111827; }
+.ch-view-btn:hover {
+  background: rgba(255, 255, 255, 0.65);
+  color: #475569;
+}
+.ch-view-btn--active {
+  background: #ffffff;
+  color: #334155;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
 .ch-dots-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   background: #fff;
-  color: #9ca3af;
+  color: #6b7280;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -1px;
-  line-height: 1;
   transition: all 0.12s;
 }
 .ch-dots-btn:hover { border-color: #d1d5db; color: #374151; background: #f9fafb; }
@@ -485,3 +493,12 @@ body {
 /* During image capture: hide normal header, show export title */
 .pd-chart-card[data-exporting] .pd-chart-header { display: none; }
 .pd-chart-card[data-exporting] .ch-chart-export-title { display: flex; }
+
+/* Clickable domain rows in Top Domains table (Overview + Prompt Detail) */
+.pd-domain-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.pd-domain-row:hover {
+  background: #f8fafc;
+}
