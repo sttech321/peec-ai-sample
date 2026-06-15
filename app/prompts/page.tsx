@@ -291,6 +291,67 @@ export default async function PromptsPage() {
       : guessBrandDomain(String(b.name)),
   }));
 
+  // ── 4c. Feature rates per prompt (% of chats with each feature flag) ────────
+  // Wrapped in try/catch — the `features` column requires a DB migration
+  // (npx drizzle-kit push). Until then, all feature rates gracefully return 0%.
+  let featureRatesRaw: Array<{
+    promptId: string;
+    totalChats: number;
+    webSearchCount: number;
+    shoppingCount: number;
+    adsCount: number;
+    mapCount: number;
+    productCompCount: number;
+  }> = [];
+  try {
+    featureRatesRaw = await db
+      .select({
+        promptId: chats.promptId,
+        totalChats: sql<number>`count(${chats.id})`,
+        webSearchCount:        sql<number>`count(case when "chats"."features" is not null and "chats"."features" @> ARRAY['WEB_SEARCH']::text[] then 1 end)`,
+        shoppingCount:         sql<number>`count(case when "chats"."features" is not null and "chats"."features" @> ARRAY['SHOPPING']::text[] then 1 end)`,
+        adsCount:              sql<number>`count(case when "chats"."features" is not null and "chats"."features" @> ARRAY['AD']::text[] then 1 end)`,
+        mapCount:              sql<number>`count(case when "chats"."features" is not null and "chats"."features" @> ARRAY['MAP']::text[] then 1 end)`,
+        productCompCount:      sql<number>`count(case when "chats"."features" is not null and "chats"."features" @> ARRAY['PRODUCT_COMPARISON']::text[] then 1 end)`,
+      })
+      .from(chats)
+      .innerJoin(prompts, eq(chats.promptId, prompts.id))
+      .where(eq(prompts.projectId, activeProjectId))
+      .groupBy(chats.promptId);
+  } catch {
+    // features column not yet migrated — all rates will be 0
+  }
+
+  const featureRatesMap = new Map<string, {
+    totalChats: number; webSearch: number; shopping: number;
+    ads: number; map: number; productComparison: number;
+  }>();
+  for (const r of featureRatesRaw) {
+    const total = Number(r.totalChats || 0);
+    featureRatesMap.set(r.promptId, {
+      totalChats: total,
+      webSearch:        total > 0 ? Math.round((Number(r.webSearchCount)   / total) * 100) : 0,
+      shopping:         total > 0 ? Math.round((Number(r.shoppingCount)    / total) * 100) : 0,
+      ads:              total > 0 ? Math.round((Number(r.adsCount)         / total) * 100) : 0,
+      map:              total > 0 ? Math.round((Number(r.mapCount)         / total) * 100) : 0,
+      productComparison:total > 0 ? Math.round((Number(r.productCompCount) / total) * 100) : 0,
+    });
+  }
+
+  // ── 4d. Branding + Intent: computed from query text ───────────────────────
+  const trackedBrandNames = projectBrandsRaw.map((b) => b.name.toLowerCase());
+  function computeBranding(query: string): "branded" | "non-branded" {
+    const lq = query.toLowerCase();
+    return trackedBrandNames.some((name) => lq.includes(name)) ? "branded" : "non-branded";
+  }
+  function computeIntent(query: string): "commercial" | "informational" | "transactional" | "navigational" {
+    const lq = query.toLowerCase();
+    if (/\bbuy\b|\bprice\b|\bcost\b|\bfor sale\b|\bpurchase\b|\bshop\b|\border\b|\bdeal\b/.test(lq)) return "transactional";
+    if (/\bnear me\b|\bdirections?\b|\baddress\b|\bphone\b|\bopen now\b/.test(lq)) return "navigational";
+    if (/\bhow to\b|\bhow do\b|\bwhat is\b|\bwhat are\b(?!.*\bbest\b)|\bwhy\b|\bexplain\b|\bguide\b|\btutorial\b/.test(lq)) return "informational";
+    return "commercial";
+  }
+
   // ── 5. All tags in the project (for filter dropdown) ───────────────────────
   const allTagsRaw = await db
     .select({ id: tags.id, name: tags.name, color: tags.color })
@@ -420,6 +481,15 @@ export default async function PromptsPage() {
       sovTrend,
       location: (p.location || "US").toUpperCase(),
       isActive: p.isActive ?? true,
+      // Branding + Intent (computed from query text)
+      branding: computeBranding(p.query),
+      intentType: computeIntent(p.query),
+      // Feature rates (% of chats where each AI feature was present)
+      webSearch:         featureRatesMap.get(p.id)?.webSearch         ?? 0,
+      shopping:          featureRatesMap.get(p.id)?.shopping          ?? 0,
+      ads:               featureRatesMap.get(p.id)?.ads               ?? 0,
+      map:               featureRatesMap.get(p.id)?.map               ?? 0,
+      productComparison: featureRatesMap.get(p.id)?.productComparison ?? 0,
     };
   });
 

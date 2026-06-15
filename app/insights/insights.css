@@ -282,6 +282,83 @@
   align-items: center;
 }
 
+/* ··· Download menu */
+.ins-chart-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.ins-chart-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: inherit;
+}
+.ins-chart-dots:hover { border-color: #94a3b8; color: #334155; }
+
+.ins-chart-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 400;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 28px -5px rgba(0,0,0,0.12);
+  min-width: 180px;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ins-chart-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.1s;
+}
+.ins-chart-menu-item:hover { background: #f8fafc; }
+
+/* Export-only title (hidden in normal view) */
+.ins-chart-export-title {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ins-export-metric {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ins-export-period {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* During image capture: swap headers */
+.ins-chart-card[data-exporting] .ins-chart-header { display: none; }
+.ins-chart-card[data-exporting] .ins-chart-export-title { display: flex; }
+
 .ins-legend {
   display: flex;
   flex-wrap: wrap;
@@ -703,6 +780,7 @@
   transition: background 0.1s;
 }
 .ins-axis-option:hover:not(:disabled) { background: #f9fafb; }
+.ins-axis-option:disabled { opacity: 0.35; cursor: not-allowed; }
 .ins-axis-option--active { color: #2563eb; font-weight: 500; }
 .ins-axis-icon { font-size: 13px; color: #9ca3af; width: 16px; text-align: center; flex-shrink: 0; }
 

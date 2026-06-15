@@ -599,10 +599,10 @@
 .pd-brands-table thead th {
   font-size: 11px;
   font-weight: 500;
-  color: #9ca3af;
+  color: #64748b;
   padding: 8px 10px;
   text-align: left;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f1f5f9;
   white-space: nowrap;
   position: relative;
   letter-spacing: 0;
@@ -621,27 +621,29 @@
   transition: background 0.12s, color 0.12s;
   white-space: nowrap;
   font-size: 11px;
-  color: #9ca3af;
+  color: #64748b;
 }
-.pd-brands-th-btn:hover { background: #f3f4f6; color: #374151; }
+.pd-brands-th-btn:hover { background: #f1f5f9; color: #334155; }
 
-/* Active state — blue pill matching Peec AI */
+/* Active state — neutral pill matching PEEC AI (no blue) */
 .pd-brands-th-active {
-  background: #eff6ff;
-  color: #2563eb !important;
+  background: #f1f5f9;
+  color: #334155 !important;
+  font-weight: 600;
 }
-.pd-brands-th-active:hover { background: #dbeafe; }
+.pd-brands-th-active:hover { background: #e2e8f0; }
 
-/* Sort direction arrows */
+/* Sort direction icon — opacity handled per-chevron inside SortIcon */
 .pd-th-arrow {
-  font-size: 10px;
-  opacity: 0.8;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
 }
-/* SOV trending arrow — slightly blue tint */
+/* SOV column arrow — neutral, no blue tint */
 .pd-th-arrow--trend {
-  color: #2563eb;
-  opacity: 1;
-  font-size: 11px;
+  color: inherit;
+  opacity: 0.7;
+  font-size: 10px;
 }
 
 /* ── Sort dropdown menu — Peec AI design ───────────────────── */
@@ -682,12 +684,12 @@
 .pd-sort-active { color: #4f46e5; font-weight: 500; }
 .pd-sort-active .pd-sort-opt-icon { color: #4f46e5; }
 .pd-sort-opt-icon {
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #9ca3af;
   width: 16px;
-  text-align: center;
   flex-shrink: 0;
-  font-style: normal;
 }
 /* "Value" keyword styling */
 .pd-sort-value-keyword {

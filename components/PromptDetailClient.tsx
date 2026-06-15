@@ -8,8 +8,13 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
-  Settings, MessageSquare, Play, Loader2,
+  Settings, MessageSquare, Play, Loader2, Copy, Download, ImageIcon, MoreHorizontal,
 } from "lucide-react";
+import {
+  HiMiniChevronUp, HiMiniChevronDown,
+  HiOutlineChevronDown, HiOutlineChevronUp,
+  HiOutlineArrowTrendingUp, HiOutlineArrowTrendingDown,
+} from "react-icons/hi2";
 import BrandColorPicker from "./BrandColorPicker";
 import ChatModal from "./ChatModal";
 import EngineIcon from "./EngineIcon";
@@ -95,6 +100,15 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 
+function SortIcon({ sortDir }: { sortDir: "asc" | "desc" | null }) {
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", lineHeight: 1, gap: "1px" }}>
+      <HiMiniChevronUp  size={8} style={{ opacity: sortDir === "asc"  ? 1 : sortDir === "desc" ? 0.22 : 0.38 }} />
+      <HiMiniChevronDown size={8} style={{ opacity: sortDir === "desc" ? 1 : sortDir === "asc"  ? 0.22 : 0.38 }} />
+    </span>
+  );
+}
+
 export default function PromptDetailClient({
   prompt, chatFacts, projectBrands, availableTags, selectedTagIds,
   initialHiddenBrandIds = [],
@@ -151,6 +165,20 @@ export default function PromptDetailClient({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [exportMenuOpen]);
+
+  // Chart download menu
+  const [chartMenuOpen, setChartMenuOpen] = useState(false);
+  const chartCardRef = useRef<HTMLDivElement>(null);
+  const chartMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!chartMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (chartMenuRef.current && !chartMenuRef.current.contains(e.target as Node))
+        setChartMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [chartMenuOpen]);
 
   function openPickerAt(name: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -489,6 +517,64 @@ export default function PromptDetailClient({
       };
     });
   }, [chartBrandsForDisplay, currentPeriodMap, filteredChats]);
+
+  // ── Chart export ──────────────────────────────────────────────────────────
+  const chartExportDateLabel = `${dateRange.start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${dateRange.end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  const chartExportDaysLabel = dateRange.preset === "all"
+    ? "All time"
+    : `${Math.round((dateRange.end.getTime() - dateRange.start.getTime()) / 86400000)} days`;
+  const chartExportResLabel = resolution === "D" ? "Daily" : resolution === "W" ? "Weekly" : "Monthly";
+
+  function exportChartCsv() {
+    setChartMenuOpen(false);
+    const dates = chartData.map((d) => String(d.date));
+    const rows = chartBrandsForDisplay.map((b) => [
+      b.name,
+      ...chartData.map((d) => {
+        const v = (d as Record<string, unknown>)[b.name];
+        return v !== undefined && isFinite(Number(v)) ? `${Number(v).toFixed(2)}%` : "";
+      }),
+    ]);
+    const csv = [["brand", ...dates], ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const today = new Date().toISOString().split("T")[0];
+    const a = document.createElement("a");
+    a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+    a.download = `visibility_export_from-${today}.csv`;
+    a.click();
+  }
+
+  async function saveChartAsImage() {
+    setChartMenuOpen(false);
+    const card = chartCardRef.current;
+    if (!card) return;
+    card.setAttribute("data-exporting", "true");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, { backgroundColor: "#ffffff", scale: 2, useCORS: true, logging: false });
+      const a = document.createElement("a");
+      a.download = "visibility.png";
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    } finally { card.removeAttribute("data-exporting"); }
+  }
+
+  async function copyChartToClipboard() {
+    setChartMenuOpen(false);
+    const card = chartCardRef.current;
+    if (!card) return;
+    card.setAttribute("data-exporting", "true");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, { backgroundColor: "#ffffff", scale: 2, useCORS: true, logging: false });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); }
+        catch { const a = document.createElement("a"); a.download = "visibility.png"; a.href = canvas.toDataURL("image/png"); a.click(); }
+      }, "image/png");
+    } finally { card.removeAttribute("data-exporting"); }
+  }
 
   // ── Common Terms from rawResponse (bigrams, for Fanout Queries section) ──────
   const commonTerms = useMemo(() => {
@@ -878,7 +964,12 @@ export default function PromptDetailClient({
 
         <div className="pd-overview-grid">
           {/* ── Visibility Chart ───────────────────────────── */}
-          <div className="pd-chart-card">
+          <div className="pd-chart-card" ref={chartCardRef}>
+            {/* Export-only title (hidden in UI, shown during image capture) */}
+            <div className="ch-chart-export-title">
+              <span className="ch-export-metric">Visibility · {chartExportDateLabel}</span>
+              <span className="ch-export-period">{chartExportDaysLabel} · {chartExportResLabel}</span>
+            </div>
             <div className="pd-chart-header">
               <div className="pd-chart-label">
                 Visibility <InfoTooltip text="% of chats mentioning each brand over time." />
@@ -892,7 +983,26 @@ export default function PromptDetailClient({
                     ))}
                   </div>
                 )}
-                <button className="ch-dots-btn" title="Chart options">···</button>
+                {/* Chart download menu */}
+                <div className="ch-chart-menu-wrap" ref={chartMenuRef}>
+                  <button className="ch-dots-btn" title="Export options"
+                    onClick={() => setChartMenuOpen((o) => !o)}>
+                    <MoreHorizontal size={15} />
+                  </button>
+                  {chartMenuOpen && (
+                    <div className="ch-chart-menu">
+                      <button className="ch-chart-menu-item" onClick={exportChartCsv}>
+                        <Download size={13} /> Export CSV
+                      </button>
+                      <button className="ch-chart-menu-item" onClick={saveChartAsImage}>
+                        <ImageIcon size={13} /> Save as image
+                      </button>
+                      <button className="ch-chart-menu-item" onClick={copyChartToClipboard}>
+                        <Copy size={13} /> Copy to clipboard
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1068,13 +1178,15 @@ export default function PromptDetailClient({
                     };
                     const isActive = brandSortCol === col;
                     const menuOpen = openBrandMenu === col;
-                    const icon = col === "sov" ? "↗" : isActive ? (brandSortMode === "high-low" || brandSortMode === "negative-trend" ? "↓" : "↑") : "↕";
+                    const sortDir: "asc" | "desc" | null = isActive
+                      ? (brandSortMode === "high-low" || brandSortMode === "negative-trend" ? "desc" : "asc")
+                      : null;
                     const menuRight = colIdx >= 2;
                     return (
                       <th key={col} style={{ position: "relative" }}>
                         <span className={`pd-brands-th-btn ${isActive || menuOpen ? "pd-brands-th-active" : ""}`}
                           onClick={e => { e.stopPropagation(); setOpenBrandMenu(menuOpen ? null : col); }}>
-                          {lbls[col]} <span className={`pd-th-arrow ${col === "sov" ? "pd-th-arrow--trend" : ""}`}>{icon}</span>
+                          {lbls[col]} <span className="pd-th-arrow"><SortIcon sortDir={sortDir} /></span>
                           <InfoTooltip text={tips[col]} />
                         </span>
                         {menuOpen && (
@@ -1082,9 +1194,9 @@ export default function PromptDetailClient({
                             <div className="pd-sort-label">Sort by</div>
                             {/* Value-based sorts */}
                             {([
-                              { mode: "high-low", icon: "↓", keyword: "Value", direction: "High - low" },
-                              { mode: "low-high", icon: "↑", keyword: "Value", direction: "Low - high" },
-                            ] as { mode: BrandSortMode; icon: string; keyword: string; direction: string }[]).map(opt => {
+                              { mode: "high-low" as BrandSortMode, icon: <HiOutlineChevronDown size={13} />, keyword: "Value", direction: "High - low" },
+                              { mode: "low-high" as BrandSortMode, icon: <HiOutlineChevronUp size={13} />, keyword: "Value", direction: "Low - high" },
+                            ]).map(opt => {
                               const checked = brandSortCol === col && brandSortMode === opt.mode;
                               return (
                                 <div key={opt.mode} className={`pd-sort-option ${checked ? "pd-sort-active" : ""}`}
@@ -1099,9 +1211,9 @@ export default function PromptDetailClient({
                             <div className="pd-sort-divider" />
                             {/* Trend-based sorts */}
                             {([
-                              { mode: "positive-trend", icon: "↗", label: "Positive trend" },
-                              { mode: "negative-trend", icon: "↘", label: "Negative trend" },
-                            ] as { mode: BrandSortMode; icon: string; label: string }[]).map(opt => {
+                              { mode: "positive-trend" as BrandSortMode, icon: <HiOutlineArrowTrendingUp size={13} />, label: "Positive trend" },
+                              { mode: "negative-trend" as BrandSortMode, icon: <HiOutlineArrowTrendingDown size={13} />, label: "Negative trend" },
+                            ]).map(opt => {
                               const checked = brandSortCol === col && brandSortMode === opt.mode;
                               return (
                                 <div key={opt.mode} className={`pd-sort-option ${checked ? "pd-sort-active" : ""}`}
@@ -1274,14 +1386,18 @@ export default function PromptDetailClient({
                   const defaultType = classifyDomain(d.category, d.domain, ownDomainSet, competitorDomainSet);
                   const typeLabel = typeOverrides.get(d.domain) ?? defaultType;
                   return (
-                    <tr key={i}>
+                    <tr
+                      key={i}
+                      className="pd-domain-row"
+                      onClick={() => router.push("/domains/" + encodeURIComponent(d.domain))}
+                    >
                       <td className="pd-domain-cell">
                         <DomainFavicon domain={d.domain} size={16} />
                         {d.domain}
                       </td>
                       <td>{pct}%</td>
                       <td>{rate}</td>
-                      <td style={{ position: "relative" }}>
+                      <td style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
                         <span
                           className={`pd-type-badge pd-type-${typeLabel.toLowerCase()}`}
                           style={{ cursor: "pointer", userSelect: "none" }}

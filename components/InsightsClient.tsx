@@ -6,7 +6,7 @@ import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
-import { Check, ChevronDown, Grid2X2, RotateCcw, Search } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, Grid2X2, ImageIcon, MoreHorizontal, RotateCcw, Search } from "lucide-react";
 import EngineIcon from "./EngineIcon";
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
 import BrandsDropdown from "./BrandsDropdown";
@@ -15,7 +15,6 @@ import {
   filterByEngines, filterByDateRange,
   buildVisibilitySeries, buildSentimentSeries, buildPositionSeries,
   buildSovSeries, buildDomainRetrievalSeries,
-  buildPerformanceMatrix, buildPerformanceMatrixByGroup,
   buildTopRankings, buildTopRankingsBy, buildTopRankingsByGroup,
   computeBrandKpis, previousPeriod,
 } from "../lib/chat-aggregations";
@@ -113,6 +112,58 @@ function normalizeDomain(d: string | null | undefined): string | null {
   return cleaned || null;
 }
 
+// ── Performance Matrix: axis types + helpers ─────────────────────────────
+type MatrixAxis = "models" | "brands" | "topics" | "tags";
+const AXIS_LABELS: Record<MatrixAxis, string> = {
+  models: "AI models", brands: "Brands", topics: "Topics", tags: "Tags",
+};
+type UCell = {
+  col: string; row: string;
+  visibility: number; sentiment: number; position: number; sov: number;
+  hasData: boolean;
+};
+
+function filterChatsByAxisItem(
+  chats: ChatFact[],
+  item: string,
+  axis: MatrixAxis,
+  topicMap: Record<string, string>,
+  tagsMap: Record<string, string[]>,
+): ChatFact[] {
+  if (axis === "brands") return chats;
+  if (axis === "models") return chats.filter(c => c.engine === item);
+  if (axis === "topics") return chats.filter(c => topicMap[c.id] === item);
+  return chats.filter(c => {
+    const tags = tagsMap[c.id];
+    return Array.isArray(tags) ? tags.includes(item) : false;
+  });
+}
+
+function computeMetricsForBrand(
+  chats: ChatFact[],
+  brandName: string,
+): { visibility: number; sentiment: number; position: number; sov: number; hasData: boolean } {
+  const total = chats.length;
+  if (total === 0) return { visibility: 0, sentiment: 0, position: 0, sov: 0, hasData: false };
+  let hits = 0, sentSum = 0, sentN = 0, posSum = 0, posN = 0, totalSlots = 0;
+  for (const c of chats) {
+    totalSlots += new Set(c.brands.map(b => b.name)).size;
+    const entry = c.brands.find(b => b.name === brandName);
+    if (entry) {
+      hits++;
+      if (entry.sentiment != null && entry.sentiment > 0) { sentSum += entry.sentiment; sentN++; }
+      if (entry.position != null && entry.position > 0)   { posSum += entry.position;  posN++; }
+    }
+  }
+  return {
+    visibility: (hits / total) * 100,
+    sentiment: sentN > 0 ? sentSum / sentN : 0,
+    position:  posN > 0 ? posSum / posN   : 0,
+    sov:       totalSlots > 0 ? (hits / totalSlots) * 100 : 0,
+    hasData:   hits > 0,
+  };
+}
+
 export default function InsightsClient({
   chatFacts, projectName, projectBrands, ownBrandName, ownDomain,
   chatTopicMap = {}, chatTagsMap = {},
@@ -125,6 +176,10 @@ export default function InsightsClient({
   const [matrixTab, setMatrixTab] = useState<"visibility" | "sentiment" | "position" | "sov">("visibility");
   // Chart tab — separate from matrix tab
   const [chartTab, setChartTab] = useState<"visibility" | "sentiment" | "position" | "sov">("visibility");
+  // Chart download menu
+  const [chartMenuOpen, setChartMenuOpen] = useState(false);
+  const chartCardRef = useRef<HTMLDivElement>(null);
+  const chartMenuRef = useRef<HTMLDivElement>(null);
   // Rankings tab — separate from chart + matrix tabs
   const [rankingsTab, setRankingsTab] = useState<"visibility" | "sentiment" | "position" | "sov">("visibility");
 
@@ -150,10 +205,21 @@ export default function InsightsClient({
   function hideRankTooltip() { setRankHover(null); }
 
   // ── Feature 1: X/Y Axis switcher ──────────────────────────────────────
-  type MatrixAxis = "models" | "brands" | "topics" | "tags";
   const [matrixXAxis, setMatrixXAxis] = useState<MatrixAxis>("models");
+  const [matrixYAxis, setMatrixYAxis] = useState<MatrixAxis>("brands");
   const [axisSwitcherOpen, setAxisSwitcherOpen] = useState(false);
   const axisSwitcherRef = useRef<HTMLDivElement>(null);
+
+  function handleXAxisChange(axis: MatrixAxis) {
+    if (axis === matrixYAxis) return;
+    setMatrixXAxis(axis);
+    setAxisSwitcherOpen(false);
+  }
+  function handleYAxisChange(axis: MatrixAxis) {
+    if (axis === matrixXAxis) return;
+    setMatrixYAxis(axis);
+    setAxisSwitcherOpen(false);
+  }
 
   // ── Feature 2: Column/Row Selector panel ──────────────────────────────
   const [colSelectorOpen, setColSelectorOpen] = useState(false);
@@ -177,6 +243,8 @@ export default function InsightsClient({
         setColSelectorOpen(false);
       if (rankingsGroupByRef.current && !rankingsGroupByRef.current.contains(e.target as Node))
         setRankingsGroupByOpen(false);
+      if (chartMenuRef.current && !chartMenuRef.current.contains(e.target as Node))
+        setChartMenuOpen(false);
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -291,6 +359,96 @@ export default function InsightsClient({
     }));
   }, [chartTab, chartData, sentimentData, positionData, sovData, domainData, ownDomain]);
 
+  // ── Chart export helpers ─────────────────────────────────────────────
+
+  function fmtExportDate(d: Date): string {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  function fmtExportDateFull(d: Date): string {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+  const exportDateLabel = `${fmtExportDate(dateRange.start)} - ${fmtExportDateFull(dateRange.end)}`;
+  const exportDaysLabel = dateRange.preset === "all"
+    ? "All time"
+    : `${Math.round((dateRange.end.getTime() - dateRange.start.getTime()) / 86400000)} days`;
+  const exportResLabel = resolution === "D" ? "Daily" : resolution === "W" ? "Weekly" : "Monthly";
+  const exportTabLabel = chartTab.charAt(0).toUpperCase() + chartTab.slice(1);
+
+  function exportChartCsv() {
+    setChartMenuOpen(false);
+    const dates = mergedChartData.map((d) => String(d.date));
+    const valueSuffix = chartTab === "position" ? "" : "%";
+    const rows = chartBrands.map((brand) => [
+      brand,
+      ...mergedChartData.map((d) => {
+        const v = (d as Record<string, unknown>)[brand];
+        return v !== undefined && isFinite(Number(v))
+          ? `${Number(v).toFixed(2)}${valueSuffix}`
+          : "";
+      }),
+    ]);
+    const csv = [["brand", ...dates], ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const today = new Date().toISOString().split("T")[0];
+    const a = document.createElement("a");
+    a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+    a.download = `${chartTab}_export_from-${today}.csv`;
+    a.click();
+  }
+
+  async function saveChartAsImage() {
+    setChartMenuOpen(false);
+    const card = chartCardRef.current;
+    if (!card) return;
+    card.setAttribute("data-exporting", "true");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const a = document.createElement("a");
+      a.download = `${chartTab}.png`;
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    } finally {
+      card.removeAttribute("data-exporting");
+    }
+  }
+
+  async function copyChartToClipboard() {
+    setChartMenuOpen(false);
+    const card = chartCardRef.current;
+    if (!card) return;
+    card.setAttribute("data-exporting", "true");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        } catch {
+          // fallback: download if clipboard API not available
+          const a = document.createElement("a");
+          a.download = `${chartTab}.png`;
+          a.href = canvas.toDataURL("image/png");
+          a.click();
+        }
+      }, "image/png");
+    } finally {
+      card.removeAttribute("data-exporting");
+    }
+  }
+
   // ── Performance matrix ──────────────────────────────────────────────
   const matrixBrands = useMemo(() => {
     // Top 10 brands by overall visibility. Prepend yourBrand only if it
@@ -325,50 +483,65 @@ export default function InsightsClient({
     [selectedModels, visibleMatrixEngines],
   );
 
-  // Derive which group keys are active for the X-axis
-  const activeXGroups = useMemo(() => {
+  // Column items (X-axis) and row items (Y-axis) for the matrix
+  const matrixColItems = useMemo(() => {
     if (matrixXAxis === "models") return activeMatrixEngines;
     if (matrixXAxis === "brands") return activeMatrixBrands;
-    // For topics/tags, derive unique group keys from chatTopicMap/chatTagsMap
-    const map = matrixXAxis === "topics" ? chatTopicMap : chatTagsMap;
     const keys = new Set<string>();
-    for (const val of Object.values(map)) {
-      if (Array.isArray(val)) val.forEach(v => keys.add(v));
-      else keys.add(val as string);
+    for (const c of filteredChats) {
+      if (matrixXAxis === "topics") { const t = chatTopicMap[c.id]; if (t) keys.add(t); }
+      else { const tags = chatTagsMap[c.id]; if (tags) tags.forEach(tag => keys.add(tag)); }
     }
     return [...keys].sort();
-  }, [matrixXAxis, activeMatrixEngines, activeMatrixBrands, chatTopicMap, chatTagsMap]);
+  }, [matrixXAxis, activeMatrixEngines, activeMatrixBrands, filteredChats, chatTopicMap, chatTagsMap]);
 
-  const matrixCells = useMemo(() => {
-    if (matrixXAxis === "topics") return buildPerformanceMatrixByGroup(filteredChats, activeMatrixBrands, chatTopicMap);
-    if (matrixXAxis === "tags")   return buildPerformanceMatrixByGroup(filteredChats, activeMatrixBrands, chatTagsMap);
-    // models or brands (swapped axes handled in render)
-    return buildPerformanceMatrix(filteredChats, activeMatrixBrands, activeMatrixEngines);
-  }, [filteredChats, activeMatrixBrands, activeMatrixEngines, matrixXAxis, chatTopicMap, chatTagsMap]);
+  const matrixRowItems = useMemo(() => {
+    if (matrixYAxis === "models") return activeMatrixEngines;
+    if (matrixYAxis === "brands") return activeMatrixBrands;
+    const keys = new Set<string>();
+    for (const c of filteredChats) {
+      if (matrixYAxis === "topics") { const t = chatTopicMap[c.id]; if (t) keys.add(t); }
+      else { const tags = chatTagsMap[c.id]; if (tags) tags.forEach(tag => keys.add(tag)); }
+    }
+    return [...keys].sort();
+  }, [matrixYAxis, activeMatrixEngines, activeMatrixBrands, filteredChats, chatTopicMap, chatTagsMap]);
+
+  // Unified cells for all X×Y axis combinations
+  const unifiedCells = useMemo(() => {
+    const cells: UCell[] = [];
+    for (const col of matrixColItems) {
+      const colChats = filterChatsByAxisItem(filteredChats, col, matrixXAxis, chatTopicMap, chatTagsMap);
+      for (const row of matrixRowItems) {
+        const cellChats = filterChatsByAxisItem(colChats, row, matrixYAxis, chatTopicMap, chatTagsMap);
+        const brandSubject = matrixYAxis === "brands" ? row : matrixXAxis === "brands" ? col : yourBrand;
+        cells.push({ col, row, ...computeMetricsForBrand(cellChats, brandSubject) });
+      }
+    }
+    return cells;
+  }, [filteredChats, matrixXAxis, matrixYAxis, matrixColItems, matrixRowItems, chatTopicMap, chatTagsMap, yourBrand]);
 
   // ── Matrix sort state ─────────────────────────────────────────────────
   const [matrixSortEngine, setMatrixSortEngine] = useState<string | null>(null); // null = sort by row label
   const [matrixSortDir, setMatrixSortDir]       = useState<"asc" | "desc">("desc");
 
-  // Auto-sort brands by active metric (desc by default, asc for position)
-  const sortedMatrixBrands = useMemo(() => {
-    const brands = [...activeMatrixBrands];
-    const engine = matrixSortEngine;
+  // Sort matrix rows by active metric
+  const sortedMatrixRows = useMemo(() => {
+    const rows = [...matrixRowItems];
+    const col = matrixSortEngine;
     const dir = matrixSortDir;
 
-    brands.sort((a, b) => {
+    rows.sort((a, b) => {
       let va = 0, vb = 0;
-      if (engine) {
-        const ca = matrixCells.find(c => c.brand === a && c.engine === engine);
-        const cb = matrixCells.find(c => c.brand === b && c.engine === engine);
-        if (matrixTab === "visibility")  { va = ca?.visibility ?? 0;  vb = cb?.visibility ?? 0; }
-        if (matrixTab === "sentiment")   { va = ca?.sentiment  ?? 0;  vb = cb?.sentiment  ?? 0; }
-        if (matrixTab === "position")    { va = ca?.position   ?? 999; vb = cb?.position  ?? 999; }
-        if (matrixTab === "sov")         { va = ca?.sov        ?? 0;  vb = cb?.sov        ?? 0; }
+      if (col) {
+        const ca = unifiedCells.find(c => c.row === a && c.col === col);
+        const cb = unifiedCells.find(c => c.row === b && c.col === col);
+        if (matrixTab === "visibility")  { va = ca?.visibility ?? 0;   vb = cb?.visibility ?? 0; }
+        if (matrixTab === "sentiment")   { va = ca?.sentiment  ?? 0;   vb = cb?.sentiment  ?? 0; }
+        if (matrixTab === "position")    { va = ca?.position   ?? 999; vb = cb?.position   ?? 999; }
+        if (matrixTab === "sov")         { va = ca?.sov        ?? 0;   vb = cb?.sov        ?? 0; }
       } else {
-        // Default: sort by average across all engines
-        const avgMetric = (brand: string) => {
-          const cells = matrixCells.filter(c => c.brand === brand);
+        const avgMetric = (row: string) => {
+          const cells = unifiedCells.filter(c => c.row === row);
           if (cells.length === 0) return matrixTab === "position" ? 999 : 0;
           const sum = cells.reduce((s, c) =>
             s + (matrixTab === "visibility" ? c.visibility : matrixTab === "sentiment" ? c.sentiment : matrixTab === "position" ? c.position : c.sov)
@@ -377,19 +550,18 @@ export default function InsightsClient({
         };
         va = avgMetric(a); vb = avgMetric(b);
       }
-      // Position: lower is better (asc default), others: higher is better (desc)
       const isPosition = matrixTab === "position";
       const effectiveDir = isPosition ? (dir === "desc" ? "asc" : "desc") : dir;
       return effectiveDir === "desc" ? vb - va : va - vb;
     });
-    return brands;
-  }, [activeMatrixBrands, matrixCells, matrixTab, matrixSortEngine, matrixSortDir]);
+    return rows;
+  }, [matrixRowItems, unifiedCells, matrixTab, matrixSortEngine, matrixSortDir]);
 
-  // Reset sort when tab changes
+  // Reset sort when tab or axes change
   useEffect(() => {
     setMatrixSortEngine(null);
     setMatrixSortDir("desc");
-  }, [matrixTab]);
+  }, [matrixTab, matrixXAxis, matrixYAxis]);
 
   function toggleMatrixSort(engine: string | null) {
     if (matrixSortEngine === engine) {
@@ -419,11 +591,10 @@ export default function InsightsClient({
     : { text: "0", tone: "flat" as const };
   const sovDelta = formatDelta(kpi.sov - prevKpi.sov);
 
-  const cellFor = (brand: string, engine: string) =>
-    matrixCells.find((c) => c.brand === brand && c.engine === engine);
+  const getCell = (col: string, row: string) =>
+    unifiedCells.find((c) => c.col === col && c.row === row);
 
-  // Heatmap class — different color scale per tab
-  function getHeatClass(cell: ReturnType<typeof cellFor>): string {
+  function getHeatClass(cell: UCell | undefined): string {
     if (!cell) return "h0";
     if (matrixTab === "visibility") return heatBucket(cell.visibility);
     if (matrixTab === "sentiment")  return sentimentHeatBucket(cell.sentiment);
@@ -431,8 +602,8 @@ export default function InsightsClient({
     if (matrixTab === "sov")        return heatBucket(cell.sov);
     return "h0";
   }
-  function getDisplayVal(cell: ReturnType<typeof cellFor>): string {
-    if (!cell) return "—";
+  function getDisplayVal(cell: UCell | undefined): string {
+    if (!cell || !cell.hasData) return "—";
     if (matrixTab === "visibility" && cell.visibility >= 0.5) return `${cell.visibility.toFixed(1)}%`;
     if (matrixTab === "sentiment"  && cell.sentiment  >  0)  return Math.round(cell.sentiment).toString();
     if (matrixTab === "position"   && cell.position   >  0)  return cell.position.toFixed(1);
@@ -500,7 +671,12 @@ export default function InsightsClient({
         <h2 className="ins-section-title">Your brand insights</h2>
         <p className="ins-section-subtitle">How your brand metrics change over time</p>
 
-        <div className="ins-chart-card">
+        <div className="ins-chart-card" ref={chartCardRef}>
+          {/* Export-only header: hidden in normal UI, shown during image capture */}
+          <div className="ins-chart-export-title">
+            <span className="ins-export-metric">{exportTabLabel} · {exportDateLabel}</span>
+            <span className="ins-export-period">{exportDaysLabel} · {exportResLabel}</span>
+          </div>
           <div className="ins-chart-header">
             {/* 4 functional tab buttons */}
             <div className="ins-chart-tabs">
@@ -531,6 +707,32 @@ export default function InsightsClient({
                     {r}
                   </button>
                 ))}
+              </div>
+              {/* ··· Chart download menu */}
+              <div className="ins-chart-menu-wrap" ref={chartMenuRef}>
+                <button
+                  className="ch-dots-btn ins-chart-dots"
+                  title="Export options"
+                  onClick={() => setChartMenuOpen((o) => !o)}
+                >
+                  <MoreHorizontal size={15} />
+                </button>
+                {chartMenuOpen && (
+                  <div className="ins-chart-menu">
+                    <button className="ins-chart-menu-item" onClick={exportChartCsv}>
+                      <Download size={13} />
+                      Export CSV
+                    </button>
+                    <button className="ins-chart-menu-item" onClick={saveChartAsImage}>
+                      <ImageIcon size={13} />
+                      Save as image
+                    </button>
+                    <button className="ins-chart-menu-item" onClick={copyChartToClipboard}>
+                      <Copy size={13} />
+                      Copy to clipboard
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -661,9 +863,7 @@ export default function InsightsClient({
                 className="pd-filter-chip"
                 onClick={() => setAxisSwitcherOpen(v => !v)}
               >
-                {matrixXAxis === "models" ? "AI models vs Brands" :
-                 matrixXAxis === "brands" ? "Brands vs AI models" :
-                 matrixXAxis === "topics" ? "Topics vs Brands" : "Tags vs Brands"}
+                {`${AXIS_LABELS[matrixXAxis]} vs ${AXIS_LABELS[matrixYAxis]}`}
                 <ChevronDown size={11} />
               </button>
               {axisSwitcherOpen && (
@@ -678,7 +878,8 @@ export default function InsightsClient({
                     <button
                       key={opt.key}
                       className={`ins-axis-option ${matrixXAxis === opt.key ? "ins-axis-option--active" : ""}`}
-                      onClick={() => { setMatrixXAxis(opt.key); setAxisSwitcherOpen(false); }}
+                      disabled={matrixYAxis === opt.key}
+                      onClick={() => handleXAxisChange(opt.key)}
                     >
                       <span className="ins-axis-icon">{opt.icon}</span>
                       {opt.label}
@@ -692,23 +893,18 @@ export default function InsightsClient({
                     { key: "brands" as MatrixAxis, label: "Brands",    icon: "⊞" },
                     { key: "topics" as MatrixAxis, label: "Topics",    icon: "◎" },
                     { key: "tags"   as MatrixAxis, label: "Tags",      icon: "◈" },
-                  ]).map(opt => {
-                    // Y-axis auto-set: always Brands when X is not Brands, else AI models
-                    const yAxis: MatrixAxis = matrixXAxis === "brands" ? "models" : "brands";
-                    const isActive = yAxis === opt.key;
-                    return (
-                      <button
-                        key={opt.key}
-                        className={`ins-axis-option ${isActive ? "ins-axis-option--active" : ""}`}
-                        disabled
-                        style={{ opacity: isActive ? 1 : 0.4 }}
-                      >
-                        <span className="ins-axis-icon">{opt.icon}</span>
-                        {opt.label}
-                        {isActive && <Check size={12} style={{ marginLeft: "auto" }} />}
-                      </button>
-                    );
-                  })}
+                  ]).map(opt => (
+                    <button
+                      key={opt.key}
+                      className={`ins-axis-option ${matrixYAxis === opt.key ? "ins-axis-option--active" : ""}`}
+                      disabled={matrixXAxis === opt.key}
+                      onClick={() => handleYAxisChange(opt.key)}
+                    >
+                      <span className="ins-axis-icon">{opt.icon}</span>
+                      {opt.label}
+                      {matrixYAxis === opt.key && <Check size={12} style={{ marginLeft: "auto" }} />}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -816,99 +1012,50 @@ export default function InsightsClient({
             <table className="ins-matrix">
               <thead>
                 <tr>
-                  {matrixXAxis === "models" ? (
-                    <>
-                      <th className="ins-matrix-rowhead">
-                        <button className="ins-matrix-sort-btn" onClick={() => toggleMatrixSort(null)}>
-                          Brands {matrixSortEngine === null ? (matrixSortDir === "desc" ? "↓" : "↑") : "↕"}
-                        </button>
-                      </th>
-                      {activeXGroups.map(m => (
-                        <th key={m}>
-                          <button className="ins-matrix-sort-btn" onClick={() => toggleMatrixSort(m)}>
-                            {m} {matrixSortEngine === m ? (matrixSortDir === "desc" ? "↓" : "↑") : "↕"}
-                          </button>
-                        </th>
-                      ))}
-                    </>
-                  ) : matrixXAxis === "brands" ? (
-                    <>
-                      <th className="ins-matrix-rowhead">AI models</th>
-                      {activeMatrixBrands.map(b => (
-                        <th key={b}>
-                          <span className="ins-matrix-col-label">
-                            {b}{b === yourBrand && <span className="ins-you-tag ins-you-tag--inline">You</span>}
-                          </span>
-                        </th>
-                      ))}
-                    </>
-                  ) : (
-                    /* Topics or Tags — group key as columns */
-                    <>
-                      <th className="ins-matrix-rowhead">
-                        <button className="ins-matrix-sort-btn" onClick={() => toggleMatrixSort(null)}>
-                          Brands {matrixSortEngine === null ? (matrixSortDir === "desc" ? "↓" : "↑") : "↕"}
-                        </button>
-                      </th>
-                      {activeXGroups.map(g => (
-                        <th key={g}>
-                          <button className="ins-matrix-sort-btn" onClick={() => toggleMatrixSort(g)}>
-                            {g} {matrixSortEngine === g ? (matrixSortDir === "desc" ? "↓" : "↑") : "↕"}
-                          </button>
-                        </th>
-                      ))}
-                    </>
-                  )}
+                  <th className="ins-matrix-rowhead">
+                    <button className="ins-matrix-sort-btn" onClick={() => toggleMatrixSort(null)}>
+                      {AXIS_LABELS[matrixYAxis]}{" "}{matrixSortEngine === null ? (matrixSortDir === "desc" ? "↓" : "↑") : "↕"}
+                    </button>
+                  </th>
+                  {matrixColItems.map(col => (
+                    <th key={col}>
+                      <button className="ins-matrix-sort-btn" onClick={() => toggleMatrixSort(col)}>
+                        {matrixXAxis === "models" && <><EngineIcon engine={col} size={12} />{" "}</>}
+                        {col}
+                        {matrixXAxis === "brands" && col === yourBrand && <span className="ins-you-tag ins-you-tag--inline">You</span>}
+                        {" "}{matrixSortEngine === col ? (matrixSortDir === "desc" ? "↓" : "↑") : "↕"}
+                      </button>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {matrixXAxis === "models" || matrixXAxis === "topics" || matrixXAxis === "tags" ? (
-                  /* Brands as rows, groups as columns */
-                  sortedMatrixBrands.length === 0 ? (
-                    <tr><td className="ins-empty" colSpan={activeXGroups.length + 1}>No data for this filter combination.</td></tr>
-                  ) : sortedMatrixBrands.map(brand => {
-                    const isYou = brand === yourBrand;
-                    return (
-                      <tr key={brand}>
-                        <td className="ins-matrix-rowhead ins-matrix-rowhead--brand">
-                          {brand}
-                          {isYou && <span className="ins-you-pill">You</span>}
+                {sortedMatrixRows.length === 0 ? (
+                  <tr><td className="ins-empty" colSpan={matrixColItems.length + 1}>No data for this filter combination.</td></tr>
+                ) : sortedMatrixRows.map(row => (
+                  <tr key={row}>
+                    <td className="ins-matrix-rowhead ins-matrix-rowhead--brand">
+                      {matrixYAxis === "models" ? (
+                        <span className="ins-engine-cell"><EngineIcon engine={row} size={14} /> {row}</span>
+                      ) : (
+                        <>
+                          {row}
+                          {matrixYAxis === "brands" && row === yourBrand && <span className="ins-you-pill">You</span>}
+                        </>
+                      )}
+                    </td>
+                    {matrixColItems.map(col => {
+                      const cell = getCell(col, row);
+                      return (
+                        <td key={col}>
+                          <div className={`ins-heat ins-heat-${getHeatClass(cell)}`}>
+                            {getDisplayVal(cell)}
+                          </div>
                         </td>
-                        {activeXGroups.map(group => {
-                          const cell = cellFor(brand, group);
-                          return (
-                            <td key={group}>
-                              <div className={`ins-heat ins-heat-${getHeatClass(cell)}`}>
-                                {getDisplayVal(cell)}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })
-                ) : (
-                  /* Brands axis: engines as rows, brands as columns */
-                  activeMatrixEngines.length === 0 ? (
-                    <tr><td className="ins-empty" colSpan={activeMatrixBrands.length + 1}>No data for this filter combination.</td></tr>
-                  ) : activeMatrixEngines.map(engine => (
-                    <tr key={engine}>
-                      <td className="ins-matrix-rowhead">
-                        <span className="ins-engine-cell"><EngineIcon engine={engine} size={14} /> {engine}</span>
-                      </td>
-                      {activeMatrixBrands.map(brand => {
-                        const cell = cellFor(brand, engine);
-                        return (
-                          <td key={brand}>
-                            <div className={`ins-heat ins-heat-${getHeatClass(cell)}`}>
-                              {getDisplayVal(cell)}
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))
-                )}
+                      );
+                    })}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

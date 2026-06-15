@@ -31,16 +31,25 @@ type IndicatorMode = "default" | "indicators_only" | "none";
 
 // ── Column definitions ───────────────────────────────────────────────────────
 const COL_DEFS = [
-  { key: "visibility", label: "Visibility" },
-  { key: "sentiment",  label: "Sentiment" },
-  { key: "position",   label: "Position" },
-  { key: "mentions",   label: "Mentions" },
-  { key: "volume",     label: "Volume" },
-  { key: "status",     label: "Status" },
-  { key: "tags",       label: "Tags" },
-  { key: "location",   label: "Location" },
-  { key: "sov",        label: "SOV" },
-  { key: "added",      label: "Added" },
+  // ── Active (visible by default) ──────────────────────────────────────────
+  { key: "visibility",         label: "Visibility" },
+  { key: "sentiment",          label: "Sentiment" },
+  { key: "position",           label: "Position" },
+  { key: "mentions",           label: "Mentions" },
+  { key: "volume",             label: "Volume" },
+  { key: "status",             label: "Status" },
+  { key: "tags",               label: "Tags" },
+  { key: "location",           label: "Location" },
+  { key: "sov",                label: "SOV" },
+  { key: "added",              label: "Added" },
+  // ── Available (opt-in) ───────────────────────────────────────────────────
+  { key: "branding",           label: "Branding" },
+  { key: "intent",             label: "Intent" },
+  { key: "shopping",           label: "Shopping" },
+  { key: "product_comparison", label: "Product Comparison" },
+  { key: "ads",                label: "Ads" },
+  { key: "map",                label: "Map" },
+  { key: "web_search",         label: "Web Search" },
 ] as const;
 
 type ColKey = typeof COL_DEFS[number]["key"];
@@ -92,6 +101,14 @@ interface PromptMetric {
   sovTrend: number;
   location: string;
   isActive: boolean;
+  // Available columns
+  branding: "branded" | "non-branded";
+  intentType: "commercial" | "informational" | "transactional" | "navigational";
+  webSearch: number;
+  shopping: number;
+  ads: number;
+  map: number;
+  productComparison: number;
 }
 
 interface Topic {
@@ -334,7 +351,14 @@ type SortField =
   | "volumeTier"
   | "location"
   | "sov"
-  | "createdAt";
+  | "createdAt"
+  | "branding"
+  | "intentType"
+  | "webSearch"
+  | "shopping"
+  | "ads"
+  | "map"
+  | "productComparison";
 type SortDir = "asc" | "desc";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -1089,6 +1113,17 @@ export default function PromptsComparisonClient({
           case "createdAt":
             cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
             break;
+          case "branding":
+            cmp = a.branding.localeCompare(b.branding);
+            break;
+          case "intentType":
+            cmp = a.intentType.localeCompare(b.intentType);
+            break;
+          case "webSearch":       cmp = a.webSearch       - b.webSearch;       break;
+          case "shopping":        cmp = a.shopping        - b.shopping;        break;
+          case "ads":             cmp = a.ads             - b.ads;             break;
+          case "map":             cmp = a.map             - b.map;             break;
+          case "productComparison": cmp = a.productComparison - b.productComparison; break;
         }
         return sortDir === "asc" ? cmp : -cmp;
       });
@@ -1745,7 +1780,7 @@ export default function PromptsComparisonClient({
                         <Check size={12} style={{ marginRight: 6, color: "#3b82f6" }} /> Prompts
                       </div>
                       <div className="pp-dd-section-label" style={{ padding: "6px 12px 2px", fontSize: 10, color: "#aaa", fontWeight: 600 }}>Active columns</div>
-                      {COL_DEFS.map(({ key, label }) => (
+                      {COL_DEFS.filter(({ key }) => DEFAULT_COLS.has(key)).map(({ key, label }) => (
                         <button key={key} className="pp-dd-item" onClick={() => toggleCol(key)} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ width: 14, height: 14, border: "1.5px solid #3b82f6", borderRadius: 3, background: visibleCols.has(key) ? "#3b82f6" : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                             {visibleCols.has(key) && <Check size={9} style={{ color: "white" }} />}
@@ -1754,12 +1789,13 @@ export default function PromptsComparisonClient({
                         </button>
                       ))}
                       <div className="pp-dd-section-label" style={{ padding: "6px 12px 2px", fontSize: 10, color: "#aaa", fontWeight: 600 }}>Available columns</div>
-                      {["Shopping", "Product Comparison", "Ads", "Map", "Web Search"].map((label) => (
-                        <div key={label} className="pp-dd-item" style={{ opacity: 0.4, cursor: "not-allowed", display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ width: 14, height: 14, border: "1.5px solid #d1d5db", borderRadius: 3, display: "inline-block", flexShrink: 0 }} />
+                      {COL_DEFS.filter(({ key }) => !DEFAULT_COLS.has(key)).map(({ key, label }) => (
+                        <button key={key} className="pp-dd-item" onClick={() => toggleCol(key)} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ width: 14, height: 14, border: "1.5px solid #3b82f6", borderRadius: 3, background: visibleCols.has(key) ? "#3b82f6" : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            {visibleCols.has(key) && <Check size={9} style={{ color: "white" }} />}
+                          </span>
                           {label}
-                          <span style={{ marginLeft: "auto", fontSize: 10, color: "#aaa" }}>Soon</span>
-                        </div>
+                        </button>
                       ))}
                       <div style={{ borderTop: "1px solid #f0f0f0", margin: "6px 0" }} />
                       <button className="pp-dd-item" onClick={resetCols} style={{ color: "#6b7280", fontSize: 12 }}>
@@ -1940,8 +1976,15 @@ export default function PromptsComparisonClient({
                   {visibleCols.has("status")     && <th>Status</th>}
                   {visibleCols.has("tags")       && <th>Tags</th>}
                   {visibleCols.has("location")   && <th className="pp-th-sortable" onClick={() => handleSort("location")}>Location {renderSortIcon("location")}</th>}
-                  {visibleCols.has("sov")        && <th className="pp-th-sortable" onClick={() => handleSort("sov")}>SOV {renderSortIcon("sov")}</th>}
-                  {visibleCols.has("added")      && <th className="pp-th-sortable" onClick={() => handleSort("createdAt")}>Added {renderSortIcon("createdAt")}</th>}
+                  {visibleCols.has("sov")                && <th className="pp-th-sortable" onClick={() => handleSort("sov")}>SOV {renderSortIcon("sov")}</th>}
+                  {visibleCols.has("added")              && <th className="pp-th-sortable" onClick={() => handleSort("createdAt")}>Added {renderSortIcon("createdAt")}</th>}
+                  {visibleCols.has("branding")           && <th className="pp-th-sortable" onClick={() => handleSort("branding")}>Branding {renderSortIcon("branding")}</th>}
+                  {visibleCols.has("intent")             && <th className="pp-th-sortable" onClick={() => handleSort("intentType")}>Intent {renderSortIcon("intentType")}</th>}
+                  {visibleCols.has("shopping")           && <th className="pp-th-sortable" onClick={() => handleSort("shopping")}>Shopping {renderSortIcon("shopping")}</th>}
+                  {visibleCols.has("product_comparison") && <th className="pp-th-sortable" onClick={() => handleSort("productComparison")}>Product Comparison {renderSortIcon("productComparison")}</th>}
+                  {visibleCols.has("ads")                && <th className="pp-th-sortable" onClick={() => handleSort("ads")}>Ads {renderSortIcon("ads")}</th>}
+                  {visibleCols.has("map")                && <th className="pp-th-sortable" onClick={() => handleSort("map")}>Map {renderSortIcon("map")}</th>}
+                  {visibleCols.has("web_search")         && <th className="pp-th-sortable" onClick={() => handleSort("webSearch")}>Web Search {renderSortIcon("webSearch")}</th>}
                   <th></th>
                 </tr>
               </thead>
@@ -2065,6 +2108,27 @@ export default function PromptsComparisonClient({
                       )}
                       {visibleCols.has("added") && (
                         <td><span className="pp-added">{formatRelativeTime(p.createdAt)}</span></td>
+                      )}
+                      {visibleCols.has("branding") && (
+                        <td><span className="pp-branding">{p.branding === "branded" ? "⊙ Branded" : "⊙ Non-branded"}</span></td>
+                      )}
+                      {visibleCols.has("intent") && (
+                        <td><span style={{ color: INTENT_COLORS[p.intentType]?.text, fontSize: 12, fontWeight: 500 }}>{p.intentType.charAt(0).toUpperCase() + p.intentType.slice(1)}</span></td>
+                      )}
+                      {visibleCols.has("shopping") && (
+                        <td><span className="pp-metric-val">{p.shopping}%</span> <span className="pp-trend-flat">—</span></td>
+                      )}
+                      {visibleCols.has("product_comparison") && (
+                        <td><span className="pp-metric-val">{p.productComparison}%</span> <span className="pp-trend-flat">—</span></td>
+                      )}
+                      {visibleCols.has("ads") && (
+                        <td><span className="pp-metric-val">{p.ads}%</span> <span className="pp-trend-flat">—</span></td>
+                      )}
+                      {visibleCols.has("map") && (
+                        <td><span className="pp-metric-val">{p.map}%</span> <span className="pp-trend-flat">—</span></td>
+                      )}
+                      {visibleCols.has("web_search") && (
+                        <td><span className="pp-metric-val">{p.webSearch}%</span> <span className="pp-trend-flat">—</span></td>
                       )}
                       <td>
                         {canRunScans ? (
