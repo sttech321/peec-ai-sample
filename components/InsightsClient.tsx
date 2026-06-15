@@ -182,6 +182,7 @@ export default function InsightsClient({
   const chartMenuRef = useRef<HTMLDivElement>(null);
   // Rankings tab — separate from chart + matrix tabs
   const [rankingsTab, setRankingsTab] = useState<"visibility" | "sentiment" | "position" | "sov">("visibility");
+  const [rankSortAsc, setRankSortAsc] = useState(true);
 
   // ── Rankings hover tooltip ────────────────────────────────────────────
   const [rankHover, setRankHover] = useState<{
@@ -1174,8 +1175,15 @@ export default function InsightsClient({
               <thead>
                 <tr>
                   <th className="ins-matrix-rowhead ins-rankings-engine-head">
-                    {rankingsGroupBy === "models" ? "AI models" :
-                     rankingsGroupBy === "topics" ? "Topics" : "Tags"} ↑
+                    <button
+                      onClick={() => setRankSortAsc(v => !v)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600, fontSize: "inherit", color: "inherit" }}
+                      title={`Sort ${rankSortAsc ? "Z→A" : "A→Z"}`}
+                    >
+                      {rankingsGroupBy === "models" ? "AI models" :
+                       rankingsGroupBy === "topics" ? "Topics" : "Tags"}
+                      <span style={{ fontSize: 10, opacity: 0.7 }}>{rankSortAsc ? "↑" : "↓"}</span>
+                    </button>
                   </th>
                   {Array.from({ length: 10 }).map((_, i) => (
                     <th key={i} className="ins-rankings-pos-head">#{i + 1}</th>
@@ -1184,7 +1192,7 @@ export default function InsightsClient({
               </thead>
               <tbody>
                 {/* Rows = group keys (engines / topics / tags) */}
-                {Object.keys(topRankings).sort().map((groupKey) => {
+                {Object.keys(topRankings).sort((a, b) => rankSortAsc ? a.localeCompare(b) : b.localeCompare(a)).map((groupKey) => {
                   const ranks = topRankings[groupKey] || [];
                   return (
                     <tr key={groupKey}>
