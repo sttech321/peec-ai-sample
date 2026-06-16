@@ -7,6 +7,7 @@ import { getActiveProjectId } from "../../lib/project-context";
 import { fetchChatFacts, fetchProjectBrands } from "../../lib/chat-facts-server";
 import { getPageFilterData } from "../../lib/page-filter-data";
 import { addBrand, getDomainTypeOverrides, updateDomainTypeOverride, getDomainBookmarks, updateDomainBookmark } from "../actions/brands";
+import { fetchChatMaps } from "../../lib/fetch-chat-maps";
 import type { BrandProfile } from "../../lib/brand-profile-types";
 import "../prompts/[id]/prompt-detail.css";
 import "../prompts/prompts-comparison.css";
@@ -57,12 +58,13 @@ export default async function DomainsPage() {
   if (profileDomain) ownDomains.push(profileDomain);
   for (const d of ownBrand?.domains ?? []) ownDomains.push(d.toLowerCase());
 
-  const [chatFacts, projectBrands, filterData, domainTypeOverrides, domainBookmarks] = await Promise.all([
+  const [chatFacts, projectBrands, filterData, domainTypeOverrides, domainBookmarks, chatMaps] = await Promise.all([
     fetchChatFacts({ projectId: activeProjectId }),
     fetchProjectBrands(activeProjectId),
     getPageFilterData(activeProjectId),
     getDomainTypeOverrides(),
     getDomainBookmarks(),
+    fetchChatMaps(activeProjectId),
   ]);
 
   // Derive available engines from actual data (dynamic, not hardcoded)
@@ -76,6 +78,9 @@ export default async function DomainsPage() {
         projectBrands={projectBrands}
         filterBrands={filterData.projectBrands}
         availableTags={filterData.availableTags}
+        availableTopics={filterData.availableTopics}
+        chatTopicMap={chatMaps.chatTopicMap}
+        chatTagsMap={chatMaps.chatTagsMap}
         ownDomains={ownDomains}
         competitorDomains={competitorDomains}
         addBrandAction={addBrand}

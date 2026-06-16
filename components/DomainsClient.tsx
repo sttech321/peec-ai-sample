@@ -36,6 +36,10 @@ interface Props {
   competitorDomains: string[];
   externalDateRange?: DateRangeValue;
   externalModels?: string[];
+  externalTagNames?: string[] | null;
+  externalTopicNames?: string[] | null;
+  chatTopicMap?: Record<string, string>;
+  chatTagsMap?: Record<string, string[]>;
   initialDomainTypeOverrides?: Record<string, string>;
   updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
   initialDomainBookmarks?: string[];
@@ -262,6 +266,10 @@ export default function DomainsClient({
   competitorDomains,
   externalDateRange,
   externalModels,
+  externalTagNames,
+  externalTopicNames,
+  chatTopicMap = {},
+  chatTagsMap = {},
   initialDomainTypeOverrides,
   updateDomainTypeOverrideAction,
   initialDomainBookmarks,
@@ -345,17 +353,30 @@ export default function DomainsClient({
     [projectBrands]
   );
 
+  const applyTagTopicFilter = (facts: ChatFact[]) => {
+    let f = facts;
+    if (externalTagNames && externalTagNames.length > 0) {
+      f = f.filter((c) => { const t = chatTagsMap[c.id]; return t && t.some((tag) => externalTagNames.includes(tag)); });
+    }
+    if (externalTopicNames && externalTopicNames.length > 0) {
+      f = f.filter((c) => { const topic = chatTopicMap[c.id]; return topic !== undefined && externalTopicNames.includes(topic); });
+    }
+    return f;
+  };
+
   const filteredCurrent = useMemo(
-    () => filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange),
-    [chatFacts, selectedModels, dateRange],
+    () => applyTagTopicFilter(filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatFacts, selectedModels, dateRange, externalTagNames, externalTopicNames, chatTagsMap, chatTopicMap],
   );
   const filteredPrevious = useMemo(() => {
     if (dateRange.preset === "all") return [];
-    return filterByDateRange(
+    return applyTagTopicFilter(filterByDateRange(
       filterByEngines(chatFacts, selectedModels),
       previousPeriod(dateRange),
-    );
-  }, [chatFacts, selectedModels, dateRange]);
+    ));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatFacts, selectedModels, dateRange, externalTagNames, externalTopicNames, chatTagsMap, chatTopicMap]);
 
   const allDomains = useMemo(
     () => aggregateDomainsFull(filteredCurrent, filteredPrevious),
