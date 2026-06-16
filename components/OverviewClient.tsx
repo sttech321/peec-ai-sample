@@ -43,6 +43,8 @@ export interface OverviewExternalFilters {
   dateRange?: { start: Date; end: Date; preset: string; label: string } | null;
   models?: string[] | null;
   brandIds?: string[] | null;
+  tagNames?: string[] | null;
+  topicNames?: string[] | null;
 }
 
 interface Props {
@@ -50,6 +52,8 @@ interface Props {
   projectName: string;
   projectBrands: ProjectBrand[];
   externalFilters?: OverviewExternalFilters;
+  chatTopicMap?: Record<string, string>;
+  chatTagsMap?: Record<string, string[]>;
   initialDomainTypeOverrides?: Record<string, string>;
   updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
   brandColorOverrides?: Record<string, string>;
@@ -67,6 +71,7 @@ function SortIcon({ sortDir }: { sortDir: "asc" | "desc" | null }) {
 
 export default function OverviewClient({
   chatFacts, projectName, projectBrands, externalFilters,
+  chatTopicMap = {}, chatTagsMap = {},
   initialDomainTypeOverrides, updateDomainTypeOverrideAction,
   brandColorOverrides = {}, onBrandColorChange,
 }: Props) {
@@ -254,12 +259,27 @@ export default function OverviewClient({
     return { ...map, ...brandColorOverrides }; // saved colors override palette
   }, [chatFacts, brandColorOverrides]);
 
+  const effectiveTagNames  = externalFilters?.tagNames  ?? null;
+  const effectiveTopicNames = externalFilters?.topicNames ?? null;
+
   // ── Filtered derivations ──────────────────────────────────────────────
-  const filteredChats = useMemo(
-    () => filterByDateRange(filterByEngines(chatFacts, effectiveModels), effectiveDateRange),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chatFacts, effectiveModels, effectiveDateRange],
-  );
+  const filteredChats = useMemo(() => {
+    let facts = filterByDateRange(filterByEngines(chatFacts, effectiveModels), effectiveDateRange);
+    if (effectiveTagNames && effectiveTagNames.length > 0) {
+      facts = facts.filter((c) => {
+        const t = chatTagsMap[c.id];
+        return t && t.some((tag) => effectiveTagNames.includes(tag));
+      });
+    }
+    if (effectiveTopicNames && effectiveTopicNames.length > 0) {
+      facts = facts.filter((c) => {
+        const topic = chatTopicMap[c.id];
+        return topic !== undefined && effectiveTopicNames.includes(topic);
+      });
+    }
+    return facts;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatFacts, effectiveModels, effectiveDateRange, effectiveTagNames, effectiveTopicNames, chatTopicMap, chatTagsMap]);
 
   // ── Current period (date-filtered) — SOV denominator + display metrics ─────────
   const allBrands = useMemo(

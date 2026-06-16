@@ -5,15 +5,15 @@ import PageFilterBar, {
   PageFilterBrand,
   PageFilterTag,
   PageFilterTopic,
+  PageFilterDateRange,
 } from "./PageFilterBar";
-import { DateRangeValue, makePresetRange as makeDR } from "./DateRangeDropdown";
-import DomainsClient from "./DomainsClient";
+import UrlsClient from "./UrlsClient";
 import { ChatFact } from "../lib/chat-aggregations";
+import { DateRangeValue } from "./DateRangeDropdown";
 
 interface ProjectBrand {
   name: string;
   isOwn: boolean;
-  domains?: string[] | null;
 }
 
 interface Props {
@@ -23,31 +23,27 @@ interface Props {
   filterBrands: PageFilterBrand[];
   availableTags: PageFilterTag[];
   availableTopics?: PageFilterTopic[];
-  chatTopicMap?: Record<string, string>;
-  chatTagsMap?: Record<string, string[]>;
+  ownBrandName: string | null;
   ownDomains: string[];
   competitorDomains: string[];
-  addBrandAction: (name: string) => Promise<{ ok: boolean; error?: string }>;
+  chatTopicMap?: Record<string, string>;
+  chatTagsMap?: Record<string, string[]>;
+  addBrandAction?: (name: string) => Promise<{ ok: boolean; error?: string }>;
   availableEngines?: string[];
-  initialDomainTypeOverrides?: Record<string, string>;
-  updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
-  initialDomainBookmarks?: string[];
-  updateDomainBookmarkAction?: (domain: string, bookmarked: boolean) => Promise<{ ok: boolean; error?: string }>;
 }
 
+function toDateRangeValue(r: PageFilterDateRange): DateRangeValue {
+  return { start: r.start, end: r.end, preset: r.preset as DateRangeValue["preset"], label: r.label };
+}
 
-export default function DomainsWrapper({
+export default function UrlsWrapper({
   projectName, chatFacts, projectBrands, filterBrands,
-  availableTags, availableTopics = [], chatTopicMap = {}, chatTagsMap = {},
-  ownDomains, competitorDomains,
+  availableTags, availableTopics = [], ownBrandName, ownDomains,
+  competitorDomains, chatTopicMap = {}, chatTagsMap = {},
   addBrandAction, availableEngines,
-  initialDomainTypeOverrides, updateDomainTypeOverrideAction,
-  initialDomainBookmarks, updateDomainBookmarkAction,
 }: Props) {
-  const [dateRange, setDateRange] = useState<DateRangeValue>(() => makeDR("30"));
-  const [selectedModels, setSelectedModels] = useState<string[]>(
-    availableEngines?.length ? availableEngines : []
-  );
+  const [dateRange, setDateRange] = useState<DateRangeValue | null>(null);
+  const [selectedModels, setSelectedModels] = useState<string[] | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<string[] | null>(null);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[] | null>(null);
 
@@ -69,28 +65,25 @@ export default function DomainsWrapper({
         availableTags={availableTags}
         availableTopics={availableTopics}
         addBrandAction={addBrandAction}
-        onDateChange={setDateRange}
+        onDateChange={(r) => setDateRange(toDateRangeValue(r))}
         onModelsChange={setSelectedModels}
         onTagsChange={setSelectedTagIds}
         onTopicsChange={setSelectedTopicIds}
         initialModels={availableEngines}
       />
-      <DomainsClient
+      <UrlsClient
         chatFacts={chatFacts}
         projectName={projectName}
         projectBrands={projectBrands}
+        ownBrandName={ownBrandName}
         ownDomains={ownDomains}
         competitorDomains={competitorDomains}
-        externalDateRange={dateRange}
-        externalModels={selectedModels}
+        externalDateRange={dateRange ?? undefined}
+        externalModels={selectedModels ?? undefined}
         externalTagNames={selectedTagNames}
         externalTopicNames={selectedTopicNames}
         chatTopicMap={chatTopicMap}
         chatTagsMap={chatTagsMap}
-        initialDomainTypeOverrides={initialDomainTypeOverrides}
-        updateDomainTypeOverrideAction={updateDomainTypeOverrideAction}
-        initialDomainBookmarks={initialDomainBookmarks}
-        updateDomainBookmarkAction={updateDomainBookmarkAction}
       />
     </>
   );

@@ -35,6 +35,12 @@ interface Props {
   ownBrandName: string | null;
   ownDomains: string[];
   competitorDomains: string[];
+  externalDateRange?: DateRangeValue;
+  externalModels?: string[];
+  externalTagNames?: string[] | null;
+  externalTopicNames?: string[] | null;
+  chatTopicMap?: Record<string, string>;
+  chatTagsMap?: Record<string, string[]>;
 }
 
 const PAGE_SIZE = 15;
@@ -77,9 +83,16 @@ export default function UrlsClient({
   ownBrandName,
   ownDomains,
   competitorDomains,
+  externalDateRange,
+  externalModels,
+  externalTagNames,
+  externalTopicNames,
+  chatTopicMap = {},
+  chatTagsMap = {},
 }: Props) {
   const [resolution, setResolution] = useState<Resolution>("W");
-  const [dateRange, setDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
+  const [internalDateRange, setDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
+  const dateRange = externalDateRange ?? internalDateRange;
   const [selectedBrands, setSelectedBrands] = useState<string[] | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [urlTypeFilter, setUrlTypeFilter] = useState<UrlType | null>(null);
@@ -95,12 +108,24 @@ export default function UrlsClient({
     for (const c of chatFacts) set.add(c.engine);
     return Array.from(set);
   }, [chatFacts]);
-  const [selectedModels, setSelectedModels] = useState<string[]>(allEngines);
+  const [internalModels, setInternalModels] = useState<string[]>(allEngines);
+  const selectedModels = externalModels ?? internalModels;
 
   const toggleModel = (m: string) => {
-    setSelectedModels((prev) =>
+    setInternalModels((prev) =>
       prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m],
     );
+  };
+
+  const applyTagTopicFilter = (facts: ChatFact[]) => {
+    let f = facts;
+    if (externalTagNames && externalTagNames.length > 0) {
+      f = f.filter((c) => { const t = chatTagsMap[c.id]; return t && t.some((tag) => externalTagNames.includes(tag)); });
+    }
+    if (externalTopicNames && externalTopicNames.length > 0) {
+      f = f.filter((c) => { const topic = chatTopicMap[c.id]; return topic !== undefined && externalTopicNames.includes(topic); });
+    }
+    return f;
   };
 
   
@@ -122,16 +147,18 @@ export default function UrlsClient({
 
   // ── Filtered chat windows
   const filteredCurrent = useMemo(
-    () => filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange),
-    [chatFacts, selectedModels, dateRange],
+    () => applyTagTopicFilter(filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatFacts, selectedModels, dateRange, externalTagNames, externalTopicNames, chatTagsMap, chatTopicMap],
   );
   const filteredPrevious = useMemo(() => {
     if (dateRange.preset === "all") return [];
-    return filterByDateRange(
+    return applyTagTopicFilter(filterByDateRange(
       filterByEngines(chatFacts, selectedModels),
       previousPeriod(dateRange),
-    );
-  }, [chatFacts, selectedModels, dateRange]);
+    ));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatFacts, selectedModels, dateRange, externalTagNames, externalTopicNames, chatTagsMap, chatTopicMap]);
 
   // ── URL aggregates (full unfiltered list; row filters applied after)
   const allUrls = useMemo(

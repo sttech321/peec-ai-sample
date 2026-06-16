@@ -32,6 +32,11 @@ interface Props {
   ownDomain: string | null;
   chatTopicMap?: Record<string, string>;         // chatId → topicName
   chatTagsMap?: Record<string, string[]>;        // chatId → tagNames[]
+  externalDateRange?: DateRangeValue;
+  externalModels?: string[];
+  externalBrandNames?: string[] | null;
+  externalTagNames?: string[] | null;
+  externalTopicNames?: string[] | null;
 }
 
 const DEFAULT_ENGINES = ["AI Mode", "ChatGPT", "AI Overview", "Gemini", "Perplexity"];
@@ -167,9 +172,12 @@ function computeMetricsForBrand(
 export default function InsightsClient({
   chatFacts, projectName, projectBrands, ownBrandName, ownDomain,
   chatTopicMap = {}, chatTagsMap = {},
+  externalDateRange, externalModels, externalBrandNames,
+  externalTagNames, externalTopicNames,
 }: Props) {
   const [resolution, setResolution] = useState<Resolution>("D");
-  const [dateRange, setDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
+  const internalDateRange = makePresetRange("30");
+  const dateRange = externalDateRange ?? internalDateRange;
   const [selectedBrands, setSelectedBrands] = useState<string[] | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [tagsDropdownOpen, setTagsDropdownOpen] = useState(false);
@@ -258,24 +266,41 @@ export default function InsightsClient({
     for (const d of DEFAULT_ENGINES) if (!found.includes(d)) found.push(d);
     return found;
   }, [chatFacts]);
-  const [selectedModels, setSelectedModels] = useState<string[]>(allEngines);
+  const [internalModels, setInternalModels] = useState<string[]>(allEngines);
+  const selectedModels = externalModels ?? internalModels;
 
   const toggleModel = (model: string) => {
-    setSelectedModels((prev) =>
+    setInternalModels((prev) =>
       prev.includes(model) ? prev.filter((m) => m !== model) : [...prev, model],
     );
   };
 
+  const applyExternalFilters = (facts: ChatFact[]) => {
+    let f = facts;
+    if (externalBrandNames && externalBrandNames.length > 0) {
+      f = f.filter((c) => c.brands.some((b) => externalBrandNames.includes(b.name)));
+    }
+    if (externalTagNames && externalTagNames.length > 0) {
+      f = f.filter((c) => { const t = chatTagsMap[c.id]; return t && t.some((tag) => externalTagNames.includes(tag)); });
+    }
+    if (externalTopicNames && externalTopicNames.length > 0) {
+      f = f.filter((c) => { const topic = chatTopicMap[c.id]; return topic !== undefined && externalTopicNames.includes(topic); });
+    }
+    return f;
+  };
+
   const filteredChats = useMemo(
-    () => filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange),
-    [chatFacts, selectedModels, dateRange],
+    () => applyExternalFilters(filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatFacts, selectedModels, dateRange, externalBrandNames, externalTagNames, externalTopicNames, chatTagsMap, chatTopicMap],
   );
   // Previous period only makes sense for bounded ranges; "All time" has nothing before it.
   const previousChats = useMemo(() => {
     if (dateRange.preset === "all") return [];
     const prev = previousPeriod(dateRange);
-    return filterByDateRange(filterByEngines(chatFacts, selectedModels), prev);
-  }, [chatFacts, selectedModels, dateRange]);
+    return applyExternalFilters(filterByDateRange(filterByEngines(chatFacts, selectedModels), prev));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatFacts, selectedModels, dateRange, externalBrandNames, externalTagNames, externalTopicNames, chatTagsMap, chatTopicMap]);
   const showDeltas = dateRange.preset !== "all";
 
   // Resolve "your" brand — explicit isOwn flag, fall back to project name match.

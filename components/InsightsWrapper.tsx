@@ -5,15 +5,15 @@ import PageFilterBar, {
   PageFilterBrand,
   PageFilterTag,
   PageFilterTopic,
+  PageFilterDateRange,
 } from "./PageFilterBar";
-import { DateRangeValue, makePresetRange as makeDR } from "./DateRangeDropdown";
-import DomainsClient from "./DomainsClient";
+import InsightsClient from "./InsightsClient";
 import { ChatFact } from "../lib/chat-aggregations";
+import { DateRangeValue } from "./DateRangeDropdown";
 
 interface ProjectBrand {
   name: string;
   isOwn: boolean;
-  domains?: string[] | null;
 }
 
 interface Props {
@@ -23,33 +23,29 @@ interface Props {
   filterBrands: PageFilterBrand[];
   availableTags: PageFilterTag[];
   availableTopics?: PageFilterTopic[];
+  ownBrandName: string | null;
+  ownDomain: string | null;
   chatTopicMap?: Record<string, string>;
   chatTagsMap?: Record<string, string[]>;
-  ownDomains: string[];
-  competitorDomains: string[];
-  addBrandAction: (name: string) => Promise<{ ok: boolean; error?: string }>;
+  addBrandAction?: (name: string) => Promise<{ ok: boolean; error?: string }>;
   availableEngines?: string[];
-  initialDomainTypeOverrides?: Record<string, string>;
-  updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
-  initialDomainBookmarks?: string[];
-  updateDomainBookmarkAction?: (domain: string, bookmarked: boolean) => Promise<{ ok: boolean; error?: string }>;
 }
 
+function toDateRangeValue(r: PageFilterDateRange): DateRangeValue {
+  return { start: r.start, end: r.end, preset: r.preset as DateRangeValue["preset"], label: r.label };
+}
 
-export default function DomainsWrapper({
+export default function InsightsWrapper({
   projectName, chatFacts, projectBrands, filterBrands,
-  availableTags, availableTopics = [], chatTopicMap = {}, chatTagsMap = {},
-  ownDomains, competitorDomains,
+  availableTags, availableTopics = [], ownBrandName, ownDomain,
+  chatTopicMap = {}, chatTagsMap = {},
   addBrandAction, availableEngines,
-  initialDomainTypeOverrides, updateDomainTypeOverrideAction,
-  initialDomainBookmarks, updateDomainBookmarkAction,
 }: Props) {
-  const [dateRange, setDateRange] = useState<DateRangeValue>(() => makeDR("30"));
-  const [selectedModels, setSelectedModels] = useState<string[]>(
-    availableEngines?.length ? availableEngines : []
-  );
+  const [dateRange, setDateRange] = useState<DateRangeValue | null>(null);
+  const [selectedModels, setSelectedModels] = useState<string[] | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<string[] | null>(null);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[] | null>(null);
+  const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(null);
 
   const selectedTagNames: string[] | null =
     selectedTagIds === null
@@ -61,6 +57,11 @@ export default function DomainsWrapper({
       ? null
       : selectedTopicIds.map((id) => availableTopics.find((t) => t.id === id)?.name).filter((n): n is string => !!n);
 
+  const selectedBrandNames: string[] | null =
+    selectedBrandIds === null
+      ? null
+      : selectedBrandIds.map((id) => filterBrands.find((b) => b.id === id)?.name).filter((n): n is string => !!n);
+
   return (
     <>
       <PageFilterBar
@@ -69,28 +70,26 @@ export default function DomainsWrapper({
         availableTags={availableTags}
         availableTopics={availableTopics}
         addBrandAction={addBrandAction}
-        onDateChange={setDateRange}
+        onDateChange={(r) => setDateRange(toDateRangeValue(r))}
         onModelsChange={setSelectedModels}
+        onBrandsChange={setSelectedBrandIds}
         onTagsChange={setSelectedTagIds}
         onTopicsChange={setSelectedTopicIds}
         initialModels={availableEngines}
       />
-      <DomainsClient
+      <InsightsClient
         chatFacts={chatFacts}
         projectName={projectName}
         projectBrands={projectBrands}
-        ownDomains={ownDomains}
-        competitorDomains={competitorDomains}
-        externalDateRange={dateRange}
-        externalModels={selectedModels}
-        externalTagNames={selectedTagNames}
-        externalTopicNames={selectedTopicNames}
+        ownBrandName={ownBrandName}
+        ownDomain={ownDomain}
         chatTopicMap={chatTopicMap}
         chatTagsMap={chatTagsMap}
-        initialDomainTypeOverrides={initialDomainTypeOverrides}
-        updateDomainTypeOverrideAction={updateDomainTypeOverrideAction}
-        initialDomainBookmarks={initialDomainBookmarks}
-        updateDomainBookmarkAction={updateDomainBookmarkAction}
+        externalDateRange={dateRange ?? undefined}
+        externalModels={selectedModels ?? undefined}
+        externalBrandNames={selectedBrandNames}
+        externalTagNames={selectedTagNames}
+        externalTopicNames={selectedTopicNames}
       />
     </>
   );

@@ -5,6 +5,7 @@ import PageFilterBar, {
   PageFilterBrand,
   PageFilterDateRange,
   PageFilterTag,
+  PageFilterTopic,
 } from "./PageFilterBar";
 import OverviewClient from "./OverviewClient";
 import { ChatFact } from "../lib/chat-aggregations";
@@ -21,6 +22,9 @@ interface Props {
   projectBrands: ProjectBrand[];
   filterBrands: PageFilterBrand[];
   availableTags: PageFilterTag[];
+  availableTopics?: PageFilterTopic[];
+  chatTopicMap?: Record<string, string>;
+  chatTagsMap?: Record<string, string[]>;
   addBrandAction: (name: string) => Promise<{ ok: boolean; error?: string }>;
   initialHiddenBrandIds: string[];
   updateBrandFilterAction: (hiddenBrandIds: string[] | null) => Promise<{ ok: boolean; error?: string }>;
@@ -46,6 +50,9 @@ export default function OverviewWrapper({
   projectBrands,
   filterBrands,
   availableTags,
+  availableTopics = [],
+  chatTopicMap = {},
+  chatTagsMap = {},
   addBrandAction,
   initialHiddenBrandIds,
   updateBrandFilterAction,
@@ -56,6 +63,8 @@ export default function OverviewWrapper({
   updateBrandColorAction,
 }: Props) {
   const [dateRange, setDateRange]     = useState<PageFilterDateRange>(makeDefaultDateRange);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[] | null>(null);
+  const [selectedTopicIds, setSelectedTopicIds] = useState<string[] | null>(null);
   // Initialize with availableEngines from DB; fallback to engines in chatFacts; finally []
   const [selectedModels, setSelectedModels] = useState<string[]>(() => {
     if (availableEngines?.length) return availableEngines;
@@ -105,16 +114,33 @@ export default function OverviewWrapper({
           .filter((b) => !initialHiddenBrandIds.includes(b.name))
           .map((b) => b.id);
 
+  const selectedTagNames: string[] | null =
+    selectedTagIds === null
+      ? null
+      : selectedTagIds
+          .map((id) => availableTags.find((t) => t.id === id)?.name)
+          .filter((n): n is string => !!n);
+
+  const selectedTopicNames: string[] | null =
+    selectedTopicIds === null
+      ? null
+      : selectedTopicIds
+          .map((id) => availableTopics.find((t) => t.id === id)?.name)
+          .filter((n): n is string => !!n);
+
   return (
     <>
       <PageFilterBar
         projectName={projectName}
         projectBrands={filterBrands}
         availableTags={availableTags}
+        availableTopics={availableTopics}
         addBrandAction={addBrandAction}
         onDateChange={setDateRange}
         onModelsChange={setSelectedModels}
         onBrandsChange={handleBrandsChange}
+        onTagsChange={setSelectedTagIds}
+        onTopicsChange={setSelectedTopicIds}
         initialBrands={initialBrandIds}
         initialModels={availableEngines}
       />
@@ -126,7 +152,11 @@ export default function OverviewWrapper({
           dateRange,
           models: selectedModels,
           brandIds: selectedBrandNames,
+          tagNames: selectedTagNames,
+          topicNames: selectedTopicNames,
         }}
+        chatTopicMap={chatTopicMap}
+        chatTagsMap={chatTagsMap}
         initialDomainTypeOverrides={initialDomainTypeOverrides}
         updateDomainTypeOverrideAction={updateDomainTypeOverrideAction}
         brandColorOverrides={brandColorOverrides}

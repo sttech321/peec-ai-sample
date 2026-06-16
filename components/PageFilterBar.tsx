@@ -30,6 +30,11 @@ export interface PageFilterTag {
   color: string;
 }
 
+export interface PageFilterTopic {
+  id: string;
+  name: string;
+}
+
 export type PageFilterDatePreset =
   | "7"
   | "14"
@@ -51,6 +56,7 @@ interface Props {
   projectName: string;
   projectBrands: PageFilterBrand[];
   availableTags: PageFilterTag[];
+  availableTopics?: PageFilterTopic[];
   /** Optional — if provided, the "+ Add brand" inline form is shown. */
   addBrandAction?: (
     name: string,
@@ -60,6 +66,7 @@ interface Props {
   onTagsChange?: (ids: string[] | null) => void;
   onModelsChange?: (engines: string[]) => void;
   onDateChange?: (range: PageFilterDateRange) => void;
+  onTopicsChange?: (ids: string[] | null) => void;
   /** Hide the Tags chip — used on the prompt detail page where filtering
    *  by tag has no meaning (single prompt). */
   hideTags?: boolean;
@@ -637,11 +644,13 @@ export default function PageFilterBar({
   projectName,
   projectBrands,
   availableTags,
+  availableTopics = [],
   addBrandAction,
   onBrandsChange,
   onTagsChange,
   onModelsChange,
   onDateChange,
+  onTopicsChange,
   hideTags,
   initialDateRange,
   initialModels,
@@ -651,6 +660,7 @@ export default function PageFilterBar({
     initialBrands !== undefined ? initialBrands : null,
   );
   const [selectedTagIds, setSelectedTagIds] = useState<string[] | null>(null);
+  const [selectedTopicIds, setSelectedTopicIds] = useState<string[] | null>(null);
   const [selectedModels, setSelectedModels] = useState<string[]>(
     initialModels ?? ALL_ENGINES,
   );
@@ -675,6 +685,11 @@ export default function PageFilterBar({
     onDateChange?.(v);
   };
 
+  const updateTopics = (v: string[] | null) => {
+    setSelectedTopicIds(v);
+    onTopicsChange?.(v);
+  };
+
   const toggleTagFilter = (id: string) => {
     if (selectedTagIds === null) {
       updateTags([id]);
@@ -685,6 +700,19 @@ export default function PageFilterBar({
       updateTags(next.length === 0 ? null : next);
     } else {
       updateTags([...selectedTagIds, id]);
+    }
+  };
+
+  const toggleTopicFilter = (id: string) => {
+    if (selectedTopicIds === null) {
+      updateTopics([id]);
+      return;
+    }
+    if (selectedTopicIds.includes(id)) {
+      const next = selectedTopicIds.filter((t) => t !== id);
+      updateTopics(next.length === 0 ? null : next);
+    } else {
+      updateTopics([...selectedTopicIds, id]);
     }
   };
 
@@ -783,6 +811,49 @@ export default function PageFilterBar({
           </div>
         )}
       </Dropdown>
+
+      {availableTopics.length > 0 && (
+        <Dropdown
+          width={240}
+          trigger={(open) => (
+            <>
+              <TagIcon size={13} />
+              <span>
+                {selectedTopicIds === null
+                  ? "All Topics"
+                  : selectedTopicIds.length === 1
+                  ? availableTopics.find((t) => t.id === selectedTopicIds[0])?.name ?? "1 Topic"
+                  : `${selectedTopicIds.length} Topics`}
+              </span>
+              <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
+            </>
+          )}
+        >
+          {() => (
+            <div className="pp-dd-section">
+              <button
+                className={`pp-dd-item ${selectedTopicIds === null ? "pp-dd-item-active" : ""}`}
+                onClick={() => updateTopics(null)}
+              >
+                All Topics
+              </button>
+              {availableTopics.length === 0 && (
+                <div className="pp-dd-empty">No topics yet</div>
+              )}
+              {availableTopics.map((t) => (
+                <label key={t.id} className="pp-dd-check-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedTopicIds?.includes(t.id) ?? false}
+                    onChange={() => toggleTopicFilter(t.id)}
+                  />
+                  <span className="pp-dd-check-label">{t.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </Dropdown>
+      )}
     </div>
   );
 }
