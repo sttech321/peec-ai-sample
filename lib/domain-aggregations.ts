@@ -4,6 +4,24 @@
 import type { ChatFact, Resolution } from "./chat-aggregations";
 import { classifyDomain, DOMAIN_TYPE_COLORS, type DomainType } from "./url-aggregations";
 
+// Strips www. prefix to get base domain (e.g. www.cslplasma.com → cslplasma.com).
+export function extractBaseDomain(host: string): string {
+  return host.toLowerCase().replace(/^www\./, "");
+}
+
+// Pre-processes ChatFact sources so aggregations group by base domain (strips www.)
+// or by full hostname. When grouping === "host", returns input unchanged.
+export function normalizeChatFacts(
+  chats: ChatFact[],
+  grouping: "domain" | "host",
+): ChatFact[] {
+  if (grouping === "host") return chats;
+  return chats.map((c) => ({
+    ...c,
+    sources: c.sources.map((s) => ({ ...s, domain: extractBaseDomain(s.domain) })),
+  }));
+}
+
 export { DOMAIN_TYPE_COLORS, classifyDomain };
 export type { DomainType };
 
@@ -201,9 +219,13 @@ export function buildDomainCountSeries(
   const tl = timelineForRange(range.start, range.end, resolution);
   const targets = new Set(domains.map((d) => d.toLowerCase()));
   const perBucket = new Map<string, Map<string, number>>();
+  const chatsByBucket = new Map<string, Set<string>>();
 
   for (const c of chats) {
     const key = bucketStart(new Date(c.runDate), resolution).toISOString();
+    let chatSet = chatsByBucket.get(key);
+    if (!chatSet) { chatSet = new Set(); chatsByBucket.set(key, chatSet); }
+    chatSet.add(c.id);
     for (const s of c.sources) {
       const d = s.domain.toLowerCase();
       if (!targets.has(d)) continue;
@@ -216,7 +238,10 @@ export function buildDomainCountSeries(
   return tl.map((b) => {
     const key = b.toISOString();
     const hits = perBucket.get(key);
-    const point: DomainSeriesPoint = { date: formatLabel(b, resolution) };
+    const point: DomainSeriesPoint = {
+      date: formatLabel(b, resolution),
+      _chatCount: chatsByBucket.get(key)?.size ?? 0,
+    };
     for (const d of domains) {
       point[d] = hits?.get(d.toLowerCase()) || 0;
     }
