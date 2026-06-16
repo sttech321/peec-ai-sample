@@ -766,6 +766,7 @@ export default function PromptsComparisonClient({
   const [pageSize, setPageSize] = useState(50);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedTopicId, setSelectedTopicId] = useState<string | "all" | "none">("all");
+  const [filterBarTopicIds, setFilterBarTopicIds] = useState<string[] | null>(null); // null = all
   const [selectedTagIds, setSelectedTagIds] = useState<string[] | null>(null); // null = all
   const [selectedModels, setSelectedModels] = useState<string[]>([...ALL_ENGINES]);
   const [dateRange, setDateRange] = useState<DateRange>(() => makeDateRange("7"));
@@ -1052,7 +1053,9 @@ export default function PromptsComparisonClient({
       result = result.filter((p) => p.query.toLowerCase().includes(q));
     }
 
-    if (selectedTopicId === "none") {
+    if (filterBarTopicIds !== null && filterBarTopicIds.length > 0) {
+      result = result.filter((p) => !!p.topicId && filterBarTopicIds.includes(p.topicId));
+    } else if (selectedTopicId === "none") {
       result = result.filter((p) => !p.topicName);
     } else if (selectedTopicId !== "all") {
       result = result.filter((p) => p.topicId === selectedTopicId);
@@ -1134,6 +1137,7 @@ export default function PromptsComparisonClient({
     prompts,
     search,
     selectedTopicId,
+    filterBarTopicIds,
     selectedTagIds,
     tagOp,
     selectedBrandIds,
@@ -1189,6 +1193,17 @@ export default function PromptsComparisonClient({
 
   const toggleTagFilter = (id: string) => {
     setSelectedTagIds((curr) => {
+      if (curr === null) return [id];
+      if (curr.includes(id)) {
+        const next = curr.filter((t) => t !== id);
+        return next.length === 0 ? null : next;
+      }
+      return [...curr, id];
+    });
+  };
+
+  const toggleFilterBarTopic = (id: string) => {
+    setFilterBarTopicIds((curr) => {
       if (curr === null) return [id];
       if (curr.includes(id)) {
         const next = curr.filter((t) => t !== id);
@@ -1402,6 +1417,46 @@ export default function PromptsComparisonClient({
             </div>
           )}
         </Dropdown>
+
+        {topics.length > 0 && (
+          <Dropdown
+            width={240}
+            trigger={(open) => (
+              <>
+                <TagIcon size={13} />
+                <span>
+                  {filterBarTopicIds === null
+                    ? "All Topics"
+                    : filterBarTopicIds.length === 1
+                    ? topics.find((t) => t.id === filterBarTopicIds[0])?.name ?? "1 Topic"
+                    : `${filterBarTopicIds.length} Topics`}
+                </span>
+                <ChevronDown size={12} className={open ? "pp-rotate" : ""} />
+              </>
+            )}
+          >
+            {() => (
+              <div className="pp-dd-section">
+                <button
+                  className={`pp-dd-item ${filterBarTopicIds === null ? "pp-dd-item-active" : ""}`}
+                  onClick={() => setFilterBarTopicIds(null)}
+                >
+                  All Topics
+                </button>
+                {topics.map((t) => (
+                  <label key={t.id} className="pp-dd-check-item">
+                    <input
+                      type="checkbox"
+                      checked={filterBarTopicIds?.includes(t.id) ?? false}
+                      onChange={() => toggleFilterBarTopic(t.id)}
+                    />
+                    <span className="pp-dd-check-label">{t.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </Dropdown>
+        )}
       </div>
 
       {/* ── Main two-column layout ────────────────────────────────────── */}
