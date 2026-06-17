@@ -211,6 +211,13 @@ export default function OverviewClient({
     if (vis >= 50) return "pd-vis-strong";
     return "";
   }
+  // SoV benchmark: >=25%=leadership/green, 10-25%=competitive/neutral, <10%=trailing/amber, 0%=critical/red
+  function sovBenchmarkClass(sov: number): string {
+    if (sov === 0)  return "pd-vis-critical";
+    if (sov < 10)   return "pd-vis-weak";
+    if (sov >= 25)  return "pd-vis-strong";
+    return "";
+  }
 
   function formatTimeAgo(iso: string): string {
     const diffMs = Date.now() - new Date(iso).getTime();
@@ -1224,7 +1231,7 @@ export default function OverviewClient({
                         {/* SOV */}
                         <td>
                           <span className="pd-metric-with-delta">
-                            {showValue && <span className="pd-vis-value">{sov}%</span>}
+                            {showValue && <span className={`pd-vis-value ${sovBenchmarkClass(sov)}`}>{sov}%</span>}
                             {deltaEl(sovDelta, n => `${n}%`)}
                           </span>
                         </td>
@@ -1361,7 +1368,7 @@ export default function OverviewClient({
                           {deltaEl(visDelta, n => `${n}%`)}
                         </span></td>
                         <td><span className="pd-metric-with-delta">
-                          {showValue && <span className="pd-vis-value">{sov}%</span>}
+                          {showValue && <span className={`pd-vis-value ${sovBenchmarkClass(sov)}`}>{sov}%</span>}
                           {deltaEl(sovDelta, n => `${n}%`)}
                         </span></td>
                         <td><span className="pd-sentiment-cell">

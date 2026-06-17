@@ -198,6 +198,11 @@
 .rk-metric { font-variant-numeric: tabular-nums; font-weight: 500; color: #111827; margin-right: 4px; }
 .rk-na     { color: #d1d5db; }
 
+/* Benchmark colours */
+.rk-metric--critical { color: #dc2626 !important; font-weight: 700; }
+.rk-metric--weak     { color: #d97706 !important; font-weight: 700; }
+.rk-metric--strong   { color: #16a34a !important; font-weight: 700; }
+
 .rk-delta         { font-size: 11px; font-variant-numeric: tabular-nums; }
 .rk-delta--pos    { color: #10b981; }
 .rk-delta--neg    { color: #ef4444; }
