@@ -870,6 +870,121 @@
 .pd-trend-down { color: #ef4444; font-size: 10px; font-weight: 700; }
 .pd-trend-flat { color: #94a3b8; font-size: 10px; }
 
+/* ── Visibility benchmark colors (docs: 0%=critical/red, <20%=weak/amber, >=50%=strong/green) */
+.pd-vis-critical { color: #dc2626 !important; font-weight: 700; }
+.pd-vis-weak     { color: #d97706 !important; font-weight: 700; }
+.pd-vis-strong   { color: #16a34a !important; font-weight: 700; }
+
+/* ── Brand cell expand chevron ───────────────────────────────────────────── */
+.pd-brand-cell--expandable {
+  cursor: pointer;
+  user-select: none;
+}
+.pd-brand-cell--expandable:hover { color: #4f46e5; }
+
+.pd-engine-chevron {
+  margin-left: auto;
+  font-size: 10px;
+  color: #94a3b8;
+  transition: transform 0.18s;
+  flex-shrink: 0;
+}
+.pd-engine-chevron--open {
+  transform: rotate(180deg);
+  color: #4f46e5;
+}
+
+/* ── Row expanded state ──────────────────────────────────────────────────── */
+.pd-row-expanded { background: #fafbff !important; }
+
+/* ── Engine breakdown inline panel ──────────────────────────────────────── */
+.pd-engine-breakdown-row td {
+  padding: 0 !important;
+  border-bottom: 1px solid #e5e7eb;
+}
+.pd-engine-breakdown {
+  padding: 12px 16px 14px;
+  background: #f8faff;
+  border-top: 1px solid #e0e7ff;
+}
+.pd-engine-breakdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.pd-engine-breakdown-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #4f46e5;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.pd-engine-breakdown-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: #94a3b8;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.pd-engine-breakdown-close:hover { color: #374151; background: #e5e7eb; }
+.pd-engine-breakdown-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  padding: 4px 0;
+}
+.pd-engine-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.pd-engine-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pd-engine-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #374151;
+  font-weight: 500;
+  width: 110px;
+  flex-shrink: 0;
+}
+.pd-engine-bar-track {
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.pd-engine-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+.pd-engine-vis-pct {
+  font-size: 12px;
+  font-weight: 700;
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+  color: #111827;
+}
+.pd-engine-chats {
+  font-size: 11px;
+  color: #9ca3af;
+  width: 70px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
 /* ── Domains Section ─────────────────────────────────────────────────────── */
 .pd-domains-header-row {
   display: flex;
