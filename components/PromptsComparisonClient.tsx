@@ -760,6 +760,7 @@ export default function PromptsComparisonClient({
   // Or = match prompts with ANY selected tag; And = match ALL selected tags
   const [tagOp, setTagOp] = useState<"or" | "and">("or");
   const [search, setSearch] = useState("");
+  const [topicSearch, setTopicSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"active" | "suggested" | "archived">("active");
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -1476,28 +1477,36 @@ export default function PromptsComparisonClient({
           </button>
           <div className="pp-topics-search">
             <Search size={12} className="pp-topics-search-icon" />
-            <input placeholder="Search" />
+            <input
+              placeholder="Search"
+              value={topicSearch}
+              onChange={(e) => setTopicSearch(e.target.value)}
+            />
           </div>
           <ul className="pp-topics-list">
-            <li>
-              <button
-                className={`pp-topic-item ${selectedTopicId === "all" ? "pp-topic-item-active" : ""}`}
-                onClick={() => setSelectedTopicId("all")}
-              >
-                <span>All topics</span>
-                <span className="pp-topic-count">{totalCount}</span>
-              </button>
-            </li>
-            <li>
-              <button
-                className={`pp-topic-item ${selectedTopicId === "none" ? "pp-topic-item-active" : ""}`}
-                onClick={() => setSelectedTopicId("none")}
-              >
-                <span>No topic</span>
-                <span className="pp-topic-count">{noTopicCount}</span>
-              </button>
-            </li>
-            {topics.map((t) => (
+            {!topicSearch.trim() && (
+              <>
+                <li>
+                  <button
+                    className={`pp-topic-item ${selectedTopicId === "all" ? "pp-topic-item-active" : ""}`}
+                    onClick={() => setSelectedTopicId("all")}
+                  >
+                    <span>All topics</span>
+                    <span className="pp-topic-count">{totalCount}</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    className={`pp-topic-item ${selectedTopicId === "none" ? "pp-topic-item-active" : ""}`}
+                    onClick={() => setSelectedTopicId("none")}
+                  >
+                    <span>No topic</span>
+                    <span className="pp-topic-count">{noTopicCount}</span>
+                  </button>
+                </li>
+              </>
+            )}
+            {topics.filter((t) => !topicSearch.trim() || t.name.toLowerCase().includes(topicSearch.toLowerCase())).map((t) => (
               <li key={t.id} className="pp-topic-li">
                 {editingTopicId === t.id ? (
                   /* ── Inline rename input ─────────────────────────────── */

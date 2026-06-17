@@ -713,10 +713,6 @@ export default function OverviewClient({
           <span className="pd-breadcrumb-sep">&gt;</span>
           <span className="pd-breadcrumb-current">Overview</span>
         </div>
-        <button className="pd-settings-btn">
-          <Settings size={14} />
-          Settings
-        </button>
       </div>
 
       <div className="pd-section">
