@@ -1,19 +1,18 @@
-import DashboardLayout from "../../components/DashboardLayout";
-import DomainsWrapper from "../../components/DomainsWrapper";
-import { db } from "../../db";
-import { projects, brands, brandProfiles } from "../../db/schema";
+import DomainsWrapper from "../../../components/DomainsWrapper";
+import { db } from "../../../db";
+import { projects, brands, brandProfiles } from "../../../db/schema";
 import { eq, and } from "drizzle-orm";
-import { getActiveProjectId } from "../../lib/project-context";
-import { fetchChatFacts, fetchProjectBrands } from "../../lib/chat-facts-server";
-import { getPageFilterData } from "../../lib/page-filter-data";
-import { addBrand, getDomainTypeOverrides, updateDomainTypeOverride, getDomainBookmarks, updateDomainBookmark } from "../actions/brands";
-import { fetchChatMaps } from "../../lib/fetch-chat-maps";
-import type { BrandProfile } from "../../lib/brand-profile-types";
-import "../prompts/[id]/prompt-detail.css";
-import "../prompts/prompts-comparison.css";
-import "../insights/insights.css";
-import "../urls/urls.css";
-import "./domains.css";
+import { getActiveProjectId } from "../../../lib/project-context";
+import { fetchChatFacts, fetchProjectBrands } from "../../../lib/chat-facts-server";
+import { getPageFilterData } from "../../../lib/page-filter-data";
+import { addBrand, getDomainTypeOverrides, updateDomainTypeOverride, getDomainBookmarks, updateDomainBookmark } from "../../actions/brands";
+import { fetchChatMaps } from "../../../lib/fetch-chat-maps";
+import type { BrandProfile } from "../../../lib/brand-profile-types";
+import "../../prompts/[id]/prompt-detail.css";
+import "../../prompts/prompts-comparison.css";
+import "../../insights/insights.css";
+import "../../urls/urls.css";
+import "../../domains/domains.css";
 
 export default async function DomainsPage() {
   const activeProjectId = await getActiveProjectId();
@@ -67,29 +66,26 @@ export default async function DomainsPage() {
     fetchChatMaps(activeProjectId),
   ]);
 
-  // Derive available engines from actual data (dynamic, not hardcoded)
   const availableEngines = [...new Set(chatFacts.map((c) => c.engine))].sort();
 
   return (
-    <DashboardLayout currentPath="/domains">
-      <DomainsWrapper
-        projectName={projectName}
-        chatFacts={chatFacts}
-        projectBrands={projectBrands}
-        filterBrands={filterData.projectBrands}
-        availableTags={filterData.availableTags}
-        availableTopics={filterData.availableTopics}
-        chatTopicMap={chatMaps.chatTopicMap}
-        chatTagsMap={chatMaps.chatTagsMap}
-        ownDomains={ownDomains}
-        competitorDomains={competitorDomains}
-        addBrandAction={addBrand}
-        availableEngines={availableEngines}
-        initialDomainTypeOverrides={domainTypeOverrides}
-        updateDomainTypeOverrideAction={updateDomainTypeOverride}
-        initialDomainBookmarks={domainBookmarks}
-        updateDomainBookmarkAction={updateDomainBookmark}
-      />
-    </DashboardLayout>
+    <DomainsWrapper
+      projectName={projectName}
+      chatFacts={chatFacts}
+      projectBrands={projectBrands}
+      filterBrands={filterData.projectBrands}
+      availableTags={filterData.availableTags}
+      availableTopics={filterData.availableTopics}
+      chatTopicMap={chatMaps.chatTopicMap}
+      chatTagsMap={chatMaps.chatTagsMap}
+      ownDomains={ownDomains}
+      competitorDomains={competitorDomains}
+      addBrandAction={addBrand}
+      availableEngines={availableEngines}
+      initialDomainTypeOverrides={domainTypeOverrides}
+      updateDomainTypeOverrideAction={updateDomainTypeOverride}
+      initialDomainBookmarks={domainBookmarks}
+      updateDomainBookmarkAction={updateDomainBookmark}
+    />
   );
 }
