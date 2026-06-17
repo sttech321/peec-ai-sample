@@ -102,17 +102,64 @@ export const COMMON_TIMEZONES = [
   "Pacific/Auckland",
 ];
 
+// Default IANA time zone for each selectable country (keyed by COUNTRIES code).
+// Used to auto-fill the Time zone when a Location is picked in setup.
+export const COUNTRY_TIMEZONES: Record<string, string> = {
+  US: "America/New_York",
+  CA: "America/Toronto",
+  GB: "Europe/London",
+  DE: "Europe/Berlin",
+  FR: "Europe/Paris",
+  ES: "Europe/Madrid",
+  IT: "Europe/Rome",
+  NL: "Europe/Amsterdam",
+  AU: "Australia/Sydney",
+  IN: "Asia/Calcutta",
+  JP: "Asia/Tokyo",
+  SG: "Asia/Singapore",
+  BR: "America/Sao_Paulo",
+  MX: "America/Mexico_City",
+  AE: "Asia/Dubai",
+  CN: "Asia/Shanghai",
+  ID: "Asia/Jakarta",
+  KR: "Asia/Seoul",
+  SE: "Europe/Stockholm",
+  IE: "Europe/Dublin",
+};
+
+/** Resolve the default time zone for a country *name* (as stored in `location`).
+ *  Returns null when the country isn't recognised so callers can leave the
+ *  current time zone untouched. */
+export function timezoneForCountryName(name: string): string | null {
+  const country = COUNTRIES.find((c) => c.name === name);
+  return country ? (COUNTRY_TIMEZONES[country.code] ?? null) : null;
+}
+
 export function tzOffset(tz: string): string {
   try {
+    // "longOffset" → "GMT+05:30" (zero-padded, with colon). Matches Peec's "UTC+05:30".
     const fmt = new Intl.DateTimeFormat("en-US", {
       timeZone: tz,
-      timeZoneName: "shortOffset",
+      timeZoneName: "longOffset",
     });
     const parts = fmt.formatToParts(new Date());
     const offset = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
-    return offset.replace("GMT", "UTC");
+    return offset.replace("GMT", "UTC") || "UTC";
   } catch {
     return "";
+  }
+}
+
+/** Friendly time-zone label, e.g. "Asia/Calcutta" → "India Standard Time (Calcutta)". */
+export function tzLabel(tz: string): string {
+  const city = tz.split("/").pop()?.replace(/_/g, " ") ?? tz;
+  try {
+    const long = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "long" })
+      .formatToParts(new Date())
+      .find((p) => p.type === "timeZoneName")?.value ?? "";
+    return long ? `${long} (${city})` : city;
+  } catch {
+    return city;
   }
 }
 
