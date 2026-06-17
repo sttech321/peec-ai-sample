@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import {
-  ChevronDown, ChevronUp, RotateCcw,
+  ChevronDown, ChevronUp, RotateCcw, ChevronRight,
 } from "lucide-react";
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
 import EngineIcon from "./EngineIcon";
@@ -34,6 +34,9 @@ interface Props {
   chatFacts: ChatFact[];
   projectBrands: ProjectBrand[];
   availableTags: AvailableTag[];
+  /** When present, the page is reached from a prompt — show a breadcrumb
+   *  (Prompts › [query] › Ranking) instead of the plain "Ranking" title. */
+  promptCrumb?: { id: string; query: string };
 }
 
 type SortCol = "rank" | "visibility" | "sov" | "sentiment" | "position";
@@ -65,7 +68,7 @@ function DeltaNum({ v, invert }: { v: number; invert?: boolean }) {
   return <span className={`rk-delta ${good ? "rk-delta--pos" : "rk-delta--neg"}`}>{v > 0 ? "+" : ""}{v}</span>;
 }
 
-export default function RankingClient({ chatFacts, projectBrands, availableTags }: Props) {
+export default function RankingClient({ chatFacts, projectBrands, availableTags, promptCrumb }: Props) {
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => makePresetRange("7"));
   const [selectedModels, setSelectedModels] = useState<string[]>([...DEFAULT_ENGINES]);
   const [modelOpen, setModelOpen] = useState(false);
@@ -155,8 +158,20 @@ export default function RankingClient({ chatFacts, projectBrands, availableTags 
   return (
     <div className="rk-page">
       {/* Header */}
-      <div className="rk-header">
-        <h1 className="rk-title">Ranking</h1>
+      <div className={`rk-header${promptCrumb ? " rk-header--crumb" : ""}`}>
+        {promptCrumb ? (
+          <nav className="rk-breadcrumb">
+            <a href="/prompts" className="rk-breadcrumb-link">Prompts</a>
+            <span className="rk-breadcrumb-sep"><ChevronRight size={16} /></span>
+            <a href={`/prompts/${promptCrumb.id}`} className="rk-breadcrumb-link">
+              {promptCrumb.query}
+            </a>
+            <span className="rk-breadcrumb-sep"><ChevronRight size={16} /></span>
+            <h1 className="rk-breadcrumb-current">Ranking</h1>
+          </nav>
+        ) : (
+          <h1 className="rk-title">Ranking</h1>
+        )}
       </div>
 
       {/* Filter bar */}

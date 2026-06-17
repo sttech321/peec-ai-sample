@@ -53,8 +53,9 @@ export default async function DashboardLayout({
           {/* General */}
           <div className="sidebar-section-label">General</div>
           <NavItem href="/" icon={<LayoutDashboard size={16} />} label="Overview" active={currentPath === "/"} />
-          {/* Overview sub-items — shown when on overview, ranking, or chats */}
-          {(currentPath === "/" || currentPath === "/ranking" || currentPath === "/chats") && (
+          {/* Overview sub-items — hidden on the Overview page; revealed once the
+              "View all rankings" button navigates to /ranking (or /chats). */}
+          {(currentPath === "/ranking" || currentPath === "/chats") && (
             <div className="sidebar-sub-group">
               <SubNavItem href="/ranking" icon={<BarChart2 size={13} />} label="Ranking" active={currentPath === "/ranking"} />
               <SubNavItem href="/chats"   icon={<MessagesSquare size={13} />} label="Chats" active={currentPath === "/chats"} />
