@@ -16,7 +16,9 @@ function NavItem({ href, icon, label, dot, suffix }: {
   suffix?: string;
 }) {
   const pathname = usePathname();
-  const active = pathname === href;
+  // Exact match for the home route; parent-prefix match for the rest so nested
+  // pages (e.g. /prompts/[id], /domains/[slug]) keep their top-level item active.
+  const active = href === "/" ? pathname === "/" : (pathname === href || pathname.startsWith(href + "/"));
   return (
     <NextLink
       href={href}
@@ -73,7 +75,9 @@ export function SidebarNav({ isOwner, canManageTeam }: {
       {/* General */}
       <div className="sidebar-section-label">General</div>
       <NavItem href="/" icon={<LayoutDashboard size={16} />} label="Overview" />
-      {(pathname === "/" || pathname === "/ranking" || pathname === "/chats") && (
+      {/* Overview sub-items — hidden on the Overview page; revealed once the
+          "Show all" button in Top Brands navigates to /ranking (or /chats). */}
+      {(pathname === "/ranking" || pathname === "/chats") && (
         <div className="sidebar-sub-group">
           <SubNavItem href="/ranking" icon={<BarChart2 size={13} />} label="Ranking" />
           <SubNavItem href="/chats" icon={<MessagesSquare size={13} />} label="Chats" />

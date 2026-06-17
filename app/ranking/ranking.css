@@ -20,6 +20,52 @@
   color: #111827;
 }
 
+/* ── Breadcrumb bar (shown when reached from a prompt) ───────────── */
+/* Mirrors Peec's top breadcrumb: dark text items separated by chevrons,
+   links underline on hover, each item truncates at a max width. */
+.rk-header--crumb {
+  padding: 0;
+  min-height: 48px;
+  border-bottom: 1px solid var(--color-border, #ededed);
+}
+
+.rk-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 14px;
+  color: #171717;
+}
+
+.rk-breadcrumb-link {
+  color: #171717;
+  text-decoration: none;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rk-breadcrumb-link:hover { text-decoration: underline; }
+
+.rk-breadcrumb-sep {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: rgba(23, 23, 23, 0.6);
+}
+
+.rk-breadcrumb-current {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 400;
+  color: #171717;
+}
+
 /* ── Filter bar ──────────────────────────────────────────────────── */
 .rk-filterbar {
   display: flex;

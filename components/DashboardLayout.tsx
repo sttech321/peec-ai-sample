@@ -1,18 +1,19 @@
 import { Gift } from "lucide-react";
 import ProjectSwitcher from "./ProjectSwitcher";
 import InviteProjectsDropdown from "./InviteProjectsDropdown";
+import { SidebarNav } from "./SidebarNav";
 import { getAllProjects, getActiveProject, getInvitedProjects, getCurrentRole } from "../lib/project-context";
 import { switchProject, createProject, switchToInvitedWorkspace, switchToOwnWorkspace } from "../app/projects/actions";
 import { canManageWorkspace, canManageMembers } from "../lib/permissions";
-import { SidebarNav } from "./SidebarNav";
 import "../app/globals-sidebar.css";
 
 export default async function DashboardLayout({
   children,
-  currentPath: _currentPath,
   headerAction,
 }: {
   children: React.ReactNode;
+  /** Accepted for backward-compat with pages that still pass it; the sidebar
+   *  (SidebarNav) now derives the active route from usePathname() itself. */
   currentPath?: string;
   headerAction?: React.ReactNode;
 }) {
@@ -42,7 +43,7 @@ export default async function DashboardLayout({
           />
         </div>
 
-        {/* Scrollable Nav — client component determines active state via usePathname() */}
+        {/* Scrollable Nav — client component; derives active route via usePathname */}
         <SidebarNav isOwner={isOwner} canManageTeam={canManageTeam} />
 
         {/* Setup Progress */}

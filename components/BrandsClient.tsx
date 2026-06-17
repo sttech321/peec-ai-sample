@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import ReactDOM from "react-dom";
 import BrandColorPicker from "./BrandColorPicker";
 import { useRouter } from "next/navigation";
 import {
@@ -141,6 +142,20 @@ function BrandRow({
   const paletteColor = colorFromId(brand.id);
   const color = brand.color ?? paletteColor;
   const isAnyEditing = isNameEditing || isAliasEditing || isDomainEditing;
+  // Position for the delete popover, captured from the "more" button click so it
+  // can be rendered in a fixed-position portal (escapes the table's overflow clip).
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  const handleMenuClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const POP_W = 204;
+    const top  = rect.bottom + 4;
+    const left = Math.max(8, Math.min(rect.right - POP_W, window.innerWidth - POP_W - 8));
+    setMenuPos({ top, left });
+    onMenu(brand.id);
+  };
+
   return (
     <tr className={`bp-row${isAnyEditing ? " bp-row--editing" : ""}`}>
       <td className="bp-td bp-td--color">
@@ -171,20 +186,26 @@ function BrandRow({
       <td className="bp-td bp-td--actions">
         <button
           className="bp-more-btn"
-          onClick={(e) => { e.stopPropagation(); onMenu(brand.id); }}
+          onClick={handleMenuClick}
         >
           <MoreHorizontal size={15} />
         </button>
-        {openMenu === brand.id && (
-          <div className="bp-popover" onClick={(e) => e.stopPropagation()}>
-            <p className="bp-popover-text">
-              Permanently delete this brand and all associated data.
-            </p>
-            <button className="bp-btn-delete" onClick={() => onDelete(brand.id)}>
-              Delete brand
-            </button>
-          </div>
-        )}
+        {openMenu === brand.id && menuPos && typeof document !== "undefined" &&
+          ReactDOM.createPortal(
+            <div
+              className="bp-popover"
+              style={{ position: "fixed", top: menuPos.top, left: menuPos.left, right: "auto", zIndex: 99999 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="bp-popover-text">
+                Permanently delete this brand and all associated data.
+              </p>
+              <button className="bp-btn-delete" onClick={() => onDelete(brand.id)}>
+                Delete brand
+              </button>
+            </div>,
+            document.body
+          )}
       </td>
     </tr>
   );

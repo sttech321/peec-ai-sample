@@ -1158,7 +1158,7 @@ export default function PromptDetailClient({
                     </div>
                   )}
                 </div>
-                <button className="pd-brands-action-btn" title="Refresh"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 480 480" fill="none" aria-hidden="true"><path d="M120 260.01v60C120 342.09 137.91 360 159.99 360h60" stroke="currentColor" strokeWidth="39.9" strokeLinecap="round" strokeLinejoin="round"/><path d="M260.01 120h60C342.09 120 360 137.91 360 159.99v60" stroke="currentColor" strokeWidth="39.9" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                <button className="pd-brands-action-btn" title="View all rankings" onClick={() => router.push(`/prompts/${prompt.id}/ranking`)}><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 480 480" fill="none" aria-hidden="true"><path d="M120 260.01v60C120 342.09 137.91 360 159.99 360h60" stroke="currentColor" strokeWidth="39.9" strokeLinecap="round" strokeLinejoin="round"/><path d="M260.01 120h60C342.09 120 360 137.91 360 159.99v60" stroke="currentColor" strokeWidth="39.9" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
               </div>
             </div>
 
