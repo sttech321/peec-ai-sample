@@ -1,9 +1,8 @@
-import DashboardLayout from "../../components/DashboardLayout";
-import PromptsComparisonClient from "../../components/PromptsComparisonClient";
-import { guessBrandDomain } from "../../lib/brand-domain";
-import { db } from "../../db";
-import { canEdit as canEditFn, canRunScans as canRunScansFn } from "../../lib/permissions";
-import { getCurrentRole } from "../../lib/project-context";
+import PromptsComparisonClient from "../../../components/PromptsComparisonClient";
+import { guessBrandDomain } from "../../../lib/brand-domain";
+import { db } from "../../../db";
+import { canEdit as canEditFn, canRunScans as canRunScansFn } from "../../../lib/permissions";
+import { getCurrentRole } from "../../../lib/project-context";
 import {
   prompts,
   topics,
@@ -14,7 +13,7 @@ import {
   tags,
   promptTags,
   projects,
-} from "../../db/schema";
+} from "../../../db/schema";
 import {
   addPrompt,
   addPromptsBulk,
@@ -30,7 +29,7 @@ import {
   batchAssignTopic,
   batchSetActive,
   batchDeletePrompts,
-} from "./actions";
+} from "../../prompts/actions";
 import {
   getPromptSuggestions,
   generatePromptSuggestions,
@@ -38,11 +37,11 @@ import {
   rejectSuggestion,
   acceptAllSuggestions,
   rejectAllSuggestions,
-} from "./suggestions-actions";
-import { addBrand, markBrandAsOwn } from "../actions/brands";
+} from "../../prompts/suggestions-actions";
+import { addBrand, markBrandAsOwn } from "../../actions/brands";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
-import { getActiveProjectId } from "../../lib/project-context";
-import "./prompts-comparison.css";
+import { getActiveProjectId } from "../../../lib/project-context";
+import "../../prompts/prompts-comparison.css";
 
 export default async function PromptsPage() {
   const role = await getCurrentRole();
@@ -92,9 +91,6 @@ export default async function PromptsPage() {
     .select({
       promptId: chats.promptId,
       totalMentions: sql<number>`count(${brandMentions.id})`,
-      // Visibility is "chats with at least one brand mention / total chats"
-      // (per docs/handoff/02-metrics-definitions.md), so we need the distinct
-      // chat count here — NOT the raw mention count.
       chatsWithMentions: sql<number>`count(distinct ${chats.id})`,
       avgSentiment: sql<number>`avg(${brandMentions.sentiment})`,
       avgPosition: sql<number>`avg(${brandMentions.position})`,
@@ -111,9 +107,6 @@ export default async function PromptsPage() {
   mentionsRaw.forEach((m) => mentionsMap.set(m.promptId, m));
 
   // ── 2b. Windowed metrics for real trend deltas ─────────────────────────────
-  // Per handoff (peec-clone-handoff/02-metrics-definitions.md + 07-gotchas):
-  // 7-day rolling beats daily noise. Trend = current 7-day window − previous
-  // 7-day window. When either window has no data, trend = 0.
   const now = new Date();
   const recentStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const previousStart = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
@@ -204,7 +197,7 @@ export default async function PromptsPage() {
     return Math.round(n * 10) / 10;
   }
 
-  // ── 3. Top brands per prompt (for Mentions column favicons) ────────────────
+  // ── 3. Top brands per prompt ────────────────────────────────────────────────
   const brandMentionsPerPrompt = await db
     .select({
       promptId: chats.promptId,
@@ -270,7 +263,7 @@ export default async function PromptsPage() {
     tagsByPrompt.set(t.promptId, arr);
   }
 
-  // ── 4b. All brands in the project (for brand filter dropdown) ─────────────
+  // ── 4b. All brands in the project ─────────────────────────────────────────
   const projectBrandsRaw = await db
     .select({
       id: brands.id,
@@ -291,9 +284,7 @@ export default async function PromptsPage() {
       : guessBrandDomain(String(b.name)),
   }));
 
-  // ── 4c. Feature rates per prompt (% of chats with each feature flag) ────────
-  // Wrapped in try/catch — the `features` column requires a DB migration
-  // (npx drizzle-kit push). Until then, all feature rates gracefully return 0%.
+  // ── 4c. Feature rates per prompt ────────────────────────────────────────────
   let featureRatesRaw: Array<{
     promptId: string;
     totalChats: number;
@@ -338,7 +329,7 @@ export default async function PromptsPage() {
     });
   }
 
-  // ── 4d. Branding + Intent: computed from query text ───────────────────────
+  // ── 4d. Branding + Intent ─────────────────────────────────────────────────
   const trackedBrandNames = projectBrandsRaw.map((b) => b.name.toLowerCase());
   function computeBranding(query: string): "branded" | "non-branded" {
     const lq = query.toLowerCase();
@@ -352,7 +343,7 @@ export default async function PromptsPage() {
     return "commercial";
   }
 
-  // ── 5. All tags in the project (for filter dropdown) ───────────────────────
+  // ── 5. All tags in the project ─────────────────────────────────────────────
   const allTagsRaw = await db
     .select({ id: tags.id, name: tags.name, color: tags.color })
     .from(tags)
@@ -398,10 +389,6 @@ export default async function PromptsPage() {
     const avgPosition = Number(mentions.avgPosition || 0);
     const engines = metrics.engines ? (metrics.engines as string).split(",") : [];
 
-    // Visibility = chats with ≥1 brand mention / total chats (per
-    // docs/handoff/02-metrics-definitions.md). The previous formula divided
-    // raw mention count by chats and capped at 100, which made every prompt
-    // with multi-brand responses read 100%.
     const visibility =
       totalChats > 0
         ? Math.round((chatsWithMentions / totalChats) * 100)
@@ -418,8 +405,6 @@ export default async function PromptsPage() {
     const recent = recentMap.get(p.id);
     const previous = previousMap.get(p.id);
 
-    // Trend = recent 7-day window − previous 7-day window. Zero when either
-    // window has no data so the chip doesn't flicker on a fresh project.
     const visibilityTrend =
       recent && previous && previous.totalChats > 0 && recent.totalChats > 0
         ? round1(visibilityPct(recent) - visibilityPct(previous))
@@ -430,8 +415,6 @@ export default async function PromptsPage() {
         ? round1(recent.avgSentiment - previous.avgSentiment)
         : 0;
 
-    // Position: lower is better. Keep the raw delta — UI decides whether
-    // a negative delta is "good" (improvement) or "bad".
     const positionTrend =
       recent?.avgPosition != null && previous?.avgPosition != null
         ? round1(recent.avgPosition - previous.avgPosition)
@@ -481,10 +464,8 @@ export default async function PromptsPage() {
       sovTrend,
       location: (p.location || "US").toUpperCase(),
       isActive: p.isActive ?? true,
-      // Branding + Intent (computed from query text)
       branding: computeBranding(p.query),
       intentType: computeIntent(p.query),
-      // Feature rates (% of chats where each AI feature was present)
       webSearch:         featureRatesMap.get(p.id)?.webSearch         ?? 0,
       shopping:          featureRatesMap.get(p.id)?.shopping          ?? 0,
       ads:               featureRatesMap.get(p.id)?.ads               ?? 0,
@@ -493,13 +474,12 @@ export default async function PromptsPage() {
     };
   });
 
-  // Sort by visibility descending for default ranking
   promptMetrics.sort((a, b) => b.visibility - a.visibility);
   promptMetrics.forEach((p, idx) => {
     p.rank = idx + 1;
   });
 
-  // ── 8. Aggregate metrics across all prompts ────────────────────────────────
+  // ── 8. Aggregate metrics ───────────────────────────────────────────────────
   const visibleWithData = promptMetrics.filter((p) => p.visibility > 0 || p.sentiment > 0);
   const aggVisibility =
     promptMetrics.length > 0
@@ -524,11 +504,7 @@ export default async function PromptsPage() {
         ) / 10
       : 0;
 
-  // ── 9. Setup-state hints (banner inputs) ──────────────────────────────────
-  // The dashboard reads from `brand_mentions`, which only fills when an
-  // extracted brand matches a row in `brands` for this project. When the
-  // metrics column is all 0%, the user usually just hasn't set up brands —
-  // surface that loudly instead of silently rendering zeroes.
+  // ── 9. Setup-state hints ──────────────────────────────────────────────────
   const [brandCountRow] = await db
     .select({
       total: sql<number>`count(*)`,
@@ -577,68 +553,43 @@ export default async function PromptsPage() {
   const promptSuggestionsList = await getPromptSuggestions();
 
   return (
-    <DashboardLayout currentPath="/prompts">
-      <PromptsComparisonClient
-        prompts={promptMetrics}
-        totalCount={promptMetrics.length}
-        topics={topicsList}
-        availableTags={allTags}
-        aggregates={{
-          visibility: aggVisibility,
-          sentiment: aggSentiment,
-          position: aggPosition,
-        }}
-        projectName={projectName}
-        availableBrands={projectBrands}
-        setupHints={setupHints}
-        suggestions={promptSuggestionsList}
-        addPromptAction={addPrompt}
-        addPromptsBulkAction={addPromptsBulk}
-        addPromptsFromCsvAction={addPromptsFromCsv}
-        addPromptsFromParsedAction={addPromptsFromParsed}
-        runNowAction={runNow}
-        addBrandAction={addBrand}
-        markBrandAsOwnAction={markBrandAsOwn}
-        createTopicAction={createTopic}
-        renameTopicAction={renameTopic}
-        deleteTopicAction={deleteTopic}
-        assignTagAction={assignTagToPromptByName}
-        removeTagAction={removeTagFromPrompt}
-        batchAssignTagAction={batchAssignTag}
-        batchAssignTopicAction={batchAssignTopic}
-        batchSetActiveAction={batchSetActive}
-        batchDeleteAction={batchDeletePrompts}
-        generateSuggestionsAction={generatePromptSuggestions}
-        acceptSuggestionAction={acceptSuggestion}
-        rejectSuggestionAction={rejectSuggestion}
-        acceptAllSuggestionsAction={acceptAllSuggestions}
-        rejectAllSuggestionsAction={rejectAllSuggestions}
-        canEdit={canEdit}
-        canRunScans={canRunScans}
-      />
-    </DashboardLayout>
+    <PromptsComparisonClient
+      prompts={promptMetrics}
+      totalCount={promptMetrics.length}
+      topics={topicsList}
+      availableTags={allTags}
+      aggregates={{
+        visibility: aggVisibility,
+        sentiment: aggSentiment,
+        position: aggPosition,
+      }}
+      projectName={projectName}
+      availableBrands={projectBrands}
+      setupHints={setupHints}
+      suggestions={promptSuggestionsList}
+      addPromptAction={addPrompt}
+      addPromptsBulkAction={addPromptsBulk}
+      addPromptsFromCsvAction={addPromptsFromCsv}
+      addPromptsFromParsedAction={addPromptsFromParsed}
+      runNowAction={runNow}
+      addBrandAction={addBrand}
+      markBrandAsOwnAction={markBrandAsOwn}
+      createTopicAction={createTopic}
+      renameTopicAction={renameTopic}
+      deleteTopicAction={deleteTopic}
+      assignTagAction={assignTagToPromptByName}
+      removeTagAction={removeTagFromPrompt}
+      batchAssignTagAction={batchAssignTag}
+      batchAssignTopicAction={batchAssignTopic}
+      batchSetActiveAction={batchSetActive}
+      batchDeleteAction={batchDeletePrompts}
+      generateSuggestionsAction={generatePromptSuggestions}
+      acceptSuggestionAction={acceptSuggestion}
+      rejectSuggestionAction={rejectSuggestion}
+      acceptAllSuggestionsAction={acceptAllSuggestions}
+      rejectAllSuggestionsAction={rejectAllSuggestions}
+      canEdit={canEdit}
+      canRunScans={canRunScans}
+    />
   );
-}
-
-
-const TAG_PALETTE = [
-  "gray",
-  "blue",
-  "indigo",
-  "violet",
-  "purple",
-  "pink",
-  "emerald",
-  "teal",
-  "cyan",
-  "amber",
-  "orange",
-];
-
-function deriveTagColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  }
-  return TAG_PALETTE[hash % TAG_PALETTE.length];
 }
