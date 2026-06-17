@@ -345,11 +345,11 @@ export default function RankingClient({
                     </div>
                   </td>
                   <td className="rk-td rk-td--metric">
-                    <span className={`rk-metric ${visBenchmarkClass(row.vis)}`}>{row.vis}%</span>
+                    <span className="rk-metric">{row.vis}%</span>
                     <Delta v={row.visDelta} />
                   </td>
                   <td className="rk-td rk-td--metric">
-                    <span className={`rk-metric ${sovBenchmarkClass(row.sov)}`}>{row.sov}%</span>
+                    <span className="rk-metric">{row.sov}%</span>
                     <Delta v={row.sovDelta} />
                   </td>
                   <td className="rk-td rk-td--metric">

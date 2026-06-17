@@ -2895,12 +2895,12 @@
 /* ── Delta indicators (Brands table) ──────────────────────────────── */
 .pd-th-num { text-align: right !important; }
 .pd-td-num { text-align: right; white-space: nowrap; }
+.pd-td-metric { white-space: nowrap; }
 
 .pd-delta {
   display: inline-block;
   font-size: 10px;
   font-weight: 600;
-  margin-left: 4px;
 }
 .pd-delta-up   { color: #16a34a; }
 .pd-delta-down { color: #dc2626; }

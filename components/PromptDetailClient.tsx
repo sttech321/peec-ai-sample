@@ -85,10 +85,12 @@ function volumeLevel(tier: string): number {
   return VOLUME_TIER_LEVEL[tier] ?? 2;
 }
 
-function formatDelta(diff: number, suffix = "%"): { text: string; cls: "up" | "down" | "flat" } {
-  if (!isFinite(diff) || Math.abs(diff) < 0.05) return { text: `0${suffix}`, cls: "flat" };
-  const sign = diff > 0 ? "+" : "";
-  return { text: `${sign}${diff.toFixed(1)}${suffix}`, cls: diff > 0 ? "up" : "down" };
+function formatDelta(diff: number, suffix = "%"): { text: string; cls: "up" | "down" } | null {
+  if (!isFinite(diff)) return null;
+  const rounded = Math.round(diff);
+  if (rounded === 0) return null;
+  const sign = rounded > 0 ? "+" : "";
+  return { text: `${sign}${rounded}${suffix}`, cls: rounded > 0 ? "up" : "down" };
 }
 
 function formatTimeAgo(dateStr: string): string {
@@ -1273,22 +1275,30 @@ export default function PromptDetailClient({
                           <span className="pd-brand-you-badge">You</span>
                         )}
                       </td>
-                      <td className="pd-td-num">
-                        {showValue && <span className="pd-vis-value">{vis}%</span>}
-                        {showDelta && dateRange.preset !== "all" && <span className={`pd-delta pd-delta-${visDelta.cls}`}>{visDelta.text}</span>}
+                      <td className="pd-td-metric">
+                        <span className="pd-metric-with-delta">
+                          {showValue && <span className="pd-vis-value">{vis}%</span>}
+                          {showDelta && dateRange.preset !== "all" && visDelta && <span className={`pd-delta pd-delta-${visDelta.cls}`}>{visDelta.text}</span>}
+                        </span>
                       </td>
-                      <td className="pd-td-num">
-                        {showValue && <span className="pd-vis-value">{sov}%</span>}
-                        {showDelta && dateRange.preset !== "all" && <span className={`pd-delta pd-delta-${sovDelta.cls}`}>{sovDelta.text}</span>}
+                      <td className="pd-td-metric">
+                        <span className="pd-metric-with-delta">
+                          {showValue && <span className="pd-vis-value">{sov}%</span>}
+                          {showDelta && dateRange.preset !== "all" && sovDelta && <span className={`pd-delta pd-delta-${sovDelta.cls}`}>{sovDelta.text}</span>}
+                        </span>
                       </td>
-                      <td className="pd-td-num">
-                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", marginRight: 4 }} />
-                        {showValue && <span className="pd-vis-value">{cbSent > 0 ? cbSent.toFixed(0) : "—"}</span>}
-                        {showDelta && dateRange.preset !== "all" && cbSent > 0 && <span className={`pd-delta pd-delta-${sentDelta.cls}`}>{sentDelta.text}</span>}
+                      <td className="pd-td-metric">
+                        <span className="pd-metric-with-delta">
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
+                          {showValue && <span className="pd-vis-value">{cbSent > 0 ? cbSent.toFixed(0) : "—"}</span>}
+                          {showDelta && dateRange.preset !== "all" && cbSent > 0 && sentDelta && <span className={`pd-delta pd-delta-${sentDelta.cls}`}>{sentDelta.text}</span>}
+                        </span>
                       </td>
-                      <td className="pd-td-num">
-                        {showValue && <span className="pd-vis-value">{cbPos > 0 ? `#${cbPos.toFixed(1)}` : "—"}</span>}
-                        {showDelta && dateRange.preset !== "all" && cbPos > 0 && <span className={`pd-delta pd-delta-${posDelta.cls}`}>{posDelta.text}</span>}
+                      <td className="pd-td-metric">
+                        <span className="pd-metric-with-delta">
+                          {showValue && <span className="pd-vis-value">{cbPos > 0 ? `#${cbPos.toFixed(1)}` : "—"}</span>}
+                          {showDelta && dateRange.preset !== "all" && cbPos > 0 && posDelta && <span className={`pd-delta pd-delta-${posDelta.cls}`}>{posDelta.text}</span>}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -1337,18 +1347,26 @@ export default function PromptDetailClient({
                           {b.name}
                           <span className="pd-brand-you-badge">You</span>
                         </td>
-                        <td className="pd-td-num">
-                          {showValue && <span className="pd-vis-value">{vis}%</span>}
+                        <td className="pd-td-metric">
+                          <span className="pd-metric-with-delta">
+                            {showValue && <span className="pd-vis-value">{vis}%</span>}
+                          </span>
                         </td>
-                        <td className="pd-td-num">
-                          {showValue && <span className="pd-vis-value">{sov}%</span>}
+                        <td className="pd-td-metric">
+                          <span className="pd-metric-with-delta">
+                            {showValue && <span className="pd-vis-value">{sov}%</span>}
+                          </span>
                         </td>
-                        <td className="pd-td-num">
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", marginRight: 4 }} />
-                          {showValue && <span className="pd-vis-value">{cbSent > 0 ? cbSent.toFixed(0) : "—"}</span>}
+                        <td className="pd-td-metric">
+                          <span className="pd-metric-with-delta">
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
+                            {showValue && <span className="pd-vis-value">{cbSent > 0 ? cbSent.toFixed(0) : "—"}</span>}
+                          </span>
                         </td>
-                        <td className="pd-td-num">
-                          {showValue && <span className="pd-vis-value">{cbPos > 0 ? `#${cbPos.toFixed(1)}` : "—"}</span>}
+                        <td className="pd-td-metric">
+                          <span className="pd-metric-with-delta">
+                            {showValue && <span className="pd-vis-value">{cbPos > 0 ? `#${cbPos.toFixed(1)}` : "—"}</span>}
+                          </span>
                         </td>
                       </tr>
                     </>
