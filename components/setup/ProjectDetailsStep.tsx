@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronsUpDown, Globe, Search, Check, Languages } from "lucide-react";
-import { COMMON_TIMEZONES, COUNTRIES, LANGUAGES, tzOffset, tzLabel } from "../../lib/setup-types";
+import { ALL_TIMEZONES, COUNTRIES, LANGUAGES, tzOffset, tzLabel } from "../../lib/setup-types";
 
 /** Circular country flag (matches Peec). Falls back to the country code letters
  *  if the flag image fails to load. Emoji flags don't render on Windows, so we
@@ -214,7 +214,7 @@ export default function ProjectDetailsStep(props: Props) {
       <div className="step1-field">
         <label className="step1-label">Time zone</label>
         <Dropdown
-          options={[props.timezone, ...COMMON_TIMEZONES.filter((tz) => tz !== props.timezone)]}
+          options={[props.timezone, ...ALL_TIMEZONES.filter((tz) => tz !== props.timezone)]}
           value={props.timezone}
           onSelect={(tz) => props.onTimezoneChange(tz)}
           searchKey={(tz) => tz}

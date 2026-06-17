@@ -2002,6 +2002,16 @@
   background: #fff;
   cursor: pointer;
 }
+/* Location select with a circular flag for the selected country */
+.pp-modal-select-wrap { position: relative; display: flex; align-items: center; }
+.pp-modal-select-flag {
+  position: absolute;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  pointer-events: none;
+}
+.pp-modal-select--flag { padding-left: 34px; }
 .pp-modal-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

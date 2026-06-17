@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { INITIAL_SETUP_STATE, SetupState, SetupStep, SetupTopic, timezoneForCountryName } from "../../lib/setup-types";
+import { INITIAL_SETUP_STATE, SetupState, SetupStep, SetupTopic, timezoneForCountryName, languageForCountryName } from "../../lib/setup-types";
 import { BrandProfile } from "../../lib/brand-profile-types";
 import {
   generateBrandProfile,
@@ -152,9 +152,10 @@ export default function SetupPage() {
           onUrlChange={(v) => patch({ url: v })}
           onBrandNameChange={(v) => patch({ brandName: v })}
           onLocationChange={(v) => {
-            // Auto-select that country's time zone; the user can still change it.
+            // Auto-select that country's time zone + language; user can still change them.
             const tz = timezoneForCountryName(v);
-            patch(tz ? { location: v, timezone: tz } : { location: v });
+            const lang = languageForCountryName(v);
+            patch({ location: v, ...(tz ? { timezone: tz } : {}), ...(lang ? { language: lang } : {}) });
           }}
           onLanguageChange={(v) => patch({ language: v })}
           onTimezoneChange={(v) => patch({ timezone: v })}
