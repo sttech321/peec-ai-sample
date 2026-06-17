@@ -1,21 +1,19 @@
-import DashboardLayout from "../../components/DashboardLayout";
-import InsightsWrapper from "../../components/InsightsWrapper";
-import { db } from "../../db";
-import { projects, brands, brandProfiles, chats, prompts, topics, tags, promptTags } from "../../db/schema";
+import InsightsWrapper from "../../../components/InsightsWrapper";
+import { db } from "../../../db";
+import { projects, brands, brandProfiles, chats, prompts, topics, tags, promptTags } from "../../../db/schema";
 import { eq, and } from "drizzle-orm";
-import { getActiveProjectId } from "../../lib/project-context";
-import { fetchChatFacts, fetchProjectBrands } from "../../lib/chat-facts-server";
-import { getPageFilterData } from "../../lib/page-filter-data";
-import { addBrand } from "../actions/brands";
-import type { BrandProfile } from "../../lib/brand-profile-types";
-import "../prompts/[id]/prompt-detail.css";
-import "../prompts/prompts-comparison.css";
-import "./insights.css";
+import { getActiveProjectId } from "../../../lib/project-context";
+import { fetchChatFacts, fetchProjectBrands } from "../../../lib/chat-facts-server";
+import { getPageFilterData } from "../../../lib/page-filter-data";
+import { addBrand } from "../../actions/brands";
+import type { BrandProfile } from "../../../lib/brand-profile-types";
+import "../../prompts/[id]/prompt-detail.css";
+import "../../prompts/prompts-comparison.css";
+import "../../insights/insights.css";
 
 export default async function InsightsPage() {
   const activeProjectId = await getActiveProjectId();
 
-  // All independent queries run in parallel
   const [[projectRecord], [ownBrand], profileResult, chatFacts, projectBrands, filterData,
          chatTopicRows, chatTagRows] =
     await Promise.all([
@@ -33,14 +31,12 @@ export default async function InsightsPage() {
       fetchProjectBrands(activeProjectId),
       getPageFilterData(activeProjectId),
 
-      // chatId → topicName
       db.select({ chatId: chats.id, topicName: topics.name })
         .from(chats)
         .innerJoin(prompts, eq(chats.promptId, prompts.id))
         .innerJoin(topics, eq(prompts.topicId, topics.id))
         .where(eq(prompts.projectId, activeProjectId)),
 
-      // chatId → tagName (one row per tag per chat)
       db.select({ chatId: chats.id, tagName: tags.name })
         .from(chats)
         .innerJoin(prompts, eq(chats.promptId, prompts.id))
@@ -49,7 +45,6 @@ export default async function InsightsPage() {
         .where(eq(prompts.projectId, activeProjectId)),
     ]);
 
-  // Build maps: chatId → topicName, chatId → tagNames[]
   const chatTopicMap: Record<string, string> = {};
   for (const r of chatTopicRows) chatTopicMap[r.chatId] = r.topicName;
 
@@ -71,20 +66,18 @@ export default async function InsightsPage() {
     (ownBrand?.domains && ownBrand.domains.length > 0 ? ownBrand.domains[0] : null);
 
   return (
-    <DashboardLayout currentPath="/insights">
-      <InsightsWrapper
-        projectName={projectName}
-        chatFacts={chatFacts}
-        projectBrands={projectBrands}
-        filterBrands={filterData.projectBrands}
-        availableTags={filterData.availableTags}
-        availableTopics={filterData.availableTopics}
-        ownBrandName={ownBrand?.name ?? null}
-        ownDomain={ownDomain}
-        chatTopicMap={chatTopicMap}
-        chatTagsMap={chatTagsMap}
-        addBrandAction={addBrand}
-      />
-    </DashboardLayout>
+    <InsightsWrapper
+      projectName={projectName}
+      chatFacts={chatFacts}
+      projectBrands={projectBrands}
+      filterBrands={filterData.projectBrands}
+      availableTags={filterData.availableTags}
+      availableTopics={filterData.availableTopics}
+      ownBrandName={ownBrand?.name ?? null}
+      ownDomain={ownDomain}
+      chatTopicMap={chatTopicMap}
+      chatTagsMap={chatTagsMap}
+      addBrandAction={addBrand}
+    />
   );
 }

@@ -1,11 +1,10 @@
-import DashboardLayout from "../../components/DashboardLayout";
-import ImpactClient, { ImpactRow } from "../../components/ImpactClient";
-import { db } from "../../db";
-import { earnedActions, ownedActions, chats, prompts } from "../../db/schema";
+import ImpactClient, { ImpactRow } from "../../../components/ImpactClient";
+import { db } from "../../../db";
+import { earnedActions, ownedActions, chats, prompts } from "../../../db/schema";
 import { eq, desc } from "drizzle-orm";
-import { getActiveProjectId } from "../../lib/project-context";
-import { updateImpactActionStatus } from "./actions";
-import "../earned/earned.css";
+import { getActiveProjectId } from "../../../lib/project-context";
+import { updateImpactActionStatus } from "../../impact/actions";
+import "../../earned/earned.css";
 
 export default async function ImpactPage() {
   const activeProjectId = await getActiveProjectId();
@@ -54,13 +53,11 @@ export default async function ImpactPage() {
   ];
 
   return (
-    <DashboardLayout currentPath="/impact">
-      <ImpactClient
-        initialRows={rows}
-        updateStatusAction={updateImpactActionStatus}
-        lastScanDate={lastScanDate}
-      />
-    </DashboardLayout>
+    <ImpactClient
+      initialRows={rows}
+      updateStatusAction={updateImpactActionStatus}
+      lastScanDate={lastScanDate}
+    />
   );
 }
 

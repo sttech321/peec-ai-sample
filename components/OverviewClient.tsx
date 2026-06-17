@@ -503,6 +503,7 @@ export default function OverviewClient({
     });
   }, [chartBrandsForDisplay, currentPeriodMap, filteredChats]);
 
+
   // ── Chart export ─────────────────────────────────────────────────────────
   const chartExportDateLabel = `${effectiveDateRange.start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${effectiveDateRange.end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
   const chartExportDaysLabel = effectiveDateRange.preset === "all"
@@ -1157,66 +1158,67 @@ export default function OverviewClient({
                     ) : null;
 
                   return (
-                    <tr
-                      key={b.name}
-                      onMouseEnter={() => setHoveredBrand(b.name)}
-                      onMouseLeave={() => setHoveredBrand(null)}
-                    >
-                      {/* Rank cell — hover shows colored dot, click opens color picker */}
-                      <td className="pd-rank">
-                        {hoveredBrand === b.name ? (
-                          <span
-                            className="pd-rank-dot pd-rank-dot--clickable"
-                            style={{ background: b.color }}
-                            title="Change brand color"
-                            onClick={e => openPickerAt(b.name, e)}
-                          />
-                        ) : (
-                          i + 1
-                        )}
-                        {pickerInfo?.name === b.name && (
-                          <BrandColorPicker
-                            color={b.color}
-                            position={pickerInfo.pos}
-                            onChange={color => onBrandColorChange?.(b.name, color)}
-                            onClose={() => setPickerInfo(null)}
-                          />
-                        )}
-                      </td>
-                      <td className="pd-brand-cell">
-                        <DomainFavicon domain={brandDomainMap.get(b.name) ?? guessBrandDomain(b.name)} size={16} />
-                        {b.name}
-                      </td>
-                      {/* Visibility */}
-                      <td>
-                        <span className="pd-metric-with-delta">
-                          {showValue && <span className="pd-vis-value">{vis}%</span>}
-                          {deltaEl(visDelta, n => `${n}%`)}
-                        </span>
-                      </td>
-                      {/* SOV */}
-                      <td>
-                        <span className="pd-metric-with-delta">
-                          {showValue && <span className="pd-vis-value">{sov}%</span>}
-                          {deltaEl(sovDelta, n => `${n}%`)}
-                        </span>
-                      </td>
-                      {/* Sentiment */}
-                      <td>
-                        <span className="pd-sentiment-cell">
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
-                          {showValue && <span className="pd-vis-value">{sent > 0 ? sent : "—"}</span>}
-                          {deltaEl(sentDelta, n => `${n > 0 ? "+" : ""}${n}`)}
-                        </span>
-                      </td>
-                      {/* Position — use current period bPos */}
-                      <td>
-                        <span className="pd-metric-with-delta">
-                          {showValue && <span>{bPos > 0 ? `#${bPos.toFixed(1)}` : "—"}</span>}
-                          {deltaElInv(posDelta, (n: number) => `${n > 0 ? "+" : ""}${n}`)}
-                        </span>
-                      </td>
-                    </tr>
+                    <React.Fragment key={b.name}>
+                      <tr
+                        onMouseEnter={() => setHoveredBrand(b.name)}
+                        onMouseLeave={() => setHoveredBrand(null)}
+                      >
+                        {/* Rank cell — hover shows colored dot, click opens color picker */}
+                        <td className="pd-rank">
+                          {hoveredBrand === b.name ? (
+                            <span
+                              className="pd-rank-dot pd-rank-dot--clickable"
+                              style={{ background: b.color }}
+                              title="Change brand color"
+                              onClick={e => openPickerAt(b.name, e)}
+                            />
+                          ) : (
+                            i + 1
+                          )}
+                          {pickerInfo?.name === b.name && (
+                            <BrandColorPicker
+                              color={b.color}
+                              position={pickerInfo.pos}
+                              onChange={color => onBrandColorChange?.(b.name, color)}
+                              onClose={() => setPickerInfo(null)}
+                            />
+                          )}
+                        </td>
+                        <td className="pd-brand-cell">
+                          <DomainFavicon domain={brandDomainMap.get(b.name) ?? guessBrandDomain(b.name)} size={16} />
+                          {b.name}
+                        </td>
+                        {/* Visibility */}
+                        <td>
+                          <span className="pd-metric-with-delta">
+                            {showValue && <span className="pd-vis-value">{vis}%</span>}
+                            {deltaEl(visDelta, n => `${n}%`)}
+                          </span>
+                        </td>
+                        {/* SOV */}
+                        <td>
+                          <span className="pd-metric-with-delta">
+                            {showValue && <span className="pd-vis-value">{sov}%</span>}
+                            {deltaEl(sovDelta, n => `${n}%`)}
+                          </span>
+                        </td>
+                        {/* Sentiment */}
+                        <td>
+                          <span className="pd-sentiment-cell">
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
+                            {showValue && <span className="pd-vis-value">{sent > 0 ? sent : "—"}</span>}
+                            {deltaEl(sentDelta, n => `${n > 0 ? "+" : ""}${n}`)}
+                          </span>
+                        </td>
+                        {/* Position — use current period bPos */}
+                        <td>
+                          <span className="pd-metric-with-delta">
+                            {showValue && <span>{bPos > 0 ? `#${bPos.toFixed(1)}` : "—"}</span>}
+                            {deltaElInv(posDelta, (n: number) => `${n > 0 ? "+" : ""}${n}`)}
+                          </span>
+                        </td>
+                      </tr>
+                    </React.Fragment>
                   );
                 })}
                 {chartBrands.length === 0 && (

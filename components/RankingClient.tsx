@@ -27,13 +27,17 @@ import {
 } from "../lib/chat-aggregations";
 import { DEFAULT_ENGINES } from "../lib/engines";
 
-interface ProjectBrand { name: string; isOwn: boolean; domains: string[]; }
+interface ProjectBrand  { name: string; isOwn: boolean; domains: string[]; }
 interface AvailableTag  { id: string; name: string; }
+interface AvailableTopic { id: string; name: string; }
 
 interface Props {
   chatFacts: ChatFact[];
   projectBrands: ProjectBrand[];
   availableTags: AvailableTag[];
+  availableTopics?: AvailableTopic[];
+  chatTagsMap?: Record<string, string[]>;
+  chatTopicMap?: Record<string, string>;
   /** When present, the page is reached from a prompt — show a breadcrumb
    *  (Prompts › [query] › Ranking) instead of the plain "Ranking" title. */
   promptCrumb?: { id: string; query: string };
@@ -68,10 +72,33 @@ function DeltaNum({ v, invert }: { v: number; invert?: boolean }) {
   return <span className={`rk-delta ${good ? "rk-delta--pos" : "rk-delta--neg"}`}>{v > 0 ? "+" : ""}{v}</span>;
 }
 
-export default function RankingClient({ chatFacts, projectBrands, availableTags, promptCrumb }: Props) {
+// Visibility benchmark: 0%=red, <20%=amber, >=50%=green
+function visBenchmarkClass(vis: number): string {
+  if (vis === 0) return "rk-metric--critical";
+  if (vis < 20)  return "rk-metric--weak";
+  if (vis >= 50) return "rk-metric--strong";
+  return "";
+}
+// SoV benchmark: 0%=red, <10%=amber, >=25%=green  (docs: >25%=leadership, 10-25%=competitive, <10%=trailing)
+function sovBenchmarkClass(sov: number): string {
+  if (sov === 0)  return "rk-metric--critical";
+  if (sov < 10)   return "rk-metric--weak";
+  if (sov >= 25)  return "rk-metric--strong";
+  return "";
+}
+
+export default function RankingClient({
+  chatFacts, projectBrands, availableTags,
+  availableTopics = [], chatTagsMap = {}, chatTopicMap = {},
+  promptCrumb,
+}: Props) {
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => makePresetRange("7"));
   const [selectedModels, setSelectedModels] = useState<string[]>([...DEFAULT_ENGINES]);
   const [modelOpen, setModelOpen] = useState(false);
+  const [selectedTags,   setSelectedTags]   = useState<string[]>([]);
+  const [tagOpen,        setTagOpen]        = useState(false);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [topicOpen,      setTopicOpen]      = useState(false);
   const [sortCol, setSortCol] = useState<SortCol>("visibility");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -85,10 +112,22 @@ export default function RankingClient({ chatFacts, projectBrands, availableTags,
     end:   dateRange.end,
   }), [dateRange]);
 
-  const filtered = useMemo(
-    () => filterByDateRange(filterByEngines(chatFacts, selectedModels), range),
-    [chatFacts, selectedModels, range]
-  );
+  const filtered = useMemo(() => {
+    let facts = filterByDateRange(filterByEngines(chatFacts, selectedModels), range);
+    if (selectedTags.length > 0) {
+      facts = facts.filter(c => {
+        const t = chatTagsMap[c.id];
+        return t && t.some(tag => selectedTags.includes(tag));
+      });
+    }
+    if (selectedTopics.length > 0) {
+      facts = facts.filter(c => {
+        const topic = chatTopicMap[c.id];
+        return topic !== undefined && selectedTopics.includes(topic);
+      });
+    }
+    return facts;
+  }, [chatFacts, selectedModels, range, selectedTags, selectedTopics, chatTagsMap, chatTopicMap]);
 
   const prevRange = useMemo(() => makePrevRange(range), [range]);
   const prevFiltered = useMemo(
@@ -151,9 +190,14 @@ export default function RankingClient({ chatFacts, projectBrands, availableTags,
   function resetFilters() {
     setDateRange(makePresetRange("7"));
     setSelectedModels([...DEFAULT_ENGINES]);
+    setSelectedTags([]);
+    setSelectedTopics([]);
   }
 
-  const hasFilters = selectedModels.length !== DEFAULT_ENGINES.length;
+  const hasFilters =
+    selectedModels.length !== DEFAULT_ENGINES.length ||
+    selectedTags.length > 0 ||
+    selectedTopics.length > 0;
 
   return (
     <div className="rk-page">
@@ -203,6 +247,60 @@ export default function RankingClient({ chatFacts, projectBrands, availableTags,
             </div>
           )}
         </div>
+
+        {/* Tags filter */}
+        {availableTags.length > 0 && (
+          <div className="rk-filter-wrap" style={{ position: "relative" }}>
+            <button className="rk-filter-btn" onClick={() => setTagOpen(v => !v)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+              {selectedTags.length === 0 ? "All Tags" : `${selectedTags.length} Tag${selectedTags.length > 1 ? "s" : ""}`}
+              <ChevronDown size={12} />
+            </button>
+            {tagOpen && (
+              <div className="rk-filter-menu">
+                {availableTags.map(t => (
+                  <label key={t.id} className="rk-filter-option">
+                    <input
+                      type="checkbox"
+                      checked={selectedTags.includes(t.name)}
+                      onChange={() => setSelectedTags(prev =>
+                        prev.includes(t.name) ? prev.filter(x => x !== t.name) : [...prev, t.name]
+                      )}
+                    />
+                    <span>{t.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Topics filter */}
+        {availableTopics.length > 0 && (
+          <div className="rk-filter-wrap" style={{ position: "relative" }}>
+            <button className="rk-filter-btn" onClick={() => setTopicOpen(v => !v)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              {selectedTopics.length === 0 ? "All Topics" : `${selectedTopics.length} Topic${selectedTopics.length > 1 ? "s" : ""}`}
+              <ChevronDown size={12} />
+            </button>
+            {topicOpen && (
+              <div className="rk-filter-menu">
+                {availableTopics.map(t => (
+                  <label key={t.id} className="rk-filter-option">
+                    <input
+                      type="checkbox"
+                      checked={selectedTopics.includes(t.name)}
+                      onChange={() => setSelectedTopics(prev =>
+                        prev.includes(t.name) ? prev.filter(x => x !== t.name) : [...prev, t.name]
+                      )}
+                    />
+                    <span>{t.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {hasFilters && (
           <button className="rk-reset-btn" onClick={resetFilters}>

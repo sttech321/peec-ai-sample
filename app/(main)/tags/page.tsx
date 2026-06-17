@@ -1,11 +1,10 @@
-import DashboardLayout from "../../components/DashboardLayout";
-import TagsClient, { TagRow } from "../../components/TagsClient";
-import { db } from "../../db";
-import { projects } from "../../db/schema";
+import TagsClient, { TagRow } from "../../../components/TagsClient";
+import { db } from "../../../db";
+import { projects } from "../../../db/schema";
 import { eq } from "drizzle-orm";
-import { getActiveProjectId } from "../../lib/project-context";
-import { getTags } from "./actions";
-import "./tags.css";
+import { getActiveProjectId } from "../../../lib/project-context";
+import { getTags } from "../../tags/actions";
+import "../../tags/tags.css";
 
 export default async function TagsPage() {
   const activeProjectId = await getActiveProjectId();
@@ -18,7 +17,6 @@ export default async function TagsPage() {
 
   const workspaceId = project?.workspaceId ?? "00000000-0000-0000-0000-000000000000";
 
-  // Fetch tags with real usage counts from promptTags JOIN      
   const projectTags = await getTags(activeProjectId);
 
   const rows: TagRow[] = projectTags.map((t) => ({
@@ -32,12 +30,10 @@ export default async function TagsPage() {
   }));
 
   return (
-    <DashboardLayout currentPath="/tags">
-      <TagsClient
-        initialTags={rows}
-        projectId={activeProjectId}
-        workspaceId={workspaceId}
-      />
-    </DashboardLayout>
+    <TagsClient
+      initialTags={rows}
+      projectId={activeProjectId}
+      workspaceId={workspaceId}
+    />
   );
 }

@@ -1,19 +1,17 @@
-import DashboardLayout from "../../components/DashboardLayout";
-import EarnedClient from "../../components/EarnedClient";
-import { db } from "../../db";
-import { projects, earnedActions, sources, chats, prompts, citations, brandMentions, brands } from "../../db/schema";
+import EarnedClient from "../../../components/EarnedClient";
+import { db } from "../../../db";
+import { projects, earnedActions, sources, chats, prompts, citations, brandMentions, brands } from "../../../db/schema";
 import { eq, sql, and, desc } from "drizzle-orm";
-import { getActiveProjectId } from "../../lib/project-context";
-import { classifyDomain, inferContentType } from "../../lib/actions-generator";
-import { generateActionsForProject } from "../../lib/generate-actions";
-import "./earned.css";
+import { getActiveProjectId } from "../../../lib/project-context";
+import { classifyDomain, inferContentType } from "../../../lib/actions-generator";
+import { generateActionsForProject } from "../../../lib/generate-actions";
+import "../../earned/earned.css";
 
 export const dynamic = "force-dynamic";
 
 export default async function EarnedPage() {
   const activeProjectId = await getActiveProjectId();
 
-  // Parallel fetch — all independent queries run simultaneously
   const [
     [projectRecord],
     [latestChat],
@@ -63,7 +61,6 @@ export default async function EarnedPage() {
   const promptCount = promptCountResult[0]?.promptCount ?? 0;
   const ownDomains = new Set(ownBrandsRows.flatMap((b) => b.domains ?? []));
 
-  // Move generateActionsForProject to background — don't block page render
   if (rawSources.length > 0 && lastScanDate) {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -73,7 +70,6 @@ export default async function EarnedPage() {
     }
   }
 
-  // Parallel fetch: actions + prompts are independent
   const [actions, promptRows] = await Promise.all([
     db.select().from(earnedActions).where(eq(earnedActions.projectId, activeProjectId)),
     db.select({ query: prompts.query })
@@ -171,18 +167,16 @@ export default async function EarnedPage() {
   });
 
   return (
-    <DashboardLayout currentPath="/earned">
-      <EarnedClient
-        initialActions={actions as any[]}
-        projectName={projectName}
-        sourcesMap={sourcesMap as any}
-        channelsMap={channelsMap}
-        phrasesMap={phrasesMap}
-        domainsMap={domainsMap}
-        sourcesCount={rawSources.length}
-        promptCount={promptCount as number}
-        lastScanDate={lastScanDate ? lastScanDate.toISOString() : null}
-      />
-    </DashboardLayout>
+    <EarnedClient
+      initialActions={actions as any[]}
+      projectName={projectName}
+      sourcesMap={sourcesMap as any}
+      channelsMap={channelsMap}
+      phrasesMap={phrasesMap}
+      domainsMap={domainsMap}
+      sourcesCount={rawSources.length}
+      promptCount={promptCount as number}
+      lastScanDate={lastScanDate ? lastScanDate.toISOString() : null}
+    />
   );
 }

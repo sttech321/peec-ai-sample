@@ -1,18 +1,16 @@
-import DashboardLayout from "../../components/DashboardLayout";
-import CrawlabilityClient from "../../components/CrawlabilityClient";
-import { getActiveProject, getActiveProjectId } from "../../lib/project-context";
-import { fetchRobotsTxt } from "./actions";
-import { db } from "../../db";
-import { brands } from "../../db/schema";
+import CrawlabilityClient from "../../../components/CrawlabilityClient";
+import { getActiveProject, getActiveProjectId } from "../../../lib/project-context";
+import { fetchRobotsTxt } from "../../crawlability/actions";
+import { db } from "../../../db";
+import { brands } from "../../../db/schema";
 import { eq } from "drizzle-orm";
-import "./crawlability.css";
+import "../../crawlability/crawlability.css";
 
 export default async function Page() {
   const project = await getActiveProject();
   const projectId = await getActiveProjectId();
   const domain = project?.domain ?? null;
 
-  // Fetch all tracked brands for brand-switcher
   const projectBrandsRaw = await db
     .select({ id: brands.id, name: brands.name, color: brands.color, domains: brands.domains, isOwn: brands.isOwn })
     .from(brands)
@@ -40,16 +38,14 @@ export default async function Page() {
   }
 
   return (
-    <DashboardLayout currentPath="/crawlability">
-      <CrawlabilityClient
-        domain={domain}
-        robotsTxtContent={robotsTxtContent}
-        robotsTxtUrl={robotsTxtUrl}
-        projectName={project?.name ?? "Your Project"}
-        fetchError={fetchError}
-        fetchedAt={fetchedAt}
-        brands={projectBrands}
-      />
-    </DashboardLayout>
+    <CrawlabilityClient
+      domain={domain}
+      robotsTxtContent={robotsTxtContent}
+      robotsTxtUrl={robotsTxtUrl}
+      projectName={project?.name ?? "Your Project"}
+      fetchError={fetchError}
+      fetchedAt={fetchedAt}
+      brands={projectBrands}
+    />
   );
 }
