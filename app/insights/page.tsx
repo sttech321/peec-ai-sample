@@ -1,6 +1,5 @@
 import DashboardLayout from "../../components/DashboardLayout";
-import InsightsClient from "../../components/InsightsClient";
-import PageFilterBar from "../../components/PageFilterBar";
+import InsightsWrapper from "../../components/InsightsWrapper";
 import { db } from "../../db";
 import { projects, brands, brandProfiles, chats, prompts, topics, tags, promptTags } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
@@ -73,20 +72,18 @@ export default async function InsightsPage() {
 
   return (
     <DashboardLayout currentPath="/insights">
-      <PageFilterBar
+      <InsightsWrapper
         projectName={projectName}
-        projectBrands={filterData.projectBrands}
-        availableTags={filterData.availableTags}
-        addBrandAction={addBrand}
-      />
-      <InsightsClient
         chatFacts={chatFacts}
-        projectName={projectName}
         projectBrands={projectBrands}
+        filterBrands={filterData.projectBrands}
+        availableTags={filterData.availableTags}
+        availableTopics={filterData.availableTopics}
         ownBrandName={ownBrand?.name ?? null}
         ownDomain={ownDomain}
         chatTopicMap={chatTopicMap}
         chatTagsMap={chatTagsMap}
+        addBrandAction={addBrand}
       />
     </DashboardLayout>
   );

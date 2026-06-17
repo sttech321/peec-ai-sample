@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -8,6 +8,7 @@ import {
 import {
   Bookmark, ChevronDown, ChevronLeft, ChevronRight, Search,
   Check, SlidersHorizontal, Upload, Settings, RotateCcw,
+  MoreHorizontal, Download, ImageIcon, Copy,
 } from "lucide-react";
 import DomainFavicon from "./DomainFavicon";
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
@@ -20,6 +21,7 @@ import {
   DOMAIN_TYPE_COLORS,
   DomainType,
   totalCitations,
+  normalizeChatFacts,
 } from "../lib/domain-aggregations";
 import TypeDropdown from "./TypeDropdown";
 
@@ -36,6 +38,10 @@ interface Props {
   competitorDomains: string[];
   externalDateRange?: DateRangeValue;
   externalModels?: string[];
+  externalTagNames?: string[] | null;
+  externalTopicNames?: string[] | null;
+  chatTopicMap?: Record<string, string>;
+  chatTagsMap?: Record<string, string[]>;
   initialDomainTypeOverrides?: Record<string, string>;
   updateDomainTypeOverrideAction?: (domain: string, type: string | null) => Promise<{ ok: boolean; error?: string }>;
   initialDomainBookmarks?: string[];
@@ -77,9 +83,12 @@ function faviconUrl(domain: string): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
 }
 
-function shortDomainLabel(domain: string): string {
+function shortDomainLabel(domain: string, mode: "domain" | "host" = "domain"): string {
   const parts = domain.split(".");
   if (parts.length < 2) return domain;
+  // Host mode: drop only TLD → www.cslplasma.com → www.cslplasma
+  if (mode === "host") return parts.slice(0, -1).join(".");
+  // Domain mode: just the registrable name → cslplasma.com → cslplasma
   return parts[parts.length - 2];
 }
 
@@ -165,14 +174,17 @@ function DomFilterDropdown({
 
 // ── Column selector popup ─────────────────────────────────────────────────────
 function DomColSelector({
-  visible, onToggle, onReset,
+  visible, onToggle, onReset, entityLabel,
 }: {
   visible: Set<string>;
   onToggle: (k: string) => void;
   onReset: () => void;
+  entityLabel: string;
 }) {
   const ACTIVE_COLS = ["domainType", "retrieved", "retrievalRate", "citationRate"];
   const AVAIL_COLS = ["retrievals"];
+  const colLabel = (k: string) =>
+    k === "domainType" ? `${entityLabel} type` : DOM_COL_LABELS[k];
   return (
     <div className="ud-col-selector dom-col-selector">
       <div className="ud-col-section-label">Fixed columns</div>
@@ -191,7 +203,7 @@ function DomColSelector({
           <span className={`ud-fdrop-cb ${visible.has(k) ? "checked" : ""}`}>
             {visible.has(k) && <Check size={9} strokeWidth={3} />}
           </span>
-          <span className="ud-fdrop-label">{DOM_COL_LABELS[k]}</span>
+          <span className="ud-fdrop-label">{colLabel(k)}</span>
         </div>
       ))}
       <div className="ud-col-divider" />
@@ -201,7 +213,7 @@ function DomColSelector({
           <span className={`ud-fdrop-cb ${visible.has(k) ? "checked" : ""}`}>
             {visible.has(k) && <Check size={9} strokeWidth={3} />}
           </span>
-          <span className="ud-fdrop-label">{DOM_COL_LABELS[k]}</span>
+          <span className="ud-fdrop-label">{colLabel(k)}</span>
         </div>
       ))}
       <div className="ud-col-divider" />
@@ -262,6 +274,10 @@ export default function DomainsClient({
   competitorDomains,
   externalDateRange,
   externalModels,
+  externalTagNames,
+  externalTopicNames,
+  chatTopicMap = {},
+  chatTagsMap = {},
   initialDomainTypeOverrides,
   updateDomainTypeOverrideAction,
   initialDomainBookmarks,
@@ -269,6 +285,7 @@ export default function DomainsClient({
 }: Props) {
   const router = useRouter();
   const [resolution, setResolution] = useState<Resolution>("W");
+  const [domainGrouping, setDomainGrouping] = useState<"domain" | "host">("domain");
   const [internalDateRange, setInternalDateRange] = useState<DateRangeValue>(() => makePresetRange("30"));
   const [hoveredDomain, setHoveredDomain] = useState<string | null>(null);
   const [hiddenDomains, setHiddenDomains] = useState<Set<string>>(new Set());
@@ -298,6 +315,11 @@ export default function DomainsClient({
   const [domCols, setDomCols] = useState<Set<string>>(new Set(DOM_COL_DEFAULT));
   const [domIndicators, setDomIndicators] = useState<IndicatorMode>("default");
 
+  // ── Chart export menu ────────────────────────────────────────────────────────
+  const [chartMenuOpen, setChartMenuOpen] = useState(false);
+  const chartCardRef = useRef<HTMLDivElement>(null);
+  const chartMenuRef = useRef<HTMLDivElement>(null);
+
   // Close dropdowns on outside click
   useEffect(() => {
     if (!domMenuOpen) return;
@@ -308,6 +330,16 @@ export default function DomainsClient({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [domMenuOpen]);
+
+  useEffect(() => {
+    if (!chartMenuOpen) return;
+    function handler(e: MouseEvent) {
+      if (chartMenuRef.current && !chartMenuRef.current.contains(e.target as Node))
+        setChartMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [chartMenuOpen]);
 
   const allEngines = useMemo(() => {
     const set = new Set<string>();
@@ -345,21 +377,44 @@ export default function DomainsClient({
     [projectBrands]
   );
 
+  const applyTagTopicFilter = (facts: ChatFact[]) => {
+    let f = facts;
+    if (externalTagNames && externalTagNames.length > 0) {
+      f = f.filter((c) => { const t = chatTagsMap[c.id]; return t && t.some((tag) => externalTagNames.includes(tag)); });
+    }
+    if (externalTopicNames && externalTopicNames.length > 0) {
+      f = f.filter((c) => { const topic = chatTopicMap[c.id]; return topic !== undefined && externalTopicNames.includes(topic); });
+    }
+    return f;
+  };
+
   const filteredCurrent = useMemo(
-    () => filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange),
-    [chatFacts, selectedModels, dateRange],
+    () => applyTagTopicFilter(filterByDateRange(filterByEngines(chatFacts, selectedModels), dateRange)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatFacts, selectedModels, dateRange, externalTagNames, externalTopicNames, chatTagsMap, chatTopicMap],
   );
   const filteredPrevious = useMemo(() => {
     if (dateRange.preset === "all") return [];
-    return filterByDateRange(
+    return applyTagTopicFilter(filterByDateRange(
       filterByEngines(chatFacts, selectedModels),
       previousPeriod(dateRange),
-    );
-  }, [chatFacts, selectedModels, dateRange]);
+    ));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatFacts, selectedModels, dateRange, externalTagNames, externalTopicNames, chatTagsMap, chatTopicMap]);
+
+  // Normalize domain keys based on active tab (domain = strip www., host = as-is)
+  const normalizedCurrent = useMemo(
+    () => normalizeChatFacts(filteredCurrent, domainGrouping),
+    [filteredCurrent, domainGrouping],
+  );
+  const normalizedPrevious = useMemo(
+    () => normalizeChatFacts(filteredPrevious, domainGrouping),
+    [filteredPrevious, domainGrouping],
+  );
 
   const allDomains = useMemo(
-    () => aggregateDomainsFull(filteredCurrent, filteredPrevious),
-    [filteredCurrent, filteredPrevious],
+    () => aggregateDomainsFull(normalizedCurrent, normalizedPrevious),
+    [normalizedCurrent, normalizedPrevious],
   );
 
   const domainTypeFor = useMemo(() => {
@@ -391,28 +446,28 @@ export default function DomainsClient({
 
   // ── Brand filter (updated to support Or/And + new domBrandFilters state) ────
   const brandFilteredCurrent = useMemo(() => {
-    if (domBrandFilters.length === 0) return filteredCurrent;
+    if (domBrandFilters.length === 0) return normalizedCurrent;
     if (domBrandMode === "or") {
       const brandSet = new Set(domBrandFilters);
-      return filteredCurrent.filter((c) => c.brands.some((b) => brandSet.has(b.name)));
+      return normalizedCurrent.filter((c) => c.brands.some((b) => brandSet.has(b.name)));
     } else {
-      return filteredCurrent.filter((c) =>
+      return normalizedCurrent.filter((c) =>
         domBrandFilters.every((name) => c.brands.some((b) => b.name === name))
       );
     }
-  }, [filteredCurrent, domBrandFilters, domBrandMode]);
+  }, [normalizedCurrent, domBrandFilters, domBrandMode]);
 
   const brandFilteredPrevious = useMemo(() => {
-    if (domBrandFilters.length === 0) return filteredPrevious;
+    if (domBrandFilters.length === 0) return normalizedPrevious;
     if (domBrandMode === "or") {
       const brandSet = new Set(domBrandFilters);
-      return filteredPrevious.filter((c) => c.brands.some((b) => brandSet.has(b.name)));
+      return normalizedPrevious.filter((c) => c.brands.some((b) => brandSet.has(b.name)));
     } else {
-      return filteredPrevious.filter((c) =>
+      return normalizedPrevious.filter((c) =>
         domBrandFilters.every((name) => c.brands.some((b) => b.name === name))
       );
     }
-  }, [filteredPrevious, domBrandFilters, domBrandMode]);
+  }, [normalizedPrevious, domBrandFilters, domBrandMode]);
 
   const brandScopedDomains = useMemo(
     () =>
@@ -431,21 +486,21 @@ export default function DomainsClient({
   const moversData = useMemo(() => {
     switch (moverTab) {
       case "top":
-        return brandScopedDomains.slice(0, 5);
+        return brandScopedDomains.slice(0, 8);
       case "trending":
         return brandScopedDomains
           .filter((d) => d.citations > d.citationsPrev)
           .sort((a, b) => (b.citations - b.citationsPrev) - (a.citations - a.citationsPrev))
-          .slice(0, 5);
+          .slice(0, 8);
       case "losing":
         return brandScopedDomains
           .filter((d) => d.citations < d.citationsPrev)
           .sort((a, b) => (a.citations - a.citationsPrev) - (b.citations - b.citationsPrev))
-          .slice(0, 5);
+          .slice(0, 8);
       case "new":
         return brandScopedDomains
           .filter((d) => d.citationsPrev === 0 && d.citations > 0)
-          .slice(0, 5);
+          .slice(0, 8);
     }
   }, [brandScopedDomains, moverTab]);
 
@@ -560,12 +615,65 @@ export default function DomainsClient({
     a.click();
   }
 
+  // ── Chart export functions ────────────────────────────────────────────────
+  function exportChartCSV() {
+    setChartMenuOpen(false);
+    if (!chartData.length) return;
+    const domains = topDomains.map((d) => d.domain);
+    const headers = ["Date", ...domains];
+    const rows = chartData.map((point) => [
+      String(point.date),
+      ...domains.map((d) => String(point[d] ?? 0)),
+    ]);
+    const content = [headers, ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const a = document.createElement("a");
+    a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(content);
+    a.download = `source-retrievals-${domainGrouping}.csv`;
+    a.click();
+  }
+
+  async function saveChartAsImage() {
+    setChartMenuOpen(false);
+    const card = chartCardRef.current;
+    if (!card) return;
+    card.setAttribute("data-exporting", "true");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, { backgroundColor: "#ffffff", scale: 2, useCORS: true, logging: false });
+      const a = document.createElement("a");
+      a.download = `source-retrievals-${domainGrouping}.png`;
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    } finally { card.removeAttribute("data-exporting"); }
+  }
+
+  async function copyChartToClipboard() {
+    setChartMenuOpen(false);
+    const card = chartCardRef.current;
+    if (!card) return;
+    card.setAttribute("data-exporting", "true");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, { backgroundColor: "#ffffff", scale: 2, useCORS: true, logging: false });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); }
+        catch { const a = document.createElement("a"); a.download = `source-retrievals-${domainGrouping}.png`; a.href = canvas.toDataURL("image/png"); a.click(); }
+      }, "image/png");
+    } finally { card.removeAttribute("data-exporting"); }
+  }
+
+  // Dynamic label based on active tab
+  const entityLabel = domainGrouping === "domain" ? "Domain" : "Host";
+
   // Filter label helpers
   const brandLabel = domBrandFilters.length === 0
     ? "All Brands"
     : `${domBrandFilters.length} Brand${domBrandFilters.length !== 1 ? "s" : ""}`;
   const typeLabel = domTypeFilters.length === 0
-    ? "All Domain types"
+    ? `All ${entityLabel} types`
     : `${domTypeFilters.length} Type${domTypeFilters.length !== 1 ? "s" : ""}`;
 
   // All brand names from projectBrands
@@ -592,17 +700,41 @@ export default function DomainsClient({
       <div className="urls-breadcrumb">
         <span>Sources</span>
         <ChevronRight size={12} />
-        <strong>Domains</strong>
+        <strong>{entityLabel}s</strong>
+      </div>
+
+      {/* ── Domains / Hosts tab toggle ── */}
+      <div className="dom-tabs">
+        <button
+          className={`dom-tab ${domainGrouping === "domain" ? "dom-tab--active" : ""}`}
+          onClick={() => {
+            setDomainGrouping("domain");
+            setPage(1);
+            setHiddenDomains(new Set());
+          }}
+        >
+          Domains
+        </button>
+        <button
+          className={`dom-tab ${domainGrouping === "host" ? "dom-tab--active" : ""}`}
+          onClick={() => {
+            setDomainGrouping("host");
+            setPage(1);
+            setHiddenDomains(new Set());
+          }}
+        >
+          Hosts
+        </button>
       </div>
 
       <h2 className="urls-section-title">Overview</h2>
       <p className="urls-section-subtitle">
-        How often each domain appears in AI generated discussions
+        How often each {entityLabel.toLowerCase()} appears in AI generated discussions
       </p>
 
       {/* ── Chart + Domain Types overview ── */}
       <div className="urls-overview">
-        <div className="ins-chart-card urls-chart-card">
+        <div className="ins-chart-card urls-chart-card" ref={chartCardRef}>
           <div className="ins-chart-header">
             <div className="urls-chart-title">Source retrievals over time</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -615,7 +747,28 @@ export default function DomainsClient({
                   >{r}</button>
                 ))}
               </div>
-              <button className="ch-dots-btn" title="Chart options">···</button>
+              <div className="ch-chart-menu-wrap" ref={chartMenuRef}>
+                <button
+                  className="ch-dots-btn"
+                  title="Export options"
+                  onClick={() => setChartMenuOpen((o) => !o)}
+                >
+                  <MoreHorizontal size={15} />
+                </button>
+                {chartMenuOpen && (
+                  <div className="ch-chart-menu">
+                    <button className="ch-chart-menu-item" onClick={exportChartCSV}>
+                      <Download size={13} /> Export CSV
+                    </button>
+                    <button className="ch-chart-menu-item" onClick={saveChartAsImage}>
+                      <ImageIcon size={13} /> Save as image
+                    </button>
+                    <button className="ch-chart-menu-item" onClick={copyChartToClipboard}>
+                      <Copy size={13} /> Copy to clipboard
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -636,6 +789,7 @@ export default function DomainsClient({
                   const sorted = [...payload]
                     .filter(p => (p.value as number) > 0)
                     .sort((a, b) => ((b.value as number) ?? 0) - ((a.value as number) ?? 0));
+                  const pc = (payload[0]?.payload?._chatCount as number) ?? 0;
                   return (
                     <div className="ch-tooltip">
                       <div className="ch-tooltip-date">{label}</div>
@@ -643,10 +797,11 @@ export default function DomainsClient({
                         <div key={p.dataKey as string} className="ch-tooltip-row">
                           <span className="ch-tooltip-dot" style={{ background: p.color as string }} />
                           <DomainFavicon domain={p.dataKey as string} size={13} />
-                          <span className="ch-tooltip-name">{shortDomainLabel(p.dataKey as string)}</span>
+                          <span className="ch-tooltip-name" style={{ maxWidth: 180 }}>{p.dataKey as string}</span>
                           <span className="ch-tooltip-val">{(p.value as number).toLocaleString()}</span>
                         </div>
                       ))}
+                      {pc > 0 && <div className="ch-tooltip-footer">{pc} new prompts created</div>}
                     </div>
                   );
                 }}
@@ -691,7 +846,7 @@ export default function DomainsClient({
                   title={d.domain}
                 >
                   <span className="urls-legend-dot" style={{ background: hidden ? "#cbd5e1" : color }} />
-                  <span className="urls-legend-label">{shortDomainLabel(d.domain)}</span>
+                  <span className="urls-legend-label">{shortDomainLabel(d.domain, domainGrouping)}</span>
                   {isHover && <span className="urls-legend-full-domain">{d.domain}</span>}
                   {isHover && (
                     <button
@@ -716,7 +871,7 @@ export default function DomainsClient({
 
         <div className="ins-chart-card urls-types-card">
           <div className="urls-types-header">
-            <div className="urls-chart-title">Domain types</div>
+            <div className="urls-chart-title">{entityLabel} types</div>
             <div className="urls-types-total">Total retrievals: {totalCit.toLocaleString()}</div>
           </div>
           <div className="urls-types-list">
@@ -757,10 +912,10 @@ export default function DomainsClient({
         </div>
       </div>
 
-      {/* ── Domain Movers ── */}
-      <h2 className="urls-section-title">Domain Movers</h2>
+      {/* ── Domain / Host Movers ── */}
+      <h2 className="urls-section-title">{entityLabel} Movers</h2>
       <p className="urls-section-subtitle">
-        Domains with the most significant changes in AI citations
+        {entityLabel}s with the most significant changes in AI citations
       </p>
       <div className="movers-card">
         <div className="movers-tabs">
@@ -776,7 +931,7 @@ export default function DomainsClient({
         </div>
         <div className="movers-list">
           {moversData.length === 0 && (
-            <div className="movers-empty">No domains in this category for the selected period.</div>
+            <div className="movers-empty">No {entityLabel.toLowerCase()}s in this category for the selected period.</div>
           )}
           {moversData.map((d, i) => {
             const delta = d.citations - d.citationsPrev;
@@ -801,10 +956,10 @@ export default function DomainsClient({
         </div>
       </div>
 
-      {/* ── Domains table section ─────────────────────────────────────────── */}
-      <h2 className="urls-section-title">Domains</h2>
+      {/* ── Domains / Hosts table section ────────────────────────────────── */}
+      <h2 className="urls-section-title">{entityLabel}s</h2>
       <p className="urls-section-subtitle">
-        Detailed breakdown of domain visibility across AI responses
+        Detailed breakdown of {entityLabel.toLowerCase()} visibility across AI responses
       </p>
 
       {/* ── Filter bar ── */}
@@ -879,7 +1034,7 @@ export default function DomainsClient({
             </button>
             {domMenuOpen === "types" && (
               <DomFilterDropdown
-                allLabel="All Domain types"
+                allLabel={`All ${entityLabel} types`}
                 searchPlaceholder="Search or create type"
                 items={DOMAIN_TYPES as unknown as string[]}
                 selected={domTypeFilters as unknown as string[]}
@@ -915,6 +1070,7 @@ export default function DomainsClient({
             {domMenuOpen === "columns" && (
               <DomColSelector
                 visible={domCols}
+                entityLabel={entityLabel}
                 onToggle={(k) => setDomCols((s) => {
                   const next = new Set(s);
                   if (next.has(k)) next.delete(k); else next.add(k);
@@ -959,7 +1115,7 @@ export default function DomainsClient({
               <th className="domains-th-source" onClick={() => toggleSort("domain")}>
                 Source <ChevronDown size={10} className="domains-sort-arrow" />
               </th>
-              {domCols.has("domainType") && <th>Domain type</th>}
+              {domCols.has("domainType") && <th>{entityLabel} type</th>}
               {domCols.has("retrieved") && (
                 <th className="urls-th-num" onClick={() => toggleSort("retrieved")}>
                   Retrieved <ChevronDown size={10} className="domains-sort-arrow" />
@@ -983,7 +1139,7 @@ export default function DomainsClient({
           <tbody>
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={8} className="urls-empty">No domains match your filters.</td>
+                <td colSpan={8} className="urls-empty">No {entityLabel.toLowerCase()}s match your filters.</td>
               </tr>
             )}
             {pageRows.map((d, i) => {

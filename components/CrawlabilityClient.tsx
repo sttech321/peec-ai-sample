@@ -607,10 +607,19 @@ export default function CrawlabilityClient({
   }
 
   const brandDropdownRef = useRef<HTMLDivElement>(null);
+  const platformDropdownRef = useRef<HTMLDivElement>(null);
+  const typeDropdownRef = useRef<HTMLDivElement>(null);
+  const botsDropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (brandDropdownRef.current && !brandDropdownRef.current.contains(e.target as Node))
         setBrandOpen(false);
+      if (platformDropdownRef.current && !platformDropdownRef.current.contains(e.target as Node))
+        setPlatformOpen(false);
+      if (typeDropdownRef.current && !typeDropdownRef.current.contains(e.target as Node))
+        setTypeOpen(false);
+      if (botsDropdownRef.current && !botsDropdownRef.current.contains(e.target as Node))
+        setBotsOpen(false);
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
@@ -661,7 +670,7 @@ export default function CrawlabilityClient({
           </div>
 
           {/* All Platforms — multi-select */}
-          <div style={{ position: "relative" }}>
+          <div ref={platformDropdownRef} style={{ position: "relative" }}>
             <button
               className={`cw-chip ${platformFilters.size > 0 ? "cw-chip-active" : ""}`}
               onClick={() => { setPlatformOpen(v => !v); setTypeOpen(false); setBotsOpen(false); }}
@@ -722,7 +731,7 @@ export default function CrawlabilityClient({
           </div>
 
           {/* All bot types — multi-select */}
-          <div style={{ position: "relative" }}>
+          <div ref={typeDropdownRef} style={{ position: "relative" }}>
             <button
               className={`cw-chip ${typeFilters.size > 0 ? "cw-chip-active" : ""}`}
               onClick={() => { setTypeOpen(v => !v); setPlatformOpen(false); setBotsOpen(false); }}
@@ -779,7 +788,7 @@ export default function CrawlabilityClient({
           </div>
 
           {/* All Bots — multi-select by bot name, grouped by type */}
-          <div style={{ position: "relative" }}>
+          <div ref={botsDropdownRef} style={{ position: "relative" }}>
             <button
               className={`cw-chip ${botFilters.size > 0 ? "cw-chip-active" : ""}`}
               onClick={() => { setBotsOpen(v => !v); setPlatformOpen(false); setTypeOpen(false); }}

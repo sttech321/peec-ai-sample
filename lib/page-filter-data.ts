@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { brands, tags } from "../db/schema";
+import { brands, tags, topics } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { guessBrandDomain } from "./brand-domain";
 export { guessBrandDomain };
@@ -66,5 +66,13 @@ export async function getPageFilterData(projectId: string) {
     color: t.color || "gray",
   }));
 
-  return { projectBrands, availableTags };
+  const topicRows = await db
+    .select({ id: topics.id, name: topics.name })
+    .from(topics)
+    .where(eq(topics.projectId, projectId))
+    .orderBy(topics.name);
+
+  const availableTopics = topicRows.map((t) => ({ id: t.id, name: t.name }));
+
+  return { projectBrands, availableTags, availableTopics };
 }
