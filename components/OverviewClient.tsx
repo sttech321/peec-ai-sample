@@ -26,6 +26,7 @@ import {
   ChatFact, ChatRecordView, Resolution,
   aggregateBrands, aggregateDomains, totalCitations, toChatRecords,
   buildVisibilitySeries, filterByEngines, filterByDateRange, aggregateByCategory,
+  buildPerformanceMatrix,
 } from "../lib/chat-aggregations";
 import { classifyDomain, DOMAIN_TYPE_COLORS } from "../lib/domain-aggregations";
 import TypeDropdown from "./TypeDropdown";
@@ -135,6 +136,7 @@ export default function OverviewClient({
   // ── Brand color picker + hover state ─────────────────────────────────────
   const [pickerInfo, setPickerInfo] = useState<{ name: string; pos: { top: number; left: number } } | null>(null);
   const [hoveredBrand, setHoveredBrand] = useState<string | null>(null);
+  const [engineBreakdownBrand, setEngineBreakdownBrand] = useState<string | null>(null);
 
   function openPickerAt(name: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -199,6 +201,22 @@ export default function OverviewClient({
     if (score >= 50) return "#eab308";
     if (score > 0) return "#ef4444";
     return "#cbd5e1";
+  }
+
+  // Visibility benchmark color classes (per docs/handoff/02-metrics-definitions.md)
+  // 0% = critical (red), <20% = weak (amber), >=50% = strong (green), 20-49% = developing (neutral)
+  function visibilityBenchmarkClass(vis: number): string {
+    if (vis === 0) return "pd-vis-critical";
+    if (vis < 20)  return "pd-vis-weak";
+    if (vis >= 50) return "pd-vis-strong";
+    return "";
+  }
+  // SoV benchmark: >=25%=leadership/green, 10-25%=competitive/neutral, <10%=trailing/amber, 0%=critical/red
+  function sovBenchmarkClass(sov: number): string {
+    if (sov === 0)  return "pd-vis-critical";
+    if (sov < 10)   return "pd-vis-weak";
+    if (sov >= 25)  return "pd-vis-strong";
+    return "";
   }
 
   function formatTimeAgo(iso: string): string {
@@ -502,6 +520,15 @@ export default function OverviewClient({
       };
     });
   }, [chartBrandsForDisplay, currentPeriodMap, filteredChats]);
+
+  // Per-engine visibility breakdown for the selected brand (engine breakdown panel)
+  const engineBreakdownData = useMemo(() => {
+    if (!engineBreakdownBrand) return [];
+    const engines = [...new Set(filteredChats.map(c => c.engine))].sort();
+    return buildPerformanceMatrix(filteredChats, [engineBreakdownBrand], engines)
+      .filter(cell => cell.total > 0)
+      .sort((a, b) => b.visibility - a.visibility);
+  }, [engineBreakdownBrand, filteredChats]);
 
   // ── Chart export ─────────────────────────────────────────────────────────
   const chartExportDateLabel = `${effectiveDateRange.start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${effectiveDateRange.end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
@@ -1156,67 +1183,113 @@ export default function OverviewClient({
                       </span>
                     ) : null;
 
+                  const isExpanded = engineBreakdownBrand === b.name;
                   return (
-                    <tr
-                      key={b.name}
-                      onMouseEnter={() => setHoveredBrand(b.name)}
-                      onMouseLeave={() => setHoveredBrand(null)}
-                    >
-                      {/* Rank cell — hover shows colored dot, click opens color picker */}
-                      <td className="pd-rank">
-                        {hoveredBrand === b.name ? (
-                          <span
-                            className="pd-rank-dot pd-rank-dot--clickable"
-                            style={{ background: b.color }}
-                            title="Change brand color"
-                            onClick={e => openPickerAt(b.name, e)}
-                          />
-                        ) : (
-                          i + 1
-                        )}
-                        {pickerInfo?.name === b.name && (
-                          <BrandColorPicker
-                            color={b.color}
-                            position={pickerInfo.pos}
-                            onChange={color => onBrandColorChange?.(b.name, color)}
-                            onClose={() => setPickerInfo(null)}
-                          />
-                        )}
-                      </td>
-                      <td className="pd-brand-cell">
-                        <DomainFavicon domain={brandDomainMap.get(b.name) ?? guessBrandDomain(b.name)} size={16} />
-                        {b.name}
-                      </td>
-                      {/* Visibility */}
-                      <td>
-                        <span className="pd-metric-with-delta">
-                          {showValue && <span className="pd-vis-value">{vis}%</span>}
-                          {deltaEl(visDelta, n => `${n}%`)}
-                        </span>
-                      </td>
-                      {/* SOV */}
-                      <td>
-                        <span className="pd-metric-with-delta">
-                          {showValue && <span className="pd-vis-value">{sov}%</span>}
-                          {deltaEl(sovDelta, n => `${n}%`)}
-                        </span>
-                      </td>
-                      {/* Sentiment */}
-                      <td>
-                        <span className="pd-sentiment-cell">
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
-                          {showValue && <span className="pd-vis-value">{sent > 0 ? sent : "—"}</span>}
-                          {deltaEl(sentDelta, n => `${n > 0 ? "+" : ""}${n}`)}
-                        </span>
-                      </td>
-                      {/* Position — use current period bPos */}
-                      <td>
-                        <span className="pd-metric-with-delta">
-                          {showValue && <span>{bPos > 0 ? `#${bPos.toFixed(1)}` : "—"}</span>}
-                          {deltaElInv(posDelta, (n: number) => `${n > 0 ? "+" : ""}${n}`)}
-                        </span>
-                      </td>
-                    </tr>
+                    <React.Fragment key={b.name}>
+                      <tr
+                        onMouseEnter={() => setHoveredBrand(b.name)}
+                        onMouseLeave={() => setHoveredBrand(null)}
+                        className={isExpanded ? "pd-row-expanded" : ""}
+                      >
+                        {/* Rank cell — hover shows colored dot, click opens color picker */}
+                        <td className="pd-rank">
+                          {hoveredBrand === b.name ? (
+                            <span
+                              className="pd-rank-dot pd-rank-dot--clickable"
+                              style={{ background: b.color }}
+                              title="Change brand color"
+                              onClick={e => openPickerAt(b.name, e)}
+                            />
+                          ) : (
+                            i + 1
+                          )}
+                          {pickerInfo?.name === b.name && (
+                            <BrandColorPicker
+                              color={b.color}
+                              position={pickerInfo.pos}
+                              onChange={color => onBrandColorChange?.(b.name, color)}
+                              onClose={() => setPickerInfo(null)}
+                            />
+                          )}
+                        </td>
+                        <td
+                          className="pd-brand-cell pd-brand-cell--expandable"
+                          onClick={() => setEngineBreakdownBrand(prev => prev === b.name ? null : b.name)}
+                          title="Click to see visibility by engine"
+                        >
+                          <DomainFavicon domain={brandDomainMap.get(b.name) ?? guessBrandDomain(b.name)} size={16} />
+                          {b.name}
+                          <span className={`pd-engine-chevron${isExpanded ? " pd-engine-chevron--open" : ""}`}>▾</span>
+                        </td>
+                        {/* Visibility — benchmark color: 0%=red, <20%=amber, >=50%=green */}
+                        <td>
+                          <span className="pd-metric-with-delta">
+                            {showValue && <span className={`pd-vis-value ${visibilityBenchmarkClass(vis)}`}>{vis}%</span>}
+                            {deltaEl(visDelta, n => `${n}%`)}
+                          </span>
+                        </td>
+                        {/* SOV */}
+                        <td>
+                          <span className="pd-metric-with-delta">
+                            {showValue && <span className={`pd-vis-value ${sovBenchmarkClass(sov)}`}>{sov}%</span>}
+                            {deltaEl(sovDelta, n => `${n}%`)}
+                          </span>
+                        </td>
+                        {/* Sentiment */}
+                        <td>
+                          <span className="pd-sentiment-cell">
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
+                            {showValue && <span className="pd-vis-value">{sent > 0 ? sent : "—"}</span>}
+                            {deltaEl(sentDelta, n => `${n > 0 ? "+" : ""}${n}`)}
+                          </span>
+                        </td>
+                        {/* Position — use current period bPos */}
+                        <td>
+                          <span className="pd-metric-with-delta">
+                            {showValue && <span>{bPos > 0 ? `#${bPos.toFixed(1)}` : "—"}</span>}
+                            {deltaElInv(posDelta, (n: number) => `${n > 0 ? "+" : ""}${n}`)}
+                          </span>
+                        </td>
+                      </tr>
+                      {/* Engine breakdown panel — expands inline below the brand row */}
+                      {isExpanded && (
+                        <tr className="pd-engine-breakdown-row">
+                          <td colSpan={6}>
+                            <div className="pd-engine-breakdown">
+                              <div className="pd-engine-breakdown-header">
+                                <span className="pd-engine-breakdown-title">Visibility by Engine — {b.name}</span>
+                                <button className="pd-engine-breakdown-close" onClick={() => setEngineBreakdownBrand(null)}>✕</button>
+                              </div>
+                              {engineBreakdownData.length === 0 ? (
+                                <div className="pd-engine-breakdown-empty">No engine data for this date range</div>
+                              ) : (
+                                <div className="pd-engine-bars">
+                                  {engineBreakdownData.map(cell => {
+                                    const eVis = Math.round(cell.visibility);
+                                    return (
+                                      <div key={cell.engine} className="pd-engine-bar-row">
+                                        <span className="pd-engine-label">
+                                          <EngineIcon engine={cell.engine} size={13} />
+                                          {cell.engine}
+                                        </span>
+                                        <div className="pd-engine-bar-track">
+                                          <div
+                                            className="pd-engine-bar-fill"
+                                            style={{ width: `${Math.min(cell.visibility, 100)}%`, background: b.color }}
+                                          />
+                                        </div>
+                                        <span className={`pd-engine-vis-pct ${visibilityBenchmarkClass(eVis)}`}>{eVis}%</span>
+                                        <span className="pd-engine-chats">{cell.hits}/{cell.total} chats</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
                 {chartBrands.length === 0 && (
@@ -1248,6 +1321,7 @@ export default function OverviewClient({
                         {v > 0 ? "+" : ""}{fmt(v)}
                       </span>
                     ) : null;
+                  const isPinnedExpanded = engineBreakdownBrand === b.name;
                   return (
                     <>
                       {/* Separator line */}
@@ -1256,7 +1330,7 @@ export default function OverviewClient({
                       </tr>
                       {/* Pinned row with real rank — hover highlights own brand line in chart */}
                       <tr
-                        className="pd-pinned-row"
+                        className={`pd-pinned-row${isPinnedExpanded ? " pd-row-expanded" : ""}`}
                         onMouseEnter={() => setHoveredBrand(b.name)}
                         onMouseLeave={() => setHoveredBrand(null)}
                       >
@@ -1280,16 +1354,21 @@ export default function OverviewClient({
                             />
                           )}
                         </td>
-                        <td className="pd-brand-cell">
+                        <td
+                          className="pd-brand-cell pd-brand-cell--expandable"
+                          onClick={() => setEngineBreakdownBrand(prev => prev === b.name ? null : b.name)}
+                          title="Click to see visibility by engine"
+                        >
                           <DomainFavicon domain={brandDomainMap.get(b.name) ?? guessBrandDomain(b.name)} size={16} />
                           {b.name}
+                          <span className={`pd-engine-chevron${isPinnedExpanded ? " pd-engine-chevron--open" : ""}`}>▾</span>
                         </td>
                         <td><span className="pd-metric-with-delta">
-                          {showValue && <span className="pd-vis-value">{vis}%</span>}
+                          {showValue && <span className={`pd-vis-value ${visibilityBenchmarkClass(vis)}`}>{vis}%</span>}
                           {deltaEl(visDelta, n => `${n}%`)}
                         </span></td>
                         <td><span className="pd-metric-with-delta">
-                          {showValue && <span className="pd-vis-value">{sov}%</span>}
+                          {showValue && <span className={`pd-vis-value ${sovBenchmarkClass(sov)}`}>{sov}%</span>}
                           {deltaEl(sovDelta, n => `${n}%`)}
                         </span></td>
                         <td><span className="pd-sentiment-cell">
@@ -1302,6 +1381,44 @@ export default function OverviewClient({
                           {deltaEl(posDelta, (n: number) => `${n > 0 ? "+" : ""}${n}`)}
                         </span></td>
                       </tr>
+                      {/* Engine breakdown panel for pinned own brand */}
+                      {isPinnedExpanded && (
+                        <tr className="pd-engine-breakdown-row">
+                          <td colSpan={6}>
+                            <div className="pd-engine-breakdown">
+                              <div className="pd-engine-breakdown-header">
+                                <span className="pd-engine-breakdown-title">Visibility by Engine — {b.name}</span>
+                                <button className="pd-engine-breakdown-close" onClick={() => setEngineBreakdownBrand(null)}>✕</button>
+                              </div>
+                              {engineBreakdownData.length === 0 ? (
+                                <div className="pd-engine-breakdown-empty">No engine data for this date range</div>
+                              ) : (
+                                <div className="pd-engine-bars">
+                                  {engineBreakdownData.map(cell => {
+                                    const eVis = Math.round(cell.visibility);
+                                    return (
+                                      <div key={cell.engine} className="pd-engine-bar-row">
+                                        <span className="pd-engine-label">
+                                          <EngineIcon engine={cell.engine} size={13} />
+                                          {cell.engine}
+                                        </span>
+                                        <div className="pd-engine-bar-track">
+                                          <div
+                                            className="pd-engine-bar-fill"
+                                            style={{ width: `${Math.min(cell.visibility, 100)}%`, background: b.color }}
+                                          />
+                                        </div>
+                                        <span className={`pd-engine-vis-pct ${visibilityBenchmarkClass(eVis)}`}>{eVis}%</span>
+                                        <span className="pd-engine-chats">{cell.hits}/{cell.total} chats</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </>
                   );
                 })()}
