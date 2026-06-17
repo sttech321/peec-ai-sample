@@ -22,6 +22,7 @@ import {
   Play,
   Columns,
   Download,
+  Sparkles,
 } from "lucide-react";
 import EngineIcon from "./EngineIcon";
 import { DEFAULT_ENGINES } from "../lib/engines";
@@ -1741,23 +1742,28 @@ export default function PromptsComparisonClient({
                   Add Prompt
                 </button>
               )}
-              {/* Suggest more button — temporarily hidden
-              {canEdit && (
+              {canEdit && activeTab === "suggested" && (
                 <button
                   className="pp-add-btn"
                   onClick={handleGenerate}
                   disabled={suggestLoading}
-                  style={{ background: "#6366f1", color: "white" }}
+                  style={{
+                    background: suggestLoading ? "#475569" : "#1e293b",
+                    color: "white",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    opacity: suggestLoading ? 0.8 : 1,
+                  }}
                   title="AI-generate new prompt suggestions based on your brand profile"
                 >
                   {suggestLoading ? (
                     <><Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Generating…</>
                   ) : (
-                    <><Plus size={13} /> Suggest more</>
+                    <><Sparkles size={13} /> Suggest more</>
                   )}
                 </button>
               )}
-              */}
             </div>
           </div>
           {suggestError && (
@@ -1914,7 +1920,9 @@ export default function PromptsComparisonClient({
                     <tr>
                       <th className="pp-th-checkbox"><input type="checkbox" disabled /></th>
                       <th className="pp-th-sortable">Prompt</th>
-                      <th>Volume <span className="pp-beta-pill">Beta</span></th>
+                      <th>Volume</th>
+                      <th>Branding</th>
+                      <th>Intent</th>
                       <th>Tags <span className="pp-beta-pill">Beta</span></th>
                       <th>Suggested At</th>
                       <th>Location</th>
@@ -1944,15 +1952,18 @@ export default function PromptsComparisonClient({
                               <span style={{ color: "#1a1a1a", fontWeight: 500 }}>{s.query}</span>
                             </td>
                             <td><VolumeBars tier={s.volumeTier} /></td>
+                            <td><span style={{ color: "#94a3b8", fontSize: 13 }}>—</span></td>
                             <td>
-                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                                <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 20, background: "#f1f5f9", color: "#64748b", fontWeight: 600 }}>
-                                  non-branded
-                                </span>
-                                <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 20, background: ic.bg, color: ic.text, fontWeight: 600 }}>
+                              {s.intentType ? (
+                                <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: ic.bg, color: ic.text, fontWeight: 600, whiteSpace: "nowrap" }}>
                                   {s.intentType}
                                 </span>
-                              </div>
+                              ) : (
+                                <span style={{ color: "#94a3b8", fontSize: 13 }}>—</span>
+                              )}
+                            </td>
+                            <td>
+                              <span style={{ fontSize: 12, color: "#6366f1", cursor: "default" }}>+ Add tags</span>
                             </td>
                             <td><span className="pp-added">{formatRelativeTime(s.createdAt)}</span></td>
                             <td>
