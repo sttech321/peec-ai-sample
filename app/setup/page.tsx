@@ -86,7 +86,7 @@ export default function SetupPage() {
     setError(null);
     patch({ step: "generating" });
     startTransition(async () => {
-      const res = await generateTopics(state.profile);
+      const res = await generateTopics(state.profile, state.language);
       if (!res.ok) {
         setError("Failed to generate topics");
         patch({ step: 2 });

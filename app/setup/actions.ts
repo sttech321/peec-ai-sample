@@ -7,7 +7,7 @@ import { SETUP_DONE_COOKIE } from "../../lib/session";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { BrandProfile, COUNTRY_OPTIONS, EMPTY_BRAND_PROFILE } from "../../lib/brand-profile-types";
-import { SetupTopic, SetupPrompt } from "../../lib/setup-types";
+import { SetupTopic, SetupPrompt, MAX_PROMPTS_PER_TOPIC } from "../../lib/setup-types";
 import { runPipelineForAllEngines, type PipelineJob } from "../../lib/run-pipeline";
 import { DEFAULT_ENGINES } from "../../lib/ai-clients";
 
@@ -20,6 +20,20 @@ function uid(): string {
 
 function cleanDomain(url: string): string {
   return url.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
+}
+
+/** True when a non-default (non-English) generation language was selected. */
+function isNonEnglishLanguage(language?: string): boolean {
+  const lang = (language ?? "").trim();
+  return !!lang && !/^(english|en)$/i.test(lang);
+}
+
+/** Instruction appended to user content so the LLM writes output in `language`.
+ *  Returns "" for English / empty so the English flow is unchanged. */
+function languageNote(language: string | undefined, what: string): string {
+  return isNonEnglishLanguage(language)
+    ? `\n\nIMPORTANT: Write every ${what} entirely in ${language!.trim()} (the native script of that language), not English.`
+    : "";
 }
 
 const BRAND_PROFILE_SYSTEM = `You are a brand intelligence analyst. Given a brand name and domain, generate a realistic brand profile.
@@ -200,7 +214,7 @@ Return ONLY a valid JSON array of exactly 10 strings. Each topic should be:
 - 3-6 words, title-case
 Return ONLY the JSON array, no other text.`;
 
-async function generateTopicsWithLLM(profile: BrandProfile): Promise<string[] | null> {
+async function generateTopicsWithLLM(profile: BrandProfile, language?: string): Promise<string[] | null> {
   const { keyState } = await import("../../lib/ai-clients");
   const summary = [
     `Brand: ${profile.companyName}`,
@@ -209,7 +223,7 @@ async function generateTopicsWithLLM(profile: BrandProfile): Promise<string[] | 
     `Description: ${profile.description}`,
     `Products: ${profile.services.map((s) => s.name).join(", ")}`,
     `Identity: ${profile.identityTraits.join(", ")}`,
-  ].join("\n");
+  ].join("\n") + languageNote(language, "topic");
 
   if (keyState(process.env.ANTHROPIC_API_KEY, ["sk-ant-"]).ok) {
     try {
@@ -287,14 +301,14 @@ async function generateTopicsWithLLM(profile: BrandProfile): Promise<string[] | 
  * Calls LLM (Claude → OpenAI → Groq) for brand-specific topics.
  * Falls back to generic industry-matched topics.
  */
-export async function generateTopics(profile: BrandProfile): Promise<{
+export async function generateTopics(profile: BrandProfile, language?: string): Promise<{
   ok: true;
   topics: SetupTopic[];
 }> {
-  // Try LLM-generated topics
+  // Try LLM-generated topics (in the selected language when non-English)
   let topicNames: string[] | null = null;
   try {
-    topicNames = await generateTopicsWithLLM(profile);
+    topicNames = await generateTopicsWithLLM(profile, language);
   } catch {
     // non-fatal
   }
@@ -327,14 +341,117 @@ export async function generateTopics(profile: BrandProfile): Promise<{
     topicNames = base.slice(0, 10);
   }
 
-  const topicList: SetupTopic[] = topicNames.map((name) => ({
-    id: uid(),
-    name,
-    selected: true,
-    prompts: generatePromptsForTopic(name, profile),
-  }));
+  // For a non-English language, generate the prompts in that language via the
+  // LLM (one batched call). English keeps the existing template generation so
+  // that flow is completely unchanged.
+  let llmPrompts: string[][] | null = null;
+  if (isNonEnglishLanguage(language)) {
+    try {
+      llmPrompts = await generatePromptsInLanguage(topicNames, profile, language!.trim());
+    } catch {
+      llmPrompts = null;
+    }
+  }
+
+  const topicList: SetupTopic[] = topicNames.map((name, i) => {
+    const fromLLM = llmPrompts?.[i];
+    const prompts: SetupPrompt[] = fromLLM && fromLLM.length > 0
+      ? fromLLM
+          .map((text) => text.trim())
+          .filter(Boolean)
+          .slice(0, MAX_PROMPTS_PER_TOPIC)
+          .map((text) => ({ id: uid(), text, selected: true }))
+      : generatePromptsForTopic(name, profile);
+    return { id: uid(), name, selected: true, prompts };
+  });
 
   return { ok: true, topics: topicList };
+}
+
+// ── LLM prompt generation in a target language ──────────────────────────────
+// Runs the same provider chain (Claude → OpenAI → Groq) used elsewhere and
+// returns raw text. Only used for non-English generation.
+async function runLLMText(system: string, user: string, maxTokens: number): Promise<string> {
+  const { keyState } = await import("../../lib/ai-clients");
+
+  if (keyState(process.env.ANTHROPIC_API_KEY, ["sk-ant-"]).ok) {
+    try {
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+      const msg = await client.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: maxTokens,
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: user }],
+      });
+      return msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+    } catch (e) { console.error("[setup-prompts] Anthropic failed:", (e as Error)?.message); }
+  }
+
+  if (keyState(process.env.OPENAI_API_KEY, ["sk-"]).ok) {
+    try {
+      const OpenAI = (await import("openai")).default;
+      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+      const r = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      });
+      return r.choices[0]?.message?.content ?? "";
+    } catch (e) { console.error("[setup-prompts] OpenAI failed:", (e as Error)?.message); }
+  }
+
+  if (keyState(process.env.GROQ_API_KEY, ["gsk_"]).ok) {
+    try {
+      const OpenAI = (await import("openai")).default;
+      const client = new OpenAI({ apiKey: process.env.GROQ_API_KEY!, baseURL: "https://api.groq.com/openai/v1" });
+      const r = await client.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      });
+      return r.choices[0]?.message?.content ?? "";
+    } catch (e) { console.error("[setup-prompts] Groq failed:", (e as Error)?.message); }
+  }
+
+  return "";
+}
+
+const PROMPTS_SYSTEM = `You are a search-intent expert. For each topic given, write exactly ${MAX_PROMPTS_PER_TOPIC} natural prompts a real user would type into an AI engine (ChatGPT, Perplexity, Gemini) when evaluating products/services in that area.
+
+Return ONLY a valid JSON array containing one sub-array per topic, in the SAME ORDER as the topics given. Each sub-array holds exactly ${MAX_PROMPTS_PER_TOPIC} prompt strings (natural questions/statements, 8-16 words).
+Shape: [["prompt 1", "prompt 2", ...], ["prompt 1", "prompt 2", ...]]
+Return ONLY the JSON, no other text.`;
+
+/** Generate prompts for every topic in one call, written in `language`.
+ *  Returns an array index-aligned with `topicNames` (each entry is that topic's
+ *  prompts), or null on failure so the caller can fall back. */
+async function generatePromptsInLanguage(
+  topicNames: string[],
+  profile: BrandProfile,
+  language: string,
+): Promise<string[][] | null> {
+  const summary = [
+    `Brand: ${profile.companyName}`,
+    `Industry: ${profile.industry}`,
+    `Products: ${profile.services.map((s) => s.name).join(", ")}`,
+  ].join("\n");
+  const topicsList = topicNames.map((t, i) => `${i + 1}. ${t}`).join("\n");
+  const user = `${summary}\n\nTopics (generate ${MAX_PROMPTS_PER_TOPIC} prompts for each, in this exact order):\n${topicsList}${languageNote(language, "prompt")}`;
+
+  let raw = "";
+  try {
+    raw = await runLLMText(PROMPTS_SYSTEM, user, 4096);
+  } catch {
+    return null;
+  }
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (!match) return null;
+  try {
+    const arr = JSON.parse(match[0]);
+    if (!Array.isArray(arr)) return null;
+    return arr.map((sub) => (Array.isArray(sub) ? sub.map(String) : []));
+  } catch {
+    return null;
+  }
 }
 
 function generatePromptsForTopic(topic: string, profile: BrandProfile): SetupPrompt[] {
@@ -397,10 +514,15 @@ export async function finalizeSetup(args: {
     }
   }
 
-  // 1. Create project
+  // 1. Create project — persist the selected language so later prompt/topic
+  //    generation (e.g. the prompts-page suggestions) stays in that language.
   const [project] = await db
     .insert(projects)
-    .values({ workspaceId, name: args.brandName.trim() })
+    .values({
+      workspaceId,
+      name: args.brandName.trim(),
+      ...(args.language?.trim() ? { language: args.language.trim() } : {}),
+    })
     .returning();
 
   // 2. Brand profile

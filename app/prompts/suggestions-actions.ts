@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "../../db";
-import { prompts, topics, promptSuggestions, brandProfiles } from "../../db/schema";
+import { prompts, topics, promptSuggestions, brandProfiles, projects } from "../../db/schema";
 import { revalidatePath } from "next/cache";
 import { getActiveProjectId, getWorkspaceId } from "../../lib/project-context";
 import { and, eq } from "drizzle-orm";
@@ -58,6 +58,17 @@ export async function generatePromptSuggestions(): Promise<{ ok: boolean; count:
   const profile = profileRow?.data as Record<string, unknown> | null;
   if (!profile) return { ok: false, count: 0, error: "No brand profile found. Complete setup first." };
 
+  // Generate suggestions in the project's configured language (defaults to English).
+  const [projectRow] = await db
+    .select({ language: projects.language })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  const language = (projectRow?.language ?? "English").trim();
+  const langNote = language && !/^(english|en)$/i.test(language)
+    ? `\n\nIMPORTANT: Write every "query" and "topic" value entirely in ${language} (native script), not English.`
+    : "";
+
   const userMsg = [
     `Brand: ${profile.companyName ?? ""}`,
     `Domain: ${profile.domain ?? ""}`,
@@ -65,7 +76,7 @@ export async function generatePromptSuggestions(): Promise<{ ok: boolean; count:
     `Description: ${profile.description ?? ""}`,
     `Services: ${Array.isArray(profile.services) ? (profile.services as {name:string}[]).map((s) => s.name).join(", ") : ""}`,
     `Identity: ${Array.isArray(profile.identityTraits) ? (profile.identityTraits as string[]).join(", ") : ""}`,
-  ].join("\n");
+  ].join("\n") + langNote;
 
   const { keyState } = await import("../../lib/ai-clients");
   let rawJson = "";
