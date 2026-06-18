@@ -122,9 +122,15 @@ const MODEL_COSTS_API = [
 ];
 
 function timeAgo(date: Date): string {
-  const diff = Date.now() - new Date(date).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "Today";
+  // Compare calendar days (local midnight → midnight), not elapsed 24h windows,
+  // so "yesterday afternoon" reads "1 day ago" regardless of the current time.
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfCreated = new Date(date);
+  startOfCreated.setHours(0, 0, 0, 0);
+  const days = Math.round((startOfToday.getTime() - startOfCreated.getTime()) / 86400000);
+  // A creation date can't be in the future — clamp clock-skew/timezone drift to "Today".
+  if (days <= 0) return "Today";
   if (days === 1) return "1 day ago";
   return `${days} days ago`;
 }

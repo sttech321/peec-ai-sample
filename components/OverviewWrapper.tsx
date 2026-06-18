@@ -134,7 +134,6 @@ export default function OverviewWrapper({
         projectName={projectName}
         projectBrands={filterBrands}
         availableTags={availableTags}
-        availableTopics={availableTopics}
         addBrandAction={addBrandAction}
         onDateChange={setDateRange}
         onModelsChange={setSelectedModels}

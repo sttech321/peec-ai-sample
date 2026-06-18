@@ -80,7 +80,7 @@ async function checkGemini(): Promise<KeyStatus> {
   base.configured = true;
   const r = await timed(async () => {
     const c = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const m = c.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const m = c.getGenerativeModel({ model: "gemini-2.5-flash" });
     return m.generateContent("ping");
   });
   if (!r.ok) return { ...base, reason: errMsg(r.err), latencyMs: r.ms };

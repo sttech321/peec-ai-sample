@@ -110,7 +110,7 @@ async function callClaude(query: string): Promise<EngineResult> {
 
 // ─── Google Gemini ────────────────────────────────────────────────────
 async function callGemini(query: string): Promise<EngineResult> {
-  const modelName = "gemini-2.0-flash";
+  const modelName = "gemini-2.5-flash";
   const snapshot = `google:${modelName}`;
   const k = keyState(process.env.GEMINI_API_KEY);
   if (!k.ok) return { ok: false, error: k.reason!, errorCode: "MISSING_KEY", modelSnapshot: snapshot };
