@@ -724,6 +724,33 @@ export default function PageFilterBar({
     }
   };
 
+  const defaultModels = initialModels ?? ALL_ENGINES;
+  const defaultDate   = initialDateRange ?? makeDateRange("7");
+
+  const handleReset = () => {
+    setSelectedBrandIds(null);
+    onBrandsChange?.(null);
+
+    setSelectedTagIds(null);
+    onTagsChange?.(null);
+
+    setSelectedTopicIds(null);
+    onTopicsChange?.(null);
+
+    setSelectedModels(defaultModels);
+    onModelsChange?.(defaultModels);
+
+    setDateRange(defaultDate);
+    onDateChange?.(defaultDate);
+  };
+  const isFiltered =
+    selectedBrandIds !== null ||
+    selectedTagIds   !== null ||
+    selectedTopicIds !== null ||
+    selectedModels.length !== defaultModels.length ||
+    !selectedModels.every((m) => defaultModels.includes(m)) ||
+    dateRange.preset !== defaultDate.preset;
+
   return (
     <div className="pp-filter-bar">
       <BrandFilterDropdown
@@ -853,6 +880,12 @@ export default function PageFilterBar({
             </div>
           )}
         </Dropdown>
+      )}
+
+      {isFiltered && (
+        <button className="pp-reset-btn pp-reset-btn-active" onClick={handleReset}>
+          Reset
+        </button>
       )}
     </div>
   );

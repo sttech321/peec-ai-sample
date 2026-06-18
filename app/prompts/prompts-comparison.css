@@ -57,6 +57,36 @@
 .pp-dd-trigger svg { color: #71717a; }
 .pp-rotate { transform: rotate(180deg); }
 
+/* ── Reset button ─────────────────────────────────────────────────────────── */
+.pp-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 13px;
+  background: transparent;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #71717a;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.pp-reset-btn:hover {
+  background: #fafafa;
+  border-color: #d4d4d8;
+  color: #3f3f46;
+}
+.pp-reset-btn-active {
+  color: #ef4444;
+  border-color: #fecaca;
+}
+.pp-reset-btn-active:hover {
+  background: #fff5f5;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
 .pp-dd-menu {
   position: absolute;
   top: calc(100% + 6px);
