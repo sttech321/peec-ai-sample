@@ -900,8 +900,11 @@ function WorkspaceUsageBar({ projects, stats }: { projects: ProjectRow[]; stats:
                   );
                 }}
               >
-                <div className="proj-usage-tooltip">
-                  <div className="proj-usage-tooltip-name">{p.name}</div>
+                <div className="proj-usage-tooltip" style={{ "--accent": color } as React.CSSProperties}>
+                  <div className="proj-usage-tooltip-name">
+                    <ProjectAvatar name={p.name} domain={p.domain} color={color} size={16} />
+                    <span>{p.name}</span>
+                  </div>
                   <div className="proj-usage-tooltip-row">
                     <span>Used credits</span>
                     <span className="proj-usage-tooltip-val">{fmtNum(p.usedCredits)}</span>
@@ -1179,6 +1182,7 @@ export default function ProjectsClient({
                   <tr key={p.id}>
                     <td>
                       <div className="proj-name-cell">
+                        <span className="proj-color-dot" style={{ background: color }} />
                         <ProjectAvatar name={p.name} domain={p.domain} color={color} />
                         <span className="proj-name-text">{p.name}</span>
                       </div>
