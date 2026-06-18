@@ -17,6 +17,7 @@ interface Props {
   value: DateRangeValue;
   onChange: (v: DateRangeValue) => void;
   defaultPreset?: DatePreset;
+  onOpen?: () => void;
 }
 
 const PRESETS: { key: DatePreset; label: string; days: number }[] = [
@@ -75,7 +76,7 @@ function isBetween(d: Date, start: Date, end: Date): boolean {
   return t >= s && t <= e;
 }
 
-export default function DateRangeDropdown({ value, onChange }: Props) {
+export default function DateRangeDropdown({ value, onChange, onOpen }: Props) {
   const [open,      setOpen]      = useState(false);
   const [pickStart, setPickStart] = useState<Date | null>(null);
 
@@ -166,7 +167,7 @@ export default function DateRangeDropdown({ value, onChange }: Props) {
 
   return (
     <div ref={ref} className="relative inline-block">
-      <button className="pd-filter-chip" onClick={() => setOpen(!open)}>
+      <button className="pd-filter-chip" onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}>
         <Calendar size={11} /> {value.label} <ChevronDown size={11} />
       </button>
 

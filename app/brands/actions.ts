@@ -10,6 +10,36 @@ import {
   retroactiveExtractionAllBrands,
 } from "../../lib/retroactive-brand-extraction";
 
+/** Delete pending suggestions whose normalized domain matches any of the given brand domains */
+async function dismissSuggestionsByDomains(projectId: string, domains: string[]): Promise<void> {
+  if (!domains.length) return;
+  const normSet = new Set(
+    domains
+      .map((d) => d.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].trim())
+      .filter(Boolean)
+  );
+  if (!normSet.size) return;
+
+  const existing = await db
+    .select({ id: brandSuggestions.id, domain: brandSuggestions.domain })
+    .from(brandSuggestions)
+    .where(eq(brandSuggestions.projectId, projectId));
+
+  const toDelete = existing
+    .filter((s) => {
+      if (!s.domain) return false;
+      const norm = s.domain.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].trim();
+      return normSet.has(norm);
+    })
+    .map((s) => s.id);
+
+  if (toDelete.length) {
+    await Promise.all(
+      toDelete.map((id) => db.delete(brandSuggestions).where(eq(brandSuggestions.id, id)))
+    );
+  }
+}
+
 export async function renameBrand(args: {
   brandId: string;
   displayName: string;
@@ -54,6 +84,11 @@ export async function updateBrandDomains(args: {
     .update(brands)
     .set({ domains: cleaned })
     .where(and(eq(brands.id, args.brandId), eq(brands.projectId, projectId)));
+
+  // Clean up pending suggestions whose domain now matches this brand
+  if (cleaned.length) {
+    await dismissSuggestionsByDomains(projectId, cleaned);
+  }
 
   revalidatePath("/brands");
   revalidatePath("/prompts");
@@ -123,8 +158,11 @@ export async function acceptSuggestion(suggestionId: string) {
     }
   }
 
-  // 4. Remove from suggestions
+  // 4. Remove accepted suggestion + clean up any other pending suggestions with the same domain
   await db.delete(brandSuggestions).where(eq(brandSuggestions.id, suggestionId));
+  if (suggestion.domain) {
+    await dismissSuggestionsByDomains(suggestion.projectId, [suggestion.domain]);
+  }
 
   revalidatePath("/brands");
   revalidatePath("/");
@@ -177,5 +215,11 @@ export async function createBrand(data: {
     aliases: data.aliases,
     domains: data.domains,
   });
+
+  // Clean up pending suggestions whose domain matches the newly added brand
+  if (data.domains.length) {
+    await dismissSuggestionsByDomains(data.projectId, data.domains);
+  }
+
   revalidatePath("/brands");
 }
