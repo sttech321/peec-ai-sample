@@ -1476,10 +1476,12 @@ export default function PromptsComparisonClient({
               <ChevronUp size={14} />
             </button>
           </div>
-          <button className="pp-new-topic" onClick={() => setShowNewTopic(true)}>
-            <Plus size={13} />
-            <span>New topic</span>
-          </button>
+          {canEdit && (
+            <button className="pp-new-topic" onClick={() => setShowNewTopic(true)}>
+              <Plus size={13} />
+              <span>New topic</span>
+            </button>
+          )}
           <div className="pp-topics-search">
             <Search size={12} className="pp-topics-search-icon" />
             <input
@@ -1905,8 +1907,8 @@ export default function PromptsComparisonClient({
             </div>
           </div>
 
-          {/* Batch-actions toolbar — visible when at least one row is selected */}
-          {selectedRows.size > 0 && (
+          {/* Batch-actions toolbar — visible when at least one row is selected AND user can edit */}
+          {selectedRows.size > 0 && canEdit && (
             <BatchActionsBar
               selectedCount={selectedRows.size}
               selectedIds={[...selectedRows]}
@@ -2042,9 +2044,11 @@ export default function PromptsComparisonClient({
             <table className="pp-table">
               <thead>
                 <tr>
-                  <th className="pp-th-checkbox">
-                    <input type="checkbox" checked={allOnPageSelected} onChange={toggleAllRows} />
-                  </th>
+                  {canEdit && (
+                    <th className="pp-th-checkbox">
+                      <input type="checkbox" checked={allOnPageSelected} onChange={toggleAllRows} />
+                    </th>
+                  )}
                   <th className="pp-th-sortable" onClick={() => handleSort("query")}>
                     Prompt {renderSortIcon("query")}
                   </th>
@@ -2095,9 +2099,11 @@ export default function PromptsComparisonClient({
                     const showDelta = indicatorMode !== "none";
                     return (
                     <tr key={p.id} style={!p.isActive ? { opacity: 0.45 } : undefined}>
-                      <td className="pp-td-checkbox">
-                        <input type="checkbox" checked={selectedRows.has(p.id)} onChange={() => toggleRow(p.id)} />
-                      </td>
+                      {canEdit && (
+                        <td className="pp-td-checkbox">
+                          <input type="checkbox" checked={selectedRows.has(p.id)} onChange={() => toggleRow(p.id)} />
+                        </td>
+                      )}
                       <td className="pp-td-prompt">
                         <a href={`/prompts/${p.id}`} className="pp-prompt-link">{p.query}</a>
                         {!p.isActive && (
