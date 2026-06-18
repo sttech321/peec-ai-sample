@@ -298,6 +298,27 @@ export default function BrandsClient({
   const [openMenu,    setOpenMenu]    = useState<string | null>(null);
   const [pickerInfo, setPickerInfo] = useState<{ id: string; pos: { top: number; left: number } } | null>(null);
 
+  // Client-side safety net: hide suggestions that already match a tracked brand by name or domain.
+  // This catches stale DB entries and optimistic-update state without requiring a page reload.
+  const visibleSuggestions = useMemo(() => {
+    const trackedNames = new Set(brands.map((b) => b.name.toLowerCase().trim()));
+    const trackedDomains = new Set<string>();
+    for (const b of brands) {
+      for (const d of b.domains) {
+        const norm = normalizeDomain(d);
+        if (norm) trackedDomains.add(norm);
+      }
+    }
+    return suggestions.filter((s) => {
+      if (trackedNames.has(s.name.toLowerCase().trim())) return false;
+      if (s.domain) {
+        const norm = normalizeDomain(s.domain);
+        if (norm && trackedDomains.has(norm)) return false;
+      }
+      return true;
+    });
+  }, [suggestions, brands]);
+
   // ── Re-process past chats state ───────────────────────────────────────────
   const [reprocessBusy,   setReprocessBusy]   = useState(false);
   const [reprocessResult, setReprocessResult] = useState<{ created: number; brandsProcessed: number } | null>(null);
@@ -1009,12 +1030,12 @@ export default function BrandsClient({
         <div className="bp-sidebar">
           <div className="bp-sidebar-head">
             <span className="bp-sidebar-title">Brand suggestions</span>
-            <span className="bp-sidebar-count">· {suggestions.length}</span>
+            <span className="bp-sidebar-count">· {visibleSuggestions.length}</span>
             <Info size={13} className="bp-sidebar-info" />
           </div>
 
           <div className="bp-sidebar-cards">
-            {suggestions.length === 0 ? (
+            {visibleSuggestions.length === 0 ? (
               <div className="bp-sidebar-empty-state">
                 <p className="bp-sidebar-empty">No suggestions yet.</p>
                 <p className="bp-sidebar-empty-hint">
@@ -1023,7 +1044,7 @@ export default function BrandsClient({
                 </p>
               </div>
             ) : (
-              suggestions.map((s) => (
+              visibleSuggestions.map((s) => (
                 <SuggestionCard key={s.id} s={s} onAccept={doAccept} onReject={doReject} />
               ))
             )}

@@ -1220,6 +1220,23 @@ export default function PromptsComparisonClient({
     });
   };
 
+  const isFiltered =
+    selectedBrandIds   !== null ||
+    selectedTagIds     !== null ||
+    filterBarTopicIds  !== null ||
+    selectedModels.length !== ALL_ENGINES.length ||
+    !selectedModels.every((m) => ALL_ENGINES.includes(m)) ||
+    dateRange.preset !== "7";
+
+  const handleFilterReset = () => {
+    setSelectedBrandIds(null);
+    setSelectedTagIds(null);
+    setFilterBarTopicIds(null);
+    setSelectedModels([...ALL_ENGINES]);
+    setDateRange(makeDateRange("7"));
+    setTagOp("or");
+  };
+
   const toggleRow = (id: string) => {
     setSelectedRows((curr) => {
       const next = new Set(curr);
@@ -1463,6 +1480,12 @@ export default function PromptsComparisonClient({
               </div>
             )}
           </Dropdown>
+        )}
+
+        {isFiltered && (
+          <button className="pp-reset-btn pp-reset-btn-active" onClick={handleFilterReset}>
+            Reset
+          </button>
         )}
       </div>
 

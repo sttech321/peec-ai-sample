@@ -471,7 +471,7 @@
   font-family: inherit;
 }
 
-.urls-page-btn:hover:not(:disabled) {
+.urls-page-btn:hover:not(:disabled):not(.active) {
   background: #f8fafc;
   border-color: #cbd5e1;
 }

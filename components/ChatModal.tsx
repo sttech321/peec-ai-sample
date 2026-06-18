@@ -115,7 +115,7 @@ export default function ChatModal({ chat, ownBrand, onClose }: Props) {
               </div>
             </div>
             <div className="mr-8">
-              <button className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors uppercase tracking-wider">
+              <button className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors uppercase tracking-wider" onClick={onClose}>
                 View prompt <ExternalLink size={10} />
               </button>
             </div>

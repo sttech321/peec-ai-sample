@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import {
   ChevronDown, ChevronUp, RotateCcw, ChevronRight,
 } from "lucide-react";
@@ -100,6 +100,26 @@ export default function RankingClient({
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [topicOpen,      setTopicOpen]      = useState(false);
   const [sortCol, setSortCol] = useState<SortCol>("visibility");
+
+  const modelRef = useRef<HTMLDivElement>(null);
+  const tagRef   = useRef<HTMLDivElement>(null);
+  const topicRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (modelOpen && modelRef.current && !modelRef.current.contains(e.target as Node)) {
+        setModelOpen(false);
+      }
+      if (tagOpen && tagRef.current && !tagRef.current.contains(e.target as Node)) {
+        setTagOpen(false);
+      }
+      if (topicOpen && topicRef.current && !topicRef.current.contains(e.target as Node)) {
+        setTopicOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [modelOpen, tagOpen, topicOpen]);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const ownBrandNames = useMemo(
@@ -220,11 +240,15 @@ export default function RankingClient({
 
       {/* Filter bar */}
       <div className="rk-filterbar">
-        <DateRangeDropdown value={dateRange} onChange={setDateRange} />
+        <DateRangeDropdown
+          value={dateRange}
+          onChange={setDateRange}
+          onOpen={() => { setModelOpen(false); setTagOpen(false); setTopicOpen(false); }}
+        />
 
         {/* Models filter */}
-        <div className="rk-filter-wrap" style={{ position: "relative" }}>
-          <button className="rk-filter-btn" onClick={() => setModelOpen(v => !v)}>
+        <div ref={modelRef} className="rk-filter-wrap" style={{ position: "relative" }}>
+          <button className="rk-filter-btn" onClick={() => { setTagOpen(false); setTopicOpen(false); setModelOpen(v => !v); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             {selectedModels.length === DEFAULT_ENGINES.length ? "All Models" : `${selectedModels.length} Models`}
             <ChevronDown size={12} />
@@ -250,8 +274,8 @@ export default function RankingClient({
 
         {/* Tags filter */}
         {availableTags.length > 0 && (
-          <div className="rk-filter-wrap" style={{ position: "relative" }}>
-            <button className="rk-filter-btn" onClick={() => setTagOpen(v => !v)}>
+          <div ref={tagRef} className="rk-filter-wrap" style={{ position: "relative" }}>
+            <button className="rk-filter-btn" onClick={() => { setModelOpen(false); setTopicOpen(false); setTagOpen(v => !v); }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
               {selectedTags.length === 0 ? "All Tags" : `${selectedTags.length} Tag${selectedTags.length > 1 ? "s" : ""}`}
               <ChevronDown size={12} />
@@ -277,8 +301,8 @@ export default function RankingClient({
 
         {/* Topics filter */}
         {availableTopics.length > 0 && (
-          <div className="rk-filter-wrap" style={{ position: "relative" }}>
-            <button className="rk-filter-btn" onClick={() => setTopicOpen(v => !v)}>
+          <div ref={topicRef} className="rk-filter-wrap" style={{ position: "relative" }}>
+            <button className="rk-filter-btn" onClick={() => { setModelOpen(false); setTagOpen(false); setTopicOpen(v => !v); }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               {selectedTopics.length === 0 ? "All Topics" : `${selectedTopics.length} Topic${selectedTopics.length > 1 ? "s" : ""}`}
               <ChevronDown size={12} />
