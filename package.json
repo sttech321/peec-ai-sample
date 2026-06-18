@@ -16,6 +16,7 @@
     "@google/generative-ai": "^0.24.1",
     "@types/nodemailer": "^8.0.0",
     "clerk": "^1.1.1",
+    "countries-list": "^3.3.0",
     "d3-geo": "^3.1.1",
     "drizzle-orm": "^0.45.2",
     "html2canvas": "^1.4.1",

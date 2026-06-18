@@ -23,9 +23,36 @@ import {
   Columns,
   Download,
   Sparkles,
+  Languages,
 } from "lucide-react";
 import EngineIcon from "./EngineIcon";
 import { DEFAULT_ENGINES } from "../lib/engines";
+import { COUNTRIES as ALL_COUNTRIES, LANGUAGES as ALL_LANGUAGES } from "../lib/setup-types";
+
+/** Circular country flag (matches the setup wizard). Falls back to the country
+ *  code if the SVG fails to load — emoji flags don't render on Windows. */
+function CircleFlag({ code, size = 18 }: { code: string; size?: number }) {
+  const [err, setErr] = useState(false);
+  if (!code) return null;
+  if (err) {
+    return (
+      <span style={{ width: size, height: size, borderRadius: "50%", background: "#f1f5f9", color: "#64748b", fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        {code.toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={`https://hatscripts.github.io/circle-flags/flags/${code.toLowerCase()}.svg`}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setErr(true)}
+      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block" }}
+    />
+  );
+}
 
 // ── Indicator mode ───────────────────────────────────────────────────────────
 type IndicatorMode = "default" | "indicators_only" | "none";
@@ -238,35 +265,13 @@ interface Props {
   markBrandAsOwnAction?: (brandId: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
-const TOPIC_LOCATIONS: { code: string; name: string; flag: string }[] = [
-  { code: "US", name: "United States", flag: "🇺🇸" },
-  { code: "CA", name: "Canada", flag: "🇨🇦" },
-  { code: "GB", name: "United Kingdom", flag: "🇬🇧" },
-  { code: "DE", name: "Germany", flag: "🇩🇪" },
-  { code: "FR", name: "France", flag: "🇫🇷" },
-  { code: "ES", name: "Spain", flag: "🇪🇸" },
-  { code: "IT", name: "Italy", flag: "🇮🇹" },
-  { code: "NL", name: "Netherlands", flag: "🇳🇱" },
-  { code: "AU", name: "Australia", flag: "🇦🇺" },
-  { code: "JP", name: "Japan", flag: "🇯🇵" },
-  { code: "IN", name: "India", flag: "🇮🇳" },
-  { code: "BR", name: "Brazil", flag: "🇧🇷" },
-];
+// Full country + language lists from the `countries-list` package (shared with setup).
+const TOPIC_LOCATIONS: { code: string; name: string }[] = ALL_COUNTRIES.map((c) => ({
+  code: c.code,
+  name: c.name,
+}));
 
-const TOPIC_LANGUAGES: { code: string; name: string }[] = [
-  { code: "en", name: "English" },
-  { code: "es", name: "Spanish" },
-  { code: "fr", name: "French" },
-  { code: "de", name: "German" },
-  { code: "it", name: "Italian" },
-  { code: "pt", name: "Portuguese" },
-  { code: "nl", name: "Dutch" },
-  { code: "ja", name: "Japanese" },
-  { code: "ko", name: "Korean" },
-  { code: "zh", name: "Chinese" },
-  { code: "hi", name: "Hindi" },
-  { code: "ar", name: "Arabic" },
-];
+const TOPIC_LANGUAGES: { code: string; name: string }[] = ALL_LANGUAGES;
 
 const ALL_ENGINES: readonly string[] = DEFAULT_ENGINES;
 
@@ -2936,7 +2941,7 @@ function NewTopicModal({
               disabled={pending}
             >
               <span className="pp-topic-select-value">
-                <span className="pp-flag">{selectedLocation?.flag}</span>
+                {selectedLocation && <CircleFlag code={selectedLocation.code} size={18} />}
                 {selectedLocation?.name}
               </span>
               <ChevronDown
@@ -2958,7 +2963,7 @@ function NewTopicModal({
                       setLocationOpen(false);
                     }}
                   >
-                    <span className="pp-flag">{l.flag}</span>
+                    <CircleFlag code={l.code} size={18} />
                     {l.name}
                   </button>
                 ))}
@@ -2977,7 +2982,7 @@ function NewTopicModal({
               disabled={pending}
             >
               <span className="pp-topic-select-value">
-                <span className="pp-topic-lang-icon">文A</span>
+                <span className="pp-topic-lang-icon"><Languages size={13} /></span>
                 {selectedLanguage?.name}
               </span>
               <ChevronDown
@@ -2999,7 +3004,7 @@ function NewTopicModal({
                       setLanguageOpen(false);
                     }}
                   >
-                    <span className="pp-topic-lang-icon">文A</span>
+                    <span className="pp-topic-lang-icon"><Languages size={13} /></span>
                     {l.name}
                   </button>
                 ))}
@@ -3131,7 +3136,7 @@ function AddPromptModal({
 }: {
   topics: Topic[];
   availableTags: AvailableTag[];
-  locations: { code: string; name: string; flag: string }[];
+  locations: { code: string; name: string }[];
   onClose: () => void;
   addBulkAction: (args: {
     texts: string[];
@@ -3438,17 +3443,20 @@ function AddPromptModal({
             <div className="pp-modal-grid">
               <div>
                 <label className="pp-modal-label">Location (IP Address)</label>
-                <select
-                  className="pp-modal-select"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                >
-                  {locations.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.flag} {l.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="pp-modal-select-wrap">
+                  <span className="pp-modal-select-flag"><CircleFlag code={location} size={18} /></span>
+                  <select
+                    className="pp-modal-select pp-modal-select--flag"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                  >
+                    {locations.map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div>
                 <label className="pp-modal-label">Topic</label>

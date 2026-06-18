@@ -5,8 +5,37 @@ import ReactDOM from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   ChevronUp, ChevronDown, MoreHorizontal, Plus, Search, X, ShoppingCart, FolderOpen,
-  Pencil, Settings2, Download, Pause, Play, Trash2, Info, CheckCircle, AlertCircle,
+  Pencil, Settings2, Download, Pause, Play, Trash2, Info, CheckCircle, AlertCircle, Languages,
 } from "lucide-react";
+import {
+  COUNTRIES as ALL_COUNTRIES, LANGUAGES as ALL_LANGUAGES, ALL_TIMEZONES,
+  tzLabel, tzOffset, timezoneForCountryName, languageForCountryName,
+} from "../lib/setup-types";
+
+/** Circular country flag (matches the setup wizard). Falls back to the country
+ *  code if the SVG fails to load — emoji flags don't render on Windows. */
+function CircleFlag({ code, size = 18 }: { code: string; size?: number }) {
+  const [err, setErr] = useState(false);
+  if (!code) return null;
+  if (err) {
+    return (
+      <span style={{ width: size, height: size, borderRadius: "50%", background: "#f1f5f9", color: "#64748b", fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        {code.toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={`https://hatscripts.github.io/circle-flags/flags/${code.toLowerCase()}.svg`}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setErr(true)}
+      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block" }}
+    />
+  );
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export interface ProjectRow {
@@ -398,39 +427,11 @@ function RowMenu({
 }
 
 // ── Constants for Edit Details fields ──────────────────────────────────────
-const COUNTRIES = [
-  { code: "US", label: "United States", flag: "🇺🇸" },
-  { code: "GB", label: "United Kingdom", flag: "🇬🇧" },
-  { code: "CA", label: "Canada", flag: "🇨🇦" },
-  { code: "AU", label: "Australia", flag: "🇦🇺" },
-  { code: "DE", label: "Germany", flag: "🇩🇪" },
-  { code: "FR", label: "France", flag: "🇫🇷" },
-  { code: "IN", label: "India", flag: "🇮🇳" },
-  { code: "SG", label: "Singapore", flag: "🇸🇬" },
-  { code: "NL", label: "Netherlands", flag: "🇳🇱" },
-  { code: "BR", label: "Brazil", flag: "🇧🇷" },
-  { code: "JP", label: "Japan", flag: "🇯🇵" },
-  { code: "AE", label: "United Arab Emirates", flag: "🇦🇪" },
-];
-
-const LANGUAGES = [
-  "English", "Spanish", "French", "German", "Portuguese",
-  "Hindi", "Japanese", "Chinese (Simplified)", "Arabic", "Dutch",
-];
-
-const TIMEZONES = [
-  { label: "New York, United States of America", tz: "America/New_York", offset: "UTC-05:00 / UTC-04:00" },
-  { label: "Los Angeles, United States of America", tz: "America/Los_Angeles", offset: "UTC-08:00 / UTC-07:00" },
-  { label: "Chicago, United States of America", tz: "America/Chicago", offset: "UTC-06:00 / UTC-05:00" },
-  { label: "London, United Kingdom", tz: "Europe/London", offset: "UTC+00:00 / UTC+01:00" },
-  { label: "Paris, France", tz: "Europe/Paris", offset: "UTC+01:00 / UTC+02:00" },
-  { label: "Berlin, Germany", tz: "Europe/Berlin", offset: "UTC+01:00 / UTC+02:00" },
-  { label: "Dubai, United Arab Emirates", tz: "Asia/Dubai", offset: "UTC+04:00" },
-  { label: "Mumbai, India", tz: "Asia/Kolkata", offset: "UTC+05:30" },
-  { label: "Singapore", tz: "Asia/Singapore", offset: "UTC+08:00" },
-  { label: "Tokyo, Japan", tz: "Asia/Tokyo", offset: "UTC+09:00" },
-  { label: "Sydney, Australia", tz: "Australia/Sydney", offset: "UTC+10:00 / UTC+11:00" },
-];
+// Sourced from the `countries-list` package + the runtime Intl time-zone
+// catalogue, shared with the setup wizard.
+const COUNTRIES = ALL_COUNTRIES.map((c) => ({ code: c.code, label: c.name }));
+const LANGUAGES = ALL_LANGUAGES.map((l) => l.name);
+const TIMEZONES = ALL_TIMEZONES.map((tz) => ({ tz, label: tzLabel(tz), offset: tzOffset(tz) }));
 
 // ── EditDetailsModal ───────────────────────────────────────────────────────
 function EditDetailsModal({
@@ -512,11 +513,19 @@ function EditDetailsModal({
             <div className="proj-form-field">
               <label className="proj-form-label">Location</label>
               <div className="proj-edit-select-wrap">
-                <span className="proj-edit-select-flag">{selectedCountry.flag}</span>
+                <span className="proj-edit-select-flag"><CircleFlag code={selectedCountry.code} size={18} /></span>
                 <select
                   className="proj-edit-select-native"
                   value={location}
-                  onChange={(e) => setLocation(e.target.value)}
+                  onChange={(e) => {
+                    const newLoc = e.target.value;
+                    setLocation(newLoc);
+                    // Auto-select that country's time zone + language; user can still change them.
+                    const tz = timezoneForCountryName(newLoc);
+                    if (tz) setTimezone(tz);
+                    const lang = languageForCountryName(newLoc);
+                    if (lang) setLanguage(lang);
+                  }}
                 >
                   {COUNTRIES.map((c) => (
                     <option key={c.code} value={c.label}>{c.label}</option>
@@ -528,7 +537,7 @@ function EditDetailsModal({
             <div className="proj-form-field">
               <label className="proj-form-label">Language</label>
               <div className="proj-edit-select-wrap">
-                <span className="proj-edit-select-lang-icon">Aa</span>
+                <span className="proj-edit-select-lang-icon"><Languages size={14} /></span>
                 <select
                   className="proj-edit-select-native"
                   value={language}
