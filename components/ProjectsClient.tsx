@@ -68,7 +68,7 @@ export interface WorkspaceStats {
 interface Props {
   initialProjects: ProjectRow[];
   workspaceStats: WorkspaceStats;
-  updateProjectAction: (id: string, data: Partial<ProjectRow>) => Promise<void>;
+  updateProjectAction: (id: string, data: Partial<ProjectRow>) => Promise<{ ok: boolean; error?: string }>;
   toggleStatusAction: (id: string) => Promise<void>;
   deleteProjectAction: (id: string) => Promise<void>;
   canDelete?: boolean;
@@ -371,7 +371,25 @@ function RowMenu({
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
-  const pos = useDropdownPos(open, btnRef);
+  // Viewport-aware position: measure the menu, then open below (or flip above
+  // when there isn't room) and right-align to the button, clamped on-screen.
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) { setMenuPos(null); return; }
+    if (!btnRef.current || !dropRef.current) return;
+    const b = btnRef.current.getBoundingClientRect();
+    const m = dropRef.current.getBoundingClientRect();
+    const margin = 8;
+    let top = b.bottom + 4;
+    if (top + m.height > window.innerHeight - margin) {
+      const above = b.top - m.height - 4;
+      top = above >= margin ? above : Math.max(margin, window.innerHeight - m.height - margin);
+    }
+    let left = b.right - m.width;
+    left = Math.max(margin, Math.min(left, window.innerWidth - m.width - margin));
+    setMenuPos({ top: top + window.scrollY, left: left + window.scrollX });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -390,7 +408,12 @@ function RowMenu({
     <div
       ref={dropRef}
       className="proj-row-menu-dropdown"
-      style={{ position: "absolute", top: pos.top, left: pos.left - 100 }}
+      style={{
+        position: "absolute",
+        top: menuPos?.top ?? 0,
+        left: menuPos?.left ?? 0,
+        visibility: menuPos ? "visible" : "hidden",
+      }}
     >
       <button className="proj-row-menu-item" onClick={() => { onEditDetails(); close(); }}>
         <Pencil size={13} /> Edit Details
@@ -441,7 +464,7 @@ function EditDetailsModal({
 }: {
   project: ProjectRow;
   onClose: () => void;
-  onSave: (data: Partial<ProjectRow>) => Promise<void>;
+  onSave: (data: Partial<ProjectRow>) => Promise<{ ok: boolean; error?: string } | void>;
 }) {
   const [name, setName] = useState(project.name);
   const [brandName, setBrandName] = useState(project.brandName ?? project.name);
@@ -456,7 +479,7 @@ function EditDetailsModal({
   const handleSave = async () => {
     if (!name.trim()) return;
     setSaving(true);
-    await onSave({
+    const res = await onSave({
       name: name.trim(),
       brandName: brandName.trim() || null,
       domain: domain.trim() || null,
@@ -465,6 +488,8 @@ function EditDetailsModal({
       timezone,
     });
     setSaving(false);
+    // Keep the modal open if the region change was blocked by the 24h cooldown.
+    if (res && res.ok === false) return;
     onClose();
   };
 
@@ -983,8 +1008,9 @@ export default function ProjectsClient({
   };
 
   const handleUpdate = async (id: string, data: Partial<ProjectRow>) => {
-    await updateProjectAction(id, data);
+    const res = await updateProjectAction(id, data);
     router.refresh();
+    return res;
   };
 
   const handleToggle = async (id: string) => {
@@ -1109,7 +1135,7 @@ export default function ProjectsClient({
                     <td>
                       <ModelIconsCell
                         project={p}
-                        onUpdate={(data) => handleUpdate(p.id, data)}
+                        onUpdate={async (data) => { await handleUpdate(p.id, data); }}
                         addToast={addToast}
                       />
                     </td>
@@ -1142,9 +1168,13 @@ export default function ProjectsClient({
           project={editDetailsProject}
           onClose={() => setEditDetailsProject(null)}
           onSave={async (data) => {
-            await handleUpdate(editDetailsProject.id, data);
+            const res = await handleUpdate(editDetailsProject.id, data);
+            if (res && !res.ok) {
+              addToast("error", res.error ?? "Update failed");
+              return res; // keep modal open
+            }
             addToast("success", "Project details updated");
-            setEditDetailsProject(null);
+            return res;
           }}
         />
       )}
