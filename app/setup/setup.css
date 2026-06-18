@@ -5,7 +5,7 @@
   background: #fff;
   display: flex;
   flex-direction: column;
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-geist), system-ui, sans-serif;
   color: #0f172a;
   z-index: 100;
 }

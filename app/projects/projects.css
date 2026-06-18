@@ -44,15 +44,55 @@
 .proj-usage-segment:hover { filter: brightness(0.88); }
 .proj-usage-segment:hover .proj-usage-tooltip { display: block; }
 
+/* Allocated / Max credits card (segments sized by each project's allocated credits) */
+.proj-alloc-card {
+  background: #fff; border: 1px solid #ededed; border-radius: 14px;
+  padding: 14px 16px; display: flex; flex-direction: column;
+}
+.proj-alloc-head { display: flex; align-items: center; justify-content: space-between; }
+.proj-alloc-title { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #71717a; }
+.proj-alloc-info { color: #a1a1aa; cursor: help; }
+.proj-alloc-value { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 16px; }
+.proj-alloc-num { font-size: 26px; font-weight: 700; color: #18181b; letter-spacing: -0.5px; }
+.proj-alloc-slash { color: #a1a1aa; font-size: 18px; }
+.proj-alloc-max { font-size: 16px; font-weight: 500; color: #a1a1aa; }
+.proj-alloc-bar {
+  height: 32px; background: #f4f4f5; border-radius: 8px;
+  display: flex; align-items: stretch; gap: 3px; padding: 3px; margin-top: auto;
+}
+.proj-alloc-segment {
+  flex-basis: 0; min-width: 2px; border-radius: 4px; position: relative;
+  cursor: pointer;
+}
+/* Dim via an overlay (not opacity) so the tooltip stays fully opaque */
+.proj-alloc-segment::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: transparent; transition: background 0.15s; pointer-events: none;
+}
+.proj-alloc-segment:hover::after { background: rgba(0, 0, 0, 0.15); }
+.proj-alloc-segment:hover .proj-usage-tooltip { display: block; }
+.proj-alloc-segment .proj-usage-tooltip { z-index: 1000; }
+/* Rightmost segments: open the tooltip leftward so it stays in view */
+.proj-alloc-segment[data-flip="1"] .proj-usage-tooltip { left: auto; right: 0; }
+.proj-alloc-remainder { flex-basis: 0; border-radius: 4px; }
+
 /* Tooltip */
 .proj-usage-tooltip {
   display: none; position: absolute; top: 28px; left: 0; z-index: 100;
   background: #fff; border: 1px solid #e4e4e7; border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.10); padding: 12px 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10); padding: 12px 14px 12px 18px;
   min-width: 200px; white-space: nowrap;
 }
+/* Project-colour accent bar — inset from top/bottom (rounded pill) */
+.proj-usage-tooltip::before {
+  content: ""; position: absolute; left: 0px; top: 10px; bottom: 10px;
+  width: 4px; border-radius: 999px; background: var(--accent, #e4e4e7);
+}
 .proj-usage-tooltip-name {
-  font-size: 13px; font-weight: 600; color: #18181b; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 600; color: #18181b;
+  padding-bottom: 8px; margin-bottom: 8px;
+  border-bottom: 1px solid #ededed;
 }
 .proj-usage-tooltip-row {
   display: flex; justify-content: space-between; gap: 24px;
