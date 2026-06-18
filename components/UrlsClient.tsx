@@ -258,18 +258,26 @@ export default function UrlsClient({
     [tableRows, safePage],
   );
 
-  // Page numbers (with ellipsis for large pagination)
+  // Page numbers with sliding window — always shows first, last, and current ±1
   const pageButtons = useMemo(() => {
     const out: (number | "...")[] = [];
     if (totalPages <= 7) {
       for (let i = 1; i <= totalPages; i++) out.push(i);
       return out;
     }
-    out.push(1, 2, 3, 4, 5);
-    out.push("...");
-    out.push(totalPages);
+    const visible = new Set<number>();
+    visible.add(1);
+    visible.add(totalPages);
+    for (let i = Math.max(2, safePage - 1); i <= Math.min(totalPages - 1, safePage + 1); i++) {
+      visible.add(i);
+    }
+    const sorted = [...visible].sort((a, b) => a - b);
+    for (let i = 0; i < sorted.length; i++) {
+      if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push("...");
+      out.push(sorted[i]);
+    }
     return out;
-  }, [totalPages]);
+  }, [totalPages, safePage]);
 
   // ── Render
   return (
@@ -694,7 +702,7 @@ export default function UrlsClient({
           <button
             className="urls-page-btn"
             disabled={safePage === 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => setPage(Math.max(1, safePage - 1))}
           >
             <ChevronLeft size={14} />
           </button>
@@ -714,7 +722,7 @@ export default function UrlsClient({
           <button
             className="urls-page-btn"
             disabled={safePage === totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => setPage(Math.min(totalPages, safePage + 1))}
           >
             <ChevronRight size={14} />
           </button>
