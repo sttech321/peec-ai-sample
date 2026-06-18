@@ -1,11 +1,12 @@
 "use server";
 
 import { db } from "../../db";
-import { projects, topics, workspaceMembers } from "../../db/schema";
+import { projects, topics, workspaceMembers, prompts } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { getWorkspaceId } from "../../lib/project-context";
+import { countryCodeForName } from "../../lib/setup-types";
 import { verifySession, signSession, SESSION_COOKIE, SETUP_DONE_COOKIE, SESSION_MAX_AGE } from "../../lib/session";
 
 const ACTIVE_PROJECT_COOKIE = "active_project_id";
@@ -105,6 +106,35 @@ export async function updateProject(projectId: string, data: {
     ? data.domain.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || null
     : data.domain;
 
+  // ── 24-hour cooldown on Location / Language / Time zone ───────────────────
+  const [current] = await db
+    .select({
+      location: projects.location,
+      language: projects.language,
+      timezone: projects.timezone,
+      regionUpdatedAt: projects.regionUpdatedAt,
+    })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+
+  const regionChanged =
+    (data.location !== undefined && data.location !== current?.location) ||
+    (data.language !== undefined && data.language !== current?.language) ||
+    (data.timezone !== undefined && data.timezone !== current?.timezone);
+
+  const COOLDOWN_MS = 24 * 60 * 60 * 1000;
+  let regionBlocked = false;
+  let remainingHours = 0;
+  if (regionChanged && current?.regionUpdatedAt) {
+    const elapsed = Date.now() - new Date(current.regionUpdatedAt).getTime();
+    if (elapsed < COOLDOWN_MS) {
+      regionBlocked = true;
+      remainingHours = Math.max(1, Math.ceil((COOLDOWN_MS - elapsed) / (60 * 60 * 1000)));
+    }
+  }
+  const applyRegion = regionChanged && !regionBlocked;
+
   await db.update(projects)
     .set({
       ...(data.name !== undefined ? { name: data.name.trim() } : {}),
@@ -115,16 +145,40 @@ export async function updateProject(projectId: string, data: {
       ...(data.frequency !== undefined ? { frequency: data.frequency } : {}),
       ...(data.projectType !== undefined ? { projectType: data.projectType } : {}),
       ...(data.models !== undefined ? { models: data.models } : {}),
-      ...(data.location !== undefined ? { location: data.location } : {}),
-      ...(data.language !== undefined ? { language: data.language } : {}),
-      ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
+      // Region fields only applied when not in cooldown.
+      ...(applyRegion && data.location !== undefined ? { location: data.location } : {}),
+      ...(applyRegion && data.language !== undefined ? { language: data.language } : {}),
+      ...(applyRegion && data.timezone !== undefined ? { timezone: data.timezone } : {}),
+      ...(applyRegion ? { regionUpdatedAt: new Date() } : {}),
       updatedAt: new Date(),
     })
     .where(eq(projects.id, projectId));
 
+  // Propagate a location change to every prompt in the project. Prompts store a
+  // 2-letter location code, while the project stores the country name.
+  // (Language and time zone are project-level — generation reads the project's
+  //  language and the daily crawl uses the project's time zone.)
+  if (applyRegion && data.location) {
+    const code = countryCodeForName(data.location);
+    if (code) {
+      await db.update(prompts)
+        .set({ location: code })
+        .where(eq(prompts.projectId, projectId));
+    }
+  }
+
   void workspaceId;
   revalidatePath("/", "layout");
   revalidatePath("/projects");
+  revalidatePath("/prompts");
+
+  if (regionBlocked) {
+    return {
+      ok: false as const,
+      error: `Location, language and time zone can only be changed once every 24 hours. Try again in ${remainingHours} hour${remainingHours === 1 ? "" : "s"}.`,
+    };
+  }
+  return { ok: true as const };
 }
 
 export async function toggleProjectStatus(projectId: string) {

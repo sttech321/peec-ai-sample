@@ -85,6 +85,8 @@ export const projects = pgTable("projects", {
   location: varchar("location", { length: 100 }).default("United States"),
   language: varchar("language", { length: 50 }).default("English"),
   timezone: varchar("timezone", { length: 100 }).default("America/New_York"),
+  // When Location/Language/Time zone were last changed — enforces a 24h cooldown.
+  regionUpdatedAt: timestamp("region_updated_at"),
   hiddenBrandIds: text("hidden_brand_ids").array().default([]).notNull(),
   domainTypeOverrides: jsonb("domain_type_overrides").default({}).notNull(),
   domainBookmarks: jsonb("domain_bookmarks").default([]).notNull(),

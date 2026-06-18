@@ -194,6 +194,12 @@ export function languageForCountryName(name: string): string | null {
   return pick ? langs[pick].name : null;
 }
 
+/** Resolve a country's 2-letter code from its name (as stored in `location`),
+ *  e.g. "Ukraine" → "UA". Used to propagate a project location to its prompts. */
+export function countryCodeForName(name: string): string | null {
+  return COUNTRIES.find((c) => c.name === name)?.code ?? null;
+}
+
 export function tzOffset(tz: string): string {
   try {
     // "longOffset" → "GMT+05:30" (zero-padded, with colon). Matches Peec's "UTC+05:30".
