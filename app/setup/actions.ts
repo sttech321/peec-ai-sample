@@ -7,7 +7,7 @@ import { SETUP_DONE_COOKIE } from "../../lib/session";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { BrandProfile, COUNTRY_OPTIONS, EMPTY_BRAND_PROFILE } from "../../lib/brand-profile-types";
-import { SetupTopic, SetupPrompt, MAX_PROMPTS_PER_TOPIC } from "../../lib/setup-types";
+import { SetupTopic, SetupPrompt, MAX_PROMPTS_PER_TOPIC, countryCodeForName } from "../../lib/setup-types";
 import { runPipelineForAllEngines, type PipelineJob } from "../../lib/run-pipeline";
 import { DEFAULT_ENGINES } from "../../lib/ai-clients";
 
@@ -553,6 +553,10 @@ export async function finalizeSetup(args: {
   // 4. Topics + prompts (only selected ones)
   const createdPrompts: { id: string; query: string }[] = [];
 
+  // Prompts store a 2-letter location code; derive it from the selected country
+  // so prompts inherit the project's location (defaults to US if unrecognised).
+  const promptLocation = countryCodeForName(args.location) ?? "US";
+
   for (const topic of selectedTopics) {
     const [topicRow] = await db
       .insert(topics)
@@ -569,6 +573,7 @@ export async function finalizeSetup(args: {
         topicId: topicRow.id,
         query: p.text,
         volumeTier: "Medium",
+        location: promptLocation,
       })),
     ).returning({ id: prompts.id, query: prompts.query });
 
