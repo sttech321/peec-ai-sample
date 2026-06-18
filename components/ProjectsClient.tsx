@@ -37,6 +37,35 @@ function CircleFlag({ code, size = 18 }: { code: string; size?: number }) {
   );
 }
 
+/** Project logo — favicon from the project's domain, falling back to a coloured
+ *  initial when there's no domain or the favicon fails to load. */
+function ProjectAvatar({ name, domain, color, size = 22 }: {
+  name: string;
+  domain: string | null;
+  color: string;
+  size?: number;
+}) {
+  const [err, setErr] = useState(false);
+  const host = domain ? domain.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] : null;
+  const src = host && !err ? `https://www.google.com/s2/favicons?sz=64&domain=${host}` : null;
+  return (
+    <span className="proj-avatar" style={{ width: size, height: size, background: src ? "#fff" : color }}>
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          width={size - 6}
+          height={size - 6}
+          style={{ objectFit: "contain", display: "block" }}
+          onError={() => setErr(true)}
+        />
+      ) : (
+        <span className="proj-avatar-initial">{name.charAt(0).toUpperCase()}</span>
+      )}
+    </span>
+  );
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────
 export interface ProjectRow {
   id: string;
@@ -293,7 +322,7 @@ function ModelIconsCell({
               className={`proj-model-dropdown-item ${checked ? "checked" : ""}`}
               onClick={() => toggle(m.name)}
             >
-              <span className="proj-model-dropdown-dot" style={{ background: m.color }} />
+              <span className="proj-model-dropdown-favicon"><EngineIconSmall name={m.name} /></span>
               <span className="proj-model-dropdown-name">{m.name}</span>
               {m.info && <Info size={11} className="proj-model-info-icon" />}
               <span className="proj-model-dropdown-cost">{m.credits} cr/prompt</span>
@@ -327,9 +356,9 @@ function ModelIconsCell({
       <button ref={btnRef} className="proj-model-icons-btn" onClick={() => setOpen((v) => !v)}>
         <div className="proj-model-icons">
           {shown.map((m) => (
-            <div key={m} className="proj-model-dot" style={{ background: getModelColor(m) }} title={m}>
-              {m[0]}
-            </div>
+            <span key={m} className="proj-model-icon" title={m}>
+              <EngineIconSmall name={m} />
+            </span>
           ))}
           {rest > 0 && <span className="proj-model-more">+{rest}</span>}
         </div>
@@ -1126,7 +1155,7 @@ export default function ProjectsClient({
                   <tr key={p.id}>
                     <td>
                       <div className="proj-name-cell">
-                        <span className="proj-color-dot" style={{ background: color }} />
+                        <ProjectAvatar name={p.name} domain={p.domain} color={color} />
                         <span className="proj-name-text">{p.name}</span>
                       </div>
                     </td>
