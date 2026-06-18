@@ -45,11 +45,31 @@ export default async function BrandsPage() {
     )
     .orderBy(drizzleSql`count(${brandMentions.id}) desc`);
 
-  const suggestions = await db
+  const rawSuggestions = await db
     .select()
     .from(brandSuggestions)
     .where(eq(brandSuggestions.projectId, activeProjectId))
     .orderBy(drizzleSql`${brandSuggestions.mentions} DESC`);
+
+  // Build sets of tracked names and normalized domains from existing brands
+  const trackedNameSet = new Set(projectBrands.map((b) => b.name.toLowerCase().trim()));
+  const trackedDomainSet = new Set<string>();
+  for (const b of projectBrands) {
+    for (const d of b.domains) {
+      const norm = d.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].trim();
+      if (norm) trackedDomainSet.add(norm);
+    }
+  }
+
+  // Remove suggestions whose name or domain already matches a tracked brand
+  const suggestions = rawSuggestions.filter((s) => {
+    if (trackedNameSet.has(s.name.toLowerCase().trim())) return false;
+    if (s.domain) {
+      const norm = s.domain.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].trim();
+      if (norm && trackedDomainSet.has(norm)) return false;
+    }
+    return true;
+  });
 
   return (
     <BrandsModalProvider>

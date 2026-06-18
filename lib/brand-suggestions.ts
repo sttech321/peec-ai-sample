@@ -11,6 +11,18 @@ import { brands, brandSuggestions } from "../db/schema";
 import { eq, and } from "drizzle-orm";
 import { ChatFact } from "./chat-aggregations";
 
+/** Normalize a domain: strip protocol, www, path, lowercase */
+function normalizeDomain(domain: string | null | undefined): string | null {
+  if (!domain) return null;
+  const norm = domain
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0]
+    .trim();
+  return norm || null;
+}
+
 interface SuggestionCandidate {
   name: string;
   mentions: number;
@@ -62,41 +74,73 @@ export async function generateBrandSuggestions(
   const mentionCounts = countBrandMentions(chatFacts);
   if (mentionCounts.size === 0) return;
 
-  // 2. Already tracked brands (is project mein)
+  // 2. Already tracked brands — fetch with domains and aliases for full dedup
   const trackedRows = await db
-    .select({ name: brands.name })
+    .select({ name: brands.name, domains: brands.domains, aliases: brands.aliases })
     .from(brands)
     .where(eq(brands.projectId, projectId));
   const trackedNames = new Set(trackedRows.map((r) => r.name.toLowerCase().trim()));
 
-  // 3. Already suggested brands (pending, accepted, rejected)
+  // Build tracked domain + alias sets
+  const trackedDomains = new Set<string>();
+  const trackedAliases = new Set<string>();
+  for (const r of trackedRows) {
+    for (const d of r.domains) {
+      const norm = normalizeDomain(d);
+      if (norm) trackedDomains.add(norm);
+    }
+    for (const a of r.aliases) {
+      const alias = a.toLowerCase().trim();
+      if (alias) trackedAliases.add(alias);
+    }
+  }
+
+  // 3. Already suggested brands (pending)
   const existingRows = await db
-    .select({ name: brandSuggestions.name, mentions: brandSuggestions.mentions })
+    .select({ name: brandSuggestions.name, domain: brandSuggestions.domain, mentions: brandSuggestions.mentions })
     .from(brandSuggestions)
     .where(eq(brandSuggestions.projectId, projectId));
   const existingMap = new Map(
     existingRows.map((r) => [r.name.toLowerCase().trim(), r.mentions])
   );
+  const existingDomains = new Set<string>();
+  for (const r of existingRows) {
+    const norm = normalizeDomain(r.domain);
+    if (norm) existingDomains.add(norm);
+  }
 
   // 4. Candidates = untracked brands with >= minMentions
   const candidates: SuggestionCandidate[] = [];
   for (const [nameLower, count] of mentionCounts) {
     if (count < minMentions) continue;
     if (trackedNames.has(nameLower)) continue;
+    if (trackedAliases.has(nameLower)) continue; // skip if matches a tracked alias
 
-    // Find the original-case name from chatFacts
     const originalName = findOriginalName(chatFacts, nameLower);
+    const candidateDomain = guessDomainFromName(originalName);
+    const normCandidateDomain = normalizeDomain(candidateDomain);
+
+    // Skip if domain already covered by a tracked brand
+    if (normCandidateDomain && trackedDomains.has(normCandidateDomain)) continue;
+
     candidates.push({
       name: originalName,
       mentions: count,
-      domain: guessDomainFromName(originalName),
+      domain: candidateDomain,
     });
   }
 
   if (candidates.length === 0) return;
 
   // 5. Batch operations — group into inserts vs updates
-  const toInsert = candidates.filter(c => !existingMap.has(c.name.toLowerCase().trim()));
+  const toInsert = candidates.filter(c => {
+    const key = c.name.toLowerCase().trim();
+    if (existingMap.has(key)) return false;
+    // Also skip if domain already in existing suggestions
+    const normDom = normalizeDomain(c.domain);
+    if (normDom && existingDomains.has(normDom)) return false;
+    return true;
+  });
   const toUpdate = candidates.filter(c => {
     const key = c.name.toLowerCase().trim();
     return existingMap.has(key) && existingMap.get(key) !== c.mentions;
