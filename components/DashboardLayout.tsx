@@ -43,7 +43,7 @@ export default async function DashboardLayout({
           />
         </div>
 
-        {/* Scrollable Nav — client component; derives active route via usePathname */} 
+        {/* Scrollable Nav — client component; derives active route via usePathname */}   
         <SidebarNav isOwner={isOwner} canManageTeam={canManageTeam} />
 
         {/* Setup Progress */}

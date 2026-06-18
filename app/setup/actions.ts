@@ -514,14 +514,17 @@ export async function finalizeSetup(args: {
     }
   }
 
-  // 1. Create project — persist the selected language so later prompt/topic
-  //    generation (e.g. the prompts-page suggestions) stays in that language.
+  // 1. Create project — persist the selected language, location and time zone.
+  //    Language drives prompt/topic generation; the time zone is used by the
+  //    daily crawl so each project is scanned at 6 AM in its own local time.
   const [project] = await db
     .insert(projects)
     .values({
       workspaceId,
       name: args.brandName.trim(),
       ...(args.language?.trim() ? { language: args.language.trim() } : {}),
+      ...(args.location?.trim() ? { location: args.location.trim() } : {}),
+      ...(args.timezone?.trim() ? { timezone: args.timezone.trim() } : {}),
     })
     .returning();
 

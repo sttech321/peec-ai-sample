@@ -1,8 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Globe, Search, Check } from "lucide-react";
-import { COMMON_TIMEZONES, COUNTRIES, LANGUAGES, tzOffset } from "../../lib/setup-types";
+import { ChevronsUpDown, Globe, Search, Check, Languages } from "lucide-react";
+import { ALL_TIMEZONES, COUNTRIES, LANGUAGES, tzOffset, tzLabel } from "../../lib/setup-types";
+
+/** Circular country flag (matches Peec). Falls back to the country code letters
+ *  if the flag image fails to load. Emoji flags don't render on Windows, so we
+ *  use an SVG flag CDN instead. */
+function CircleFlag({ code, size = 20 }: { code: string; size?: number }) {
+  const [err, setErr] = useState(false);
+  if (err) {
+    return (
+      <span className="step1-flag-fallback" style={{ width: size, height: size }}>
+        {code.toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    <img
+      className="step1-flag-circle"
+      src={`https://hatscripts.github.io/circle-flags/flags/${code.toLowerCase()}.svg`}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setErr(true)}
+    />
+  );
+}
 
 interface Props {
   url: string;
@@ -60,7 +85,7 @@ function Dropdown<T>({
     <div ref={ref} className="setup-dd">
       <button type="button" className="setup-dd-trigger" onClick={() => setOpen(!open)}>
         {renderTrigger()}
-        <ChevronDown size={13} />
+        <ChevronsUpDown size={14} className="setup-dd-chevron" />
       </button>
       {open && (
         <div className="setup-dd-panel">
@@ -143,15 +168,15 @@ export default function ProjectDetailsStep(props: Props) {
             placeholder="Search countries..."
             renderTrigger={() => (
               <span className="step1-flag-line">
-                <span className="step1-flag">{selectedCountry.flag}</span>
-                <span>{selectedCountry.name}</span>
+                <CircleFlag code={selectedCountry.code} />
+                <span className="step1-dd-text">{selectedCountry.name}</span>
               </span>
             )}
             renderOption={(c, sel) => (
               <>
                 <span className="step1-flag-line">
-                  <span className="step1-flag">{c.flag}</span>
-                  <span>{c.name}</span>
+                  <CircleFlag code={c.code} />
+                  <span className="step1-dd-text">{c.name}</span>
                 </span>
                 {sel && <Check size={13} />}
               </>
@@ -169,15 +194,15 @@ export default function ProjectDetailsStep(props: Props) {
             placeholder="Search languages..."
             renderTrigger={() => (
               <span className="step1-flag-line">
-                <span className="step1-flag">{selectedLanguage.flag}</span>
-                <span>{selectedLanguage.name}</span>
+                <Languages size={15} className="step1-flag-icon" />
+                <span className="step1-dd-text">{selectedLanguage.name}</span>
               </span>
             )}
             renderOption={(l, sel) => (
               <>
                 <span className="step1-flag-line">
-                  <span className="step1-flag">{l.flag}</span>
-                  <span>{l.name}</span>
+                  <Languages size={15} className="step1-flag-icon" />
+                  <span className="step1-dd-text">{l.name}</span>
                 </span>
                 {sel && <Check size={13} />}
               </>
@@ -189,23 +214,23 @@ export default function ProjectDetailsStep(props: Props) {
       <div className="step1-field">
         <label className="step1-label">Time zone</label>
         <Dropdown
-          options={[props.timezone, ...COMMON_TIMEZONES.filter((tz) => tz !== props.timezone)]}
+          options={[props.timezone, ...ALL_TIMEZONES.filter((tz) => tz !== props.timezone)]}
           value={props.timezone}
           onSelect={(tz) => props.onTimezoneChange(tz)}
           searchKey={(tz) => tz}
           placeholder="Search timezones..."
           renderTrigger={() => (
             <span className="step1-flag-line">
-              <Globe size={13} className="step1-flag-icon" />
-              <span>{props.timezone.replace(/_/g, " ")}</span>
+              <Globe size={14} className="step1-flag-icon" />
+              <span className="step1-dd-text">{tzLabel(props.timezone)}</span>
               <span className="step1-tz-offset">{tzOffset(props.timezone)}</span>
             </span>
           )}
           renderOption={(tz, sel) => (
             <>
               <span className="step1-flag-line">
-                <Globe size={13} className="step1-flag-icon" />
-                <span>{tz.replace(/_/g, " ")}</span>
+                <Globe size={14} className="step1-flag-icon" />
+                <span className="step1-dd-text">{tzLabel(tz)}</span>
                 <span className="step1-tz-offset">{tzOffset(tz)}</span>
               </span>
               {sel && <Check size={13} />}

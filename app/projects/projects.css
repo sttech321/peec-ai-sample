@@ -253,7 +253,7 @@
 }
 
 /* Form fields */
-.proj-form-field { display: flex; flex-direction: column; gap: 5px; }
+.proj-form-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .proj-form-label { font-size: 12px; font-weight: 500; color: #3f3f46; }
 .proj-form-input {
   border: 1px solid #e4e4e7; border-radius: 6px; padding: 8px 11px;
@@ -353,7 +353,7 @@
 
 /* Custom select wrapper */
 .proj-edit-select-wrap {
-  display: flex; align-items: center; position: relative;
+  display: flex; align-items: center; position: relative; min-width: 0;
   border: 1px solid #e4e4e7; border-radius: 8px; background: #f9f9f9;
   overflow: hidden; transition: border-color 0.15s;
 }
@@ -366,9 +366,10 @@
   flex-shrink: 0; pointer-events: none;
 }
 .proj-edit-select-native {
-  flex: 1; border: none; outline: none; background: transparent;
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
   padding: 10px 32px 10px 8px; font-size: 13px; color: #18181b;
   cursor: pointer; appearance: none; -webkit-appearance: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .proj-edit-tz-select { padding-left: 12px; }
 .proj-edit-select-chevron {

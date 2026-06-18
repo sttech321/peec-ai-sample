@@ -22,9 +22,37 @@ import {
   Play,
   Columns,
   Download,
+  Sparkles,
+  Languages,
 } from "lucide-react";
 import EngineIcon from "./EngineIcon";
 import { DEFAULT_ENGINES } from "../lib/engines";
+import { COUNTRIES as ALL_COUNTRIES, LANGUAGES as ALL_LANGUAGES } from "../lib/setup-types";
+
+/** Circular country flag (matches the setup wizard). Falls back to the country
+ *  code if the SVG fails to load — emoji flags don't render on Windows. */
+function CircleFlag({ code, size = 18 }: { code: string; size?: number }) {
+  const [err, setErr] = useState(false);
+  if (!code) return null;
+  if (err) {
+    return (
+      <span style={{ width: size, height: size, borderRadius: "50%", background: "#f1f5f9", color: "#64748b", fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        {code.toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={`https://hatscripts.github.io/circle-flags/flags/${code.toLowerCase()}.svg`}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setErr(true)}
+      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block" }}
+    />
+  );
+}
 
 // ── Indicator mode ───────────────────────────────────────────────────────────
 type IndicatorMode = "default" | "indicators_only" | "none";
@@ -237,35 +265,13 @@ interface Props {
   markBrandAsOwnAction?: (brandId: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
-const TOPIC_LOCATIONS: { code: string; name: string; flag: string }[] = [
-  { code: "US", name: "United States", flag: "🇺🇸" },
-  { code: "CA", name: "Canada", flag: "🇨🇦" },
-  { code: "GB", name: "United Kingdom", flag: "🇬🇧" },
-  { code: "DE", name: "Germany", flag: "🇩🇪" },
-  { code: "FR", name: "France", flag: "🇫🇷" },
-  { code: "ES", name: "Spain", flag: "🇪🇸" },
-  { code: "IT", name: "Italy", flag: "🇮🇹" },
-  { code: "NL", name: "Netherlands", flag: "🇳🇱" },
-  { code: "AU", name: "Australia", flag: "🇦🇺" },
-  { code: "JP", name: "Japan", flag: "🇯🇵" },
-  { code: "IN", name: "India", flag: "🇮🇳" },
-  { code: "BR", name: "Brazil", flag: "🇧🇷" },
-];
+// Full country + language lists from the `countries-list` package (shared with setup).
+const TOPIC_LOCATIONS: { code: string; name: string }[] = ALL_COUNTRIES.map((c) => ({
+  code: c.code,
+  name: c.name,
+}));
 
-const TOPIC_LANGUAGES: { code: string; name: string }[] = [
-  { code: "en", name: "English" },
-  { code: "es", name: "Spanish" },
-  { code: "fr", name: "French" },
-  { code: "de", name: "German" },
-  { code: "it", name: "Italian" },
-  { code: "pt", name: "Portuguese" },
-  { code: "nl", name: "Dutch" },
-  { code: "ja", name: "Japanese" },
-  { code: "ko", name: "Korean" },
-  { code: "zh", name: "Chinese" },
-  { code: "hi", name: "Hindi" },
-  { code: "ar", name: "Arabic" },
-];
+const TOPIC_LANGUAGES: { code: string; name: string }[] = ALL_LANGUAGES;
 
 const ALL_ENGINES: readonly string[] = DEFAULT_ENGINES;
 
@@ -759,6 +765,7 @@ export default function PromptsComparisonClient({
   // Or = match prompts with ANY selected tag; And = match ALL selected tags
   const [tagOp, setTagOp] = useState<"or" | "and">("or");
   const [search, setSearch] = useState("");
+  const [topicSearch, setTopicSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"active" | "suggested" | "archived">("active");
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -1475,28 +1482,36 @@ export default function PromptsComparisonClient({
           </button>
           <div className="pp-topics-search">
             <Search size={12} className="pp-topics-search-icon" />
-            <input placeholder="Search" />
+            <input
+              placeholder="Search"
+              value={topicSearch}
+              onChange={(e) => setTopicSearch(e.target.value)}
+            />
           </div>
           <ul className="pp-topics-list">
-            <li>
-              <button
-                className={`pp-topic-item ${selectedTopicId === "all" ? "pp-topic-item-active" : ""}`}
-                onClick={() => setSelectedTopicId("all")}
-              >
-                <span>All topics</span>
-                <span className="pp-topic-count">{totalCount}</span>
-              </button>
-            </li>
-            <li>
-              <button
-                className={`pp-topic-item ${selectedTopicId === "none" ? "pp-topic-item-active" : ""}`}
-                onClick={() => setSelectedTopicId("none")}
-              >
-                <span>No topic</span>
-                <span className="pp-topic-count">{noTopicCount}</span>
-              </button>
-            </li>
-            {topics.map((t) => (
+            {!topicSearch.trim() && (
+              <>
+                <li>
+                  <button
+                    className={`pp-topic-item ${selectedTopicId === "all" ? "pp-topic-item-active" : ""}`}
+                    onClick={() => setSelectedTopicId("all")}
+                  >
+                    <span>All topics</span>
+                    <span className="pp-topic-count">{totalCount}</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    className={`pp-topic-item ${selectedTopicId === "none" ? "pp-topic-item-active" : ""}`}
+                    onClick={() => setSelectedTopicId("none")}
+                  >
+                    <span>No topic</span>
+                    <span className="pp-topic-count">{noTopicCount}</span>
+                  </button>
+                </li>
+              </>
+            )}
+            {topics.filter((t) => !topicSearch.trim() || t.name.toLowerCase().includes(topicSearch.toLowerCase())).map((t) => (
               <li key={t.id} className="pp-topic-li">
                 {editingTopicId === t.id ? (
                   /* ── Inline rename input ─────────────────────────────── */
@@ -1741,23 +1756,28 @@ export default function PromptsComparisonClient({
                   Add Prompt
                 </button>
               )}
-              {/* Suggest more button — temporarily hidden
-              {canEdit && (
+              {canEdit && activeTab === "suggested" && (
                 <button
                   className="pp-add-btn"
                   onClick={handleGenerate}
                   disabled={suggestLoading}
-                  style={{ background: "#6366f1", color: "white" }}
+                  style={{
+                    background: suggestLoading ? "#475569" : "#1e293b",
+                    color: "white",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    opacity: suggestLoading ? 0.8 : 1,
+                  }}
                   title="AI-generate new prompt suggestions based on your brand profile"
                 >
                   {suggestLoading ? (
                     <><Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Generating…</>
                   ) : (
-                    <><Plus size={13} /> Suggest more</>
+                    <><Sparkles size={13} /> Suggest more</>
                   )}
                 </button>
               )}
-              */}
             </div>
           </div>
           {suggestError && (
@@ -1914,7 +1934,9 @@ export default function PromptsComparisonClient({
                     <tr>
                       <th className="pp-th-checkbox"><input type="checkbox" disabled /></th>
                       <th className="pp-th-sortable">Prompt</th>
-                      <th>Volume <span className="pp-beta-pill">Beta</span></th>
+                      <th>Volume</th>
+                      <th>Branding</th>
+                      <th>Intent</th>
                       <th>Tags <span className="pp-beta-pill">Beta</span></th>
                       <th>Suggested At</th>
                       <th>Location</th>
@@ -1944,15 +1966,18 @@ export default function PromptsComparisonClient({
                               <span style={{ color: "#1a1a1a", fontWeight: 500 }}>{s.query}</span>
                             </td>
                             <td><VolumeBars tier={s.volumeTier} /></td>
+                            <td><span style={{ color: "#94a3b8", fontSize: 13 }}>—</span></td>
                             <td>
-                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                                <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 20, background: "#f1f5f9", color: "#64748b", fontWeight: 600 }}>
-                                  non-branded
-                                </span>
-                                <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 20, background: ic.bg, color: ic.text, fontWeight: 600 }}>
+                              {s.intentType ? (
+                                <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: ic.bg, color: ic.text, fontWeight: 600, whiteSpace: "nowrap" }}>
                                   {s.intentType}
                                 </span>
-                              </div>
+                              ) : (
+                                <span style={{ color: "#94a3b8", fontSize: 13 }}>—</span>
+                              )}
+                            </td>
+                            <td>
+                              <span style={{ fontSize: 12, color: "#6366f1", cursor: "default" }}>+ Add tags</span>
                             </td>
                             <td><span className="pp-added">{formatRelativeTime(s.createdAt)}</span></td>
                             <td>
@@ -2916,7 +2941,7 @@ function NewTopicModal({
               disabled={pending}
             >
               <span className="pp-topic-select-value">
-                <span className="pp-flag">{selectedLocation?.flag}</span>
+                {selectedLocation && <CircleFlag code={selectedLocation.code} size={18} />}
                 {selectedLocation?.name}
               </span>
               <ChevronDown
@@ -2938,7 +2963,7 @@ function NewTopicModal({
                       setLocationOpen(false);
                     }}
                   >
-                    <span className="pp-flag">{l.flag}</span>
+                    <CircleFlag code={l.code} size={18} />
                     {l.name}
                   </button>
                 ))}
@@ -2957,7 +2982,7 @@ function NewTopicModal({
               disabled={pending}
             >
               <span className="pp-topic-select-value">
-                <span className="pp-topic-lang-icon">文A</span>
+                <span className="pp-topic-lang-icon"><Languages size={13} /></span>
                 {selectedLanguage?.name}
               </span>
               <ChevronDown
@@ -2979,7 +3004,7 @@ function NewTopicModal({
                       setLanguageOpen(false);
                     }}
                   >
-                    <span className="pp-topic-lang-icon">文A</span>
+                    <span className="pp-topic-lang-icon"><Languages size={13} /></span>
                     {l.name}
                   </button>
                 ))}
@@ -3111,7 +3136,7 @@ function AddPromptModal({
 }: {
   topics: Topic[];
   availableTags: AvailableTag[];
-  locations: { code: string; name: string; flag: string }[];
+  locations: { code: string; name: string }[];
   onClose: () => void;
   addBulkAction: (args: {
     texts: string[];
@@ -3418,17 +3443,20 @@ function AddPromptModal({
             <div className="pp-modal-grid">
               <div>
                 <label className="pp-modal-label">Location (IP Address)</label>
-                <select
-                  className="pp-modal-select"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                >
-                  {locations.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.flag} {l.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="pp-modal-select-wrap">
+                  <span className="pp-modal-select-flag"><CircleFlag code={location} size={18} /></span>
+                  <select
+                    className="pp-modal-select pp-modal-select--flag"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                  >
+                    {locations.map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div>
                 <label className="pp-modal-label">Topic</label>
