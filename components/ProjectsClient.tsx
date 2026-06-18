@@ -92,6 +92,8 @@ export interface WorkspaceStats {
   totalAllocatedCredits: number;
   totalUsedPrompts: number;
   totalAllocatedPrompts: number;
+  /** Workspace credit capacity (≥ totalAllocatedCredits) — the "Max" in Allocated/Max. */
+  maxCredits: number;
 }
 
 interface Props {
@@ -852,56 +854,78 @@ function DeleteConfirm({
 
 // ── WorkspaceUsageBar ──────────────────────────────────────────────────────
 function WorkspaceUsageBar({ projects, stats }: { projects: ProjectRow[]; stats: WorkspaceStats }) {
-  const total = Math.max(stats.totalAllocatedCredits, 1);
+  const allocated = stats.totalAllocatedCredits;
+  const used = stats.totalUsedCredits;
+  const max = Math.max(stats.maxCredits, used, allocated, 1);
+  const remainder = Math.max(0, max - used);
+  // Each project is a bar segment sized by its USED credits — widest = most used.
+  const segments = [...projects]
+    .filter((p) => p.usedCredits > 0)
+    .sort((a, b) => b.usedCredits - a.usedCredits);
 
   return (
     <div className="proj-usage-section">
       <div className="proj-usage-label">Usage · Track prompt and credit usage across projects</div>
-      <div className="proj-usage-title-row">
-        <div className="proj-usage-total">
-          {fmtNum(stats.totalUsedCredits)}{" "}
-          <span style={{ fontSize: 16, color: "#a1a1aa", fontWeight: 400 }}>
-            / {fmtNum(stats.totalAllocatedCredits)}
-          </span>
+      <div className="proj-alloc-card">
+        <div className="proj-alloc-head">
+          <div className="proj-alloc-title">
+            Allocated / Max credits
+            <Info size={14} className="proj-alloc-info" />
+          </div>
+          <a href="#" className="proj-buy-link">
+            <ShoppingCart size={12} /> Buy more credits
+          </a>
         </div>
-        <a href="#" className="proj-buy-link">
-          <ShoppingCart size={12} /> Buy more credits
-        </a>
-      </div>
-      <div className="proj-usage-bar">
-        {projects.map((p, i) => {
-          const color = p.color ?? PROJECT_COLORS[i % PROJECT_COLORS.length];
-          const pct = total > 0 ? (p.usedCredits / total) * 100 : 0;
-          if (pct < 0.1) return null;
-          return (
-            <div
-              key={p.id}
-              className="proj-usage-segment"
-              style={{ width: `${pct}%`, background: color }}
-            >
-              <div className="proj-usage-tooltip">
-                <div className="proj-usage-tooltip-name">{p.name}</div>
-                <div className="proj-usage-tooltip-row">
-                  <span>Used credits</span>
-                  <span className="proj-usage-tooltip-val">{fmtNum(p.usedCredits)}</span>
-                </div>
-                <div className="proj-usage-tooltip-row">
-                  <span>Allocated credits</span>
-                  <span className="proj-usage-tooltip-val">{fmtNum(p.allocatedCredits)}</span>
-                </div>
-                <div className="proj-usage-tooltip-row">
-                  <span>Used prompts</span>
-                  <span className="proj-usage-tooltip-val">{fmtNum(p.usedPrompts)}</span>
-                </div>
-                <div className="proj-usage-tooltip-row">
-                  <span>Allocated prompts</span>
-                  <span className="proj-usage-tooltip-val">{fmtNum(p.allocatedPrompts)}</span>
+        <div className="proj-alloc-value">
+          <span className="proj-alloc-num">{fmtNum(allocated)}</span>
+          <span className="proj-alloc-slash">/</span>
+          <span className="proj-alloc-max">{fmtNum(max)}</span>
+        </div>
+        <div className="proj-alloc-bar">
+          {segments.map((p, i) => {
+            const color = p.color ?? PROJECT_COLORS[i % PROJECT_COLORS.length];
+            return (
+              <div
+                key={p.id}
+                className="proj-alloc-segment"
+                style={{ flexGrow: p.usedCredits, flexBasis: 0, background: color }}
+                onMouseEnter={(e) => {
+                  // Flip the tooltip to right-aligned when it would overflow the
+                  // right edge of the viewport (rightmost segments).
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const TOOLTIP_W = 220;
+                  e.currentTarget.setAttribute(
+                    "data-flip",
+                    rect.left + TOOLTIP_W > window.innerWidth - 16 ? "1" : "0",
+                  );
+                }}
+              >
+                <div className="proj-usage-tooltip">
+                  <div className="proj-usage-tooltip-name">{p.name}</div>
+                  <div className="proj-usage-tooltip-row">
+                    <span>Used credits</span>
+                    <span className="proj-usage-tooltip-val">{fmtNum(p.usedCredits)}</span>
+                  </div>
+                  <div className="proj-usage-tooltip-row">
+                    <span>Allocated credits</span>
+                    <span className="proj-usage-tooltip-val">{fmtNum(p.allocatedCredits)}</span>
+                  </div>
+                  <div className="proj-usage-tooltip-row">
+                    <span>Used prompts</span>
+                    <span className="proj-usage-tooltip-val">{fmtNum(p.usedPrompts)}</span>
+                  </div>
+                  <div className="proj-usage-tooltip-row">
+                    <span>Allocated prompts</span>
+                    <span className="proj-usage-tooltip-val">{fmtNum(p.allocatedPrompts)}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-        <div style={{ flex: 1, background: "#f4f4f5", minWidth: 4 }} />
+            );
+          })}
+          {remainder > 0 && (
+            <div className="proj-alloc-remainder" style={{ flexGrow: remainder, flexBasis: 0 }} />
+          )}
+        </div>
       </div>
     </div>
   );

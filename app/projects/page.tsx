@@ -63,11 +63,18 @@ export default async function ProjectsPage() {
   const totalUsedPrompts = projectRows.reduce((s, p) => s + p.usedPrompts, 0);
   const totalAllocatedPrompts = projectRows.reduce((s, p) => s + p.allocatedPrompts, 0);
 
+  // Workspace credit capacity ("Max"): the larger of total allocated / total used,
+  // rounded up to the next 10k so the usage bar always shows a remainder tail.
+  const CREDIT_STEP = 10000;
+  const creditBase = Math.max(totalAllocatedCredits, totalUsedCredits);
+  const maxCredits = Math.max(CREDIT_STEP, Math.ceil((creditBase + 1) / CREDIT_STEP) * CREDIT_STEP);
+
   const workspaceStats: WorkspaceStats = {
     totalUsedCredits,
     totalAllocatedCredits,
     totalUsedPrompts,
     totalAllocatedPrompts,
+    maxCredits,
   };
 
   return (

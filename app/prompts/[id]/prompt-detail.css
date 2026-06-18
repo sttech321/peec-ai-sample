@@ -5,7 +5,7 @@
 
 /* Override the parent dark layout for this page */
 .prompt-detail-page {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-geist), var(--font-geist-sans), sans-serif;
   color: #1a1a2e;
   background: #ffffff;
   min-height: 100%;
@@ -2658,7 +2658,7 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.06);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-geist), var(--font-geist-sans), sans-serif;
   color: #0f172a;
   overflow: visible;
   animation: ps-pop 0.18s ease;
