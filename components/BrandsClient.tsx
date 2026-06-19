@@ -135,9 +135,9 @@ function BrandRow({
   isNameEditing: boolean;
   isAliasEditing: boolean;
   isDomainEditing: boolean;
-  onNameClick: (brand: Brand) => void;
-  onAliasClick: (brand: Brand) => void;
-  onDomainClick: (brand: Brand) => void;
+  onNameClick: (brand: Brand, e: React.MouseEvent) => void;
+  onAliasClick: (brand: Brand, e: React.MouseEvent) => void;
+  onDomainClick: (brand: Brand, e: React.MouseEvent) => void;
 }) {
   const paletteColor = colorFromId(brand.id);
   const color = brand.color ?? paletteColor;
@@ -167,7 +167,7 @@ function BrandRow({
         />
       </td>
       <td className={`bp-td bp-td--name${isNameEditing ? " bp-td--active-edit" : ""}`}
-        onClick={() => onNameClick(brand)} title="Click to edit display name">
+        onClick={(e) => onNameClick(brand, e)} title="Click to edit display name">
         <div className="bp-name-cell">
           <BrandAvatar id={brand.id} name={brand.name} domain={brand.domains?.[0]} />
           <span className="bp-name-text">{brand.name}</span>
@@ -175,11 +175,11 @@ function BrandRow({
         </div>
       </td>
       <td className={`bp-td bp-td--muted bp-td--alias${isAliasEditing ? " bp-td--active-edit" : ""}`}
-        onClick={() => onAliasClick(brand)} title="Click to edit tracked names">
+        onClick={(e) => onAliasClick(brand, e)} title="Click to edit tracked names">
         {brand.aliases?.join(", ") || "—"}
       </td>
       <td className={`bp-td bp-td--muted bp-td--alias${isDomainEditing ? " bp-td--active-edit" : ""}`}
-        onClick={() => onDomainClick(brand)} title="Click to edit domains">
+        onClick={(e) => onDomainClick(brand, e)} title="Click to edit domains">
         {brand.domains?.join(", ") || "—"}
       </td>
       <td className="bp-td bp-td--num">{(brand.mentions ?? 0).toLocaleString()}</td>
@@ -339,6 +339,21 @@ export default function BrandsClient({
     }
   }
 
+  // Fixed-position anchor for the inline edit cards (rendered in a portal so they
+  // float above the table instead of being clipped by its vertical scroll).
+  const [editAnchor, setEditAnchor] = useState<{ top: number; left: number } | null>(null);
+  const anchorFromEvent = (e: React.MouseEvent): { top: number; left: number } => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const W = 300, H = 280, M = 8;
+    let top = rect.bottom + 4;
+    if (top + H > window.innerHeight - M) {
+      const above = rect.top - H - 4;
+      top = above >= M ? above : Math.max(M, window.innerHeight - H - M);
+    }
+    const left = Math.max(M, Math.min(rect.left, window.innerWidth - W - M));
+    return { top, left };
+  };
+
   // ── Inline display-name edit state ───────────────────────────────────────
   const [editingBrandId,  setEditingBrandId]  = useState<string | null>(null);
   const [editDisplayName, setEditDisplayName] = useState("");
@@ -357,11 +372,13 @@ export default function BrandsClient({
     return () => document.removeEventListener("mousedown", handler);
   }, [editingBrandId]);
 
-  function startEdit(brand: Brand) {
+  function startEdit(brand: Brand, e: React.MouseEvent) {
+    setEditAnchor(anchorFromEvent(e));
     setEditingBrandId(brand.id);
     setEditDisplayName(brand.name);
     setEditError(null);
     setAliasEditId(null);          // close alias card if open
+    setDomainEditId(null);
     setOpenMenu(null);
     setPickerInfo(null);
   }
@@ -411,7 +428,8 @@ export default function BrandsClient({
     return () => document.removeEventListener("mousedown", handler);
   }, [aliasEditId]);
 
-  function startAliasEdit(brand: Brand) {
+  function startAliasEdit(brand: Brand, e: React.MouseEvent) {
+    setEditAnchor(anchorFromEvent(e));
     setAliasEditId(brand.id);
     setEditAliases([...brand.aliases]);
     setNewAliasInput("");
@@ -420,6 +438,7 @@ export default function BrandsClient({
     setEditingAliasIdx(null);    // reset inline item edit
     setEditingAliasValue("");
     setEditingBrandId(null);       // close display-name card if open
+    setDomainEditId(null);
     setOpenMenu(null);
     setPickerInfo(null);
   }
@@ -472,7 +491,8 @@ export default function BrandsClient({
     return () => document.removeEventListener("mousedown", handler);
   }, [domainEditId]);
 
-  function startDomainEdit(brand: Brand) {
+  function startDomainEdit(brand: Brand, e: React.MouseEvent) {
+    setEditAnchor(anchorFromEvent(e));
     setDomainEditId(brand.id);
     setEditDomains([...brand.domains]);
     setNewDomainInput("");
@@ -720,11 +740,10 @@ export default function BrandsClient({
                           onDomainClick={startDomainEdit}
                         />
 
-                        {/* ── Display-name inline edit card ────────────── */}
-                        {isNameEditing && (
-                          <tr className="bp-edit-tr">
-                            <td colSpan={6} className="bp-edit-td">
-                              <div className="bp-edit-card" ref={editCardRef}>
+                        {/* ── Display-name inline edit card (floating popover) ── */}
+                        {isNameEditing && typeof document !== "undefined" && ReactDOM.createPortal(
+                          <div className="bp-edit-card" ref={editCardRef}
+                            style={{ position: "fixed", top: editAnchor?.top ?? 0, left: editAnchor?.left ?? 0, zIndex: 99999 }}>
                                 <label className="bp-edit-label">Display name</label>
                                 <div className="bp-edit-input-wrap">
                                   <input
@@ -751,16 +770,14 @@ export default function BrandsClient({
                                 <button className="bp-edit-save-btn" disabled={editBusy || !editDisplayName.trim()} onClick={doRename}>
                                   {editBusy ? "Saving…" : "Save changes"}
                                 </button>
-                              </div>
-                            </td>
-                          </tr>
+                          </div>,
+                          document.body
                         )}
 
                         {/* ── Tracked-names inline edit card ───────────── */}
-                        {isAliasEditing && (
-                          <tr className="bp-edit-tr">
-                            <td colSpan={6} className="bp-edit-td bp-edit-td--alias">
-                              <div className="bp-alias-card" ref={aliasCardRef} style={{ left: "calc(44px + 14px + 300px + 14px)" }}>
+                        {isAliasEditing && typeof document !== "undefined" && ReactDOM.createPortal(
+                          <div className="bp-alias-card" ref={aliasCardRef}
+                            style={{ position: "fixed", top: editAnchor?.top ?? 0, left: editAnchor?.left ?? 0, zIndex: 99999 }}>
                                 {/* Add input */}
                                 <div className="bp-alias-add-wrap">
                                   <input
@@ -888,16 +905,14 @@ export default function BrandsClient({
                                 >
                                   {aliasBusy ? "Saving…" : "Save changes"}
                                 </button>
-                              </div>
-                            </td>
-                          </tr>
+                          </div>,
+                          document.body
                         )}
 
                         {/* ── Domain inline edit card ──────────────────── */}
-                        {isDomainEditing && (
-                          <tr className="bp-edit-tr">
-                            <td colSpan={6} className="bp-edit-td bp-edit-td--domain">
-                              <div className="bp-alias-card" ref={domainCardRef} style={{ left: "calc(44px + 14px + 300px + 14px + 220px + 14px)" }}>
+                        {isDomainEditing && typeof document !== "undefined" && ReactDOM.createPortal(
+                          <div className="bp-alias-card" ref={domainCardRef}
+                            style={{ position: "fixed", top: editAnchor?.top ?? 0, left: editAnchor?.left ?? 0, zIndex: 99999 }}>
                                 {/* Add domain input */}
                                 <div className="bp-alias-add-wrap">
                                   <input
@@ -1000,9 +1015,8 @@ export default function BrandsClient({
                                 >
                                   {domainBusy ? "Saving…" : "Save changes"}
                                 </button>
-                              </div>
-                            </td>
-                          </tr>
+                          </div>,
+                          document.body
                         )}
 
                         {pickerInfo?.id === brand.id && (
