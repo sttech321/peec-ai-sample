@@ -873,7 +873,7 @@ export default function PromptDetailClient({
           headerSlot
         )}
 
-      <div className="pd-filters">
+      <div className="pd-filters" style={{ display: "block", padding: 0, border: "none", gap: 0 }}>
         <PageFilterBar
           projectName={prompt.projectName}
           projectBrands={pageFilterBrands}

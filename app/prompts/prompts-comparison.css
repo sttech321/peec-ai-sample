@@ -12,66 +12,110 @@
   min-height: 100%;
 }
 
-/* ── Filter bar ─────────────────────────────────────────────────────────── */
+/* ── Filter bar ──────────────────────────────────────────────────────────────
+   Matches Peec's filter header (image 4): a 44px (h-11) row of outlined chips,
+   surface #FDFDFD, with a full-bleed bottom separator. Peec uses py-2 (8px) so
+   8 + 28 (chip) + 8 = 44px. Tokens referenced from a.css (not imported).
+   NOTE: no `overflow` here — it would clip the chip dropdown menus (which open
+   below the bar). Chips wrap instead; with the usual 4–5 they stay on one row. */
 .pp-filter-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;                          /* gap-1.5 */
   flex-wrap: wrap;
+  /* Full-bleed: cancel the content area's p-6 (1.5rem) horizontal padding so the
+     separator spans edge-to-edge, then re-inset the chips to align with content. */
+  margin: 0 -1.5rem 16px;
+  padding: 8px 1.5rem;
+  border-bottom: 1px solid #e4e4e7;
+}
+
+/* The prompt detail page draws its own separator via .pd-filters — neutralise
+   the full-bleed border here so the line isn't doubled. */
+.pd-filters .pp-filter-bar {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
 }
 
 /* ── Generic dropdown ───────────────────────────────────────────────────── */
 .pp-dd { position: relative; }
 
+/* Peec "outlined button" chip — #FDFDFD surface, no hard border; a layered soft
+   shadow forms the border + elevation, with a subtle gradient wash on hover/press.
+   Dimensions from image 3: h-7 (28px), px-1.5 (6px), text-body-m (14px). */
 .pp-dd-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 10px;
-  background: #fff;
-  border: 1px solid #e4e4e7;
+  gap: 6px;                          /* gap-1.5 */
+  height: 28px;                      /* h-7 */
+  padding: 0 6px;                    /* px-1.5 */
+  background: #fdfdfd;               /* --peec-bg-white */
+  border: none;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 14px;                   /* text-body-m */
   font-weight: 500;
-  color: #3f3f46;
+  color: #171717;                    /* --peec-fg-primary */
   cursor: pointer;
-  transition: all 0.15s;
   white-space: nowrap;
+  box-shadow:
+    inset 0 -1px 0 0 #1717170a,
+    0 1px 3px 0 #17171714,
+    0 0 0 1px #1717170f;
+  transition: box-shadow 0.15s, background 0.15s;
 }
 .pp-dd-trigger:hover {
-  background: #fafafa;
-  border-color: #d4d4d8;
+  background-image: linear-gradient(to bottom, #17171700, #1717170a);
+  box-shadow:
+    inset 0 -1px 0 0 #1717170a,
+    0 1px 3px 0 #1717170f,
+    0 0 0 1px #17171714;
 }
-.pp-dd-trigger svg { color: #71717a; }
+.pp-dd-trigger:active {
+  background-image: linear-gradient(to bottom, #1717170a, #17171700);
+  box-shadow:
+    inset 0 1px 0 0 #1717170a,
+    0 1px 3px 0 #17171714,
+    0 0 0 1px #17171714;
+}
+.pp-dd-trigger svg { color: #17171799; }              /* leading icon — secondary */
+.pp-dd-trigger svg:last-child { color: #17171752; }   /* chevron — quaternary */
 .pp-rotate { transform: rotate(180deg); }
 
 /* ── Reset button ─────────────────────────────────────────────────────────── */
 .pp-reset-btn {
   display: inline-flex;
   align-items: center;
-  padding: 7px 13px;
-  background: transparent;
-  border: 1px solid #e4e4e7;
+  height: 28px;
+  padding: 0 10px;
+  background: #fdfdfd;
+  border: none;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
-  color: #71717a;
+  color: #17171799;
   cursor: pointer;
-  transition: all 0.15s;
   white-space: nowrap;
+  box-shadow:
+    inset 0 -1px 0 0 #1717170a,
+    0 1px 3px 0 #17171714,
+    0 0 0 1px #1717170f;
+  transition: box-shadow 0.15s, background 0.15s, color 0.15s;
 }
 .pp-reset-btn:hover {
-  background: #fafafa;
-  border-color: #d4d4d8;
-  color: #3f3f46;
+  background-image: linear-gradient(to bottom, #17171700, #1717170a);
+  color: #171717;
 }
 .pp-reset-btn-active {
   color: #ef4444;
-  border-color: #fecaca;
+  box-shadow:
+    inset 0 -1px 0 0 #1717170a,
+    0 1px 3px 0 #17171714,
+    0 0 0 1px #fecaca;
 }
 .pp-reset-btn-active:hover {
-  background: #fff5f5;
-  border-color: #fca5a5;
+  background-image: linear-gradient(to bottom, #ffffff, #fef2f2);
   color: #dc2626;
 }
 
