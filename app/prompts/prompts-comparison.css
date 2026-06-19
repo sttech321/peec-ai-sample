@@ -12,18 +12,6 @@
   min-height: 100%;
 }
 
-/* ── Breadcrumb / title ─────────────────────────────────────────────────── */
-.pp-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #18181b;
-  padding: 4px 0 0;
-}
-.pp-breadcrumb svg { color: #71717a; }
-
 /* ── Filter bar ─────────────────────────────────────────────────────────── */
 .pp-filter-bar {
   display: flex;

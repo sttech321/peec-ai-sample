@@ -707,14 +707,6 @@ export default function OverviewClient({
   return (
     <div className="prompt-detail-page">
       {selectedChat && <ChatModal chat={selectedChat} onClose={() => setSelectedChat(null)} />}
-      <div className="pd-topbar">
-        <div className="pd-breadcrumb">
-          <a href="/" className="pd-breadcrumb-link">Dashboard</a>
-          <span className="pd-breadcrumb-sep">&gt;</span>
-          <span className="pd-breadcrumb-current">Overview</span>
-        </div>
-      </div>
-
       <div className="pd-section">
         <h2 className="pd-section-title">Overview</h2>
         <p className="pd-section-subtitle">How often each brand appears in AI generated discussions</p>

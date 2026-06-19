@@ -1325,12 +1325,6 @@ export default function PromptsComparisonClient({
 
   return (
     <div className="pp-page">
-      {/* ── Breadcrumb / title ─────────────────────────────────────────── */}
-      <div className="pp-breadcrumb">
-        <Layers size={14} />
-        <span>Prompts</span>
-      </div>
-
       <SetupHintsBanner hints={setupHints} promptCount={prompts.length} />
 
       {/* ── Filter bar ────────────────────────────────────────────────── */}

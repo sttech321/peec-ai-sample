@@ -22,7 +22,8 @@ function NavItem({ href, icon, label, dot, suffix }: {
   return (
     <NextLink
       href={href}
-      className={`group flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[14px] transition-colors ${
+      title={label}
+      className={`group sidebar-nav-item flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[14px] transition-colors ${
         active
           ? "bg-zinc-100 font-medium text-zinc-900"
           : "font-normal text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900"
@@ -31,11 +32,11 @@ function NavItem({ href, icon, label, dot, suffix }: {
       <span className={active ? "text-zinc-900" : "text-zinc-500 group-hover:text-zinc-700"}>
         {icon}
       </span>
-      <span className="flex-1 truncate">
+      <span className="flex-1 truncate sidebar-nav-label">
         {label}
         {suffix && <span className="ml-1.5 font-normal text-zinc-400">· {suffix}</span>}
       </span>
-      {dot && <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />}
+      {dot && <span className="sidebar-nav-dot h-1.5 w-1.5 rounded-full bg-violet-500" />}
     </NextLink>
   );
 }

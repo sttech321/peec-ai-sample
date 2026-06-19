@@ -37,7 +37,14 @@ export default async function PromptRankingPage({ params }: { params: Promise<{ 
   ]);
 
   return (
-    <DashboardLayout currentPath="/prompts">
+    <DashboardLayout
+      currentPath="/prompts"
+      breadcrumbs={[
+        { label: "Prompts", href: "/prompts" },
+        { label: query, href: `/prompts/${promptId}` },
+        { label: "Ranking" },
+      ]}
+    >
       <RankingClient
         chatFacts={chatFacts}
         projectBrands={projectBrands}
