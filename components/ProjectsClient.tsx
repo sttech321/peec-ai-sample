@@ -11,6 +11,7 @@ import {
   COUNTRIES as ALL_COUNTRIES, LANGUAGES as ALL_LANGUAGES, ALL_TIMEZONES,
   tzLabel, tzOffset, timezoneForCountryName, languageForCountryName,
 } from "../lib/setup-types";
+import CountrySelect from "./CountrySelect";
 
 /** Circular country flag (matches the setup wizard). Falls back to the country
  *  code if the SVG fails to load — emoji flags don't render on Windows. */
@@ -574,27 +575,18 @@ function EditDetailsModal({
           <div className="proj-form-row">
             <div className="proj-form-field">
               <label className="proj-form-label">Location</label>
-              <div className="proj-edit-select-wrap">
-                <span className="proj-edit-select-flag"><CircleFlag code={selectedCountry.code} size={18} /></span>
-                <select
-                  className="proj-edit-select-native"
-                  value={location}
-                  onChange={(e) => {
-                    const newLoc = e.target.value;
-                    setLocation(newLoc);
-                    // Auto-select that country's time zone + language; user can still change them.
-                    const tz = timezoneForCountryName(newLoc);
-                    if (tz) setTimezone(tz);
-                    const lang = languageForCountryName(newLoc);
-                    if (lang) setLanguage(lang);
-                  }}
-                >
-                  {COUNTRIES.map((c) => (
-                    <option key={c.code} value={c.label}>{c.label}</option>
-                  ))}
-                </select>
-                <ChevronDown size={13} className="proj-edit-select-chevron" />
-              </div>
+              <CountrySelect
+                value={location}
+                valueType="name"
+                onChange={(newLoc) => {
+                  setLocation(newLoc);
+                  // Auto-select that country's time zone + language; user can still change them.
+                  const tz = timezoneForCountryName(newLoc);
+                  if (tz) setTimezone(tz);
+                  const lang = languageForCountryName(newLoc);
+                  if (lang) setLanguage(lang);
+                }}
+              />
             </div>
             <div className="proj-form-field">
               <label className="proj-form-label">Language</label>

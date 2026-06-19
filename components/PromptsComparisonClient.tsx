@@ -28,6 +28,7 @@ import {
 import EngineIcon from "./EngineIcon";
 import { DEFAULT_ENGINES } from "../lib/engines";
 import { COUNTRIES as ALL_COUNTRIES, LANGUAGES as ALL_LANGUAGES } from "../lib/setup-types";
+import CountrySelect from "./CountrySelect";
 
 /** Circular country flag (matches the setup wizard). Falls back to the country
  *  code if the SVG fails to load — emoji flags don't render on Windows. */
@@ -2962,43 +2963,7 @@ function NewTopicModal({
 
         <div className="pp-topic-field">
           <label className="pp-topic-label">Location</label>
-          <div className="pp-topic-select" ref={locRef}>
-            <button
-              type="button"
-              className="pp-topic-select-trigger"
-              onClick={() => setLocationOpen((v) => !v)}
-              disabled={pending}
-            >
-              <span className="pp-topic-select-value">
-                {selectedLocation && <CircleFlag code={selectedLocation.code} size={18} />}
-                {selectedLocation?.name}
-              </span>
-              <ChevronDown
-                size={14}
-                className={locationOpen ? "pp-rotate" : ""}
-              />
-            </button>
-            {locationOpen && (
-              <div className="pp-topic-select-menu">
-                {TOPIC_LOCATIONS.map((l) => (
-                  <button
-                    key={l.code}
-                    type="button"
-                    className={`pp-topic-select-option ${
-                      location === l.code ? "pp-topic-select-option-active" : ""
-                    }`}
-                    onClick={() => {
-                      setLocation(l.code);
-                      setLocationOpen(false);
-                    }}
-                  >
-                    <CircleFlag code={l.code} size={18} />
-                    {l.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <CountrySelect value={location} valueType="code" onChange={setLocation} />
         </div>
 
         <div className="pp-topic-field">
@@ -3472,20 +3437,7 @@ function AddPromptModal({
             <div className="pp-modal-grid">
               <div>
                 <label className="pp-modal-label">Location (IP Address)</label>
-                <div className="pp-modal-select-wrap">
-                  <span className="pp-modal-select-flag"><CircleFlag code={location} size={18} /></span>
-                  <select
-                    className="pp-modal-select pp-modal-select--flag"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                  >
-                    {locations.map((l) => (
-                      <option key={l.code} value={l.code}>
-                        {l.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <CountrySelect value={location} valueType="code" onChange={setLocation} />
               </div>
               <div>
                 <label className="pp-modal-label">Topic</label>
