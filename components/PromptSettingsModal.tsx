@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useTransition } from "react";
-import { X, ChevronsUpDown, Check } from "lucide-react";
+import React, { useState, useEffect, useTransition } from "react";
+import { X } from "lucide-react";
 import { updatePromptSettings } from "../app/prompts/actions";
+import CountrySelect from "./CountrySelect";
 
 interface PromptTag {
   id: string;
@@ -37,29 +38,6 @@ function tagColor(name: string): string {
   return TAG_COLOR_MAP[name?.toLowerCase()] ?? "#6b7280";
 }
 
-const LOCATIONS: Array<{ code: string; label: string }> = [
-  { code: "US", label: "United States" },
-  { code: "GB", label: "United Kingdom" },
-  { code: "CA", label: "Canada" },
-  { code: "AU", label: "Australia" },
-  { code: "DE", label: "Germany" },
-  { code: "FR", label: "France" },
-  { code: "ES", label: "Spain" },
-  { code: "IT", label: "Italy" },
-  { code: "NL", label: "Netherlands" },
-  { code: "SE", label: "Sweden" },
-  { code: "IN", label: "India" },
-  { code: "JP", label: "Japan" },
-  { code: "BR", label: "Brazil" },
-  { code: "MX", label: "Mexico" },
-];
-
-// Windows fonts don't render regional-indicator flag emoji, so use flagcdn PNGs
-// (cached, tiny, no dependency). Returns the 40w PNG for crisp 20×15 rendering.
-function flagUrl(code: string): string {
-  return `https://flagcdn.com/w40/${code.toLowerCase()}.png`;
-}
-
 export default function PromptSettingsModal({
   promptId,
   initialActive,
@@ -71,22 +49,7 @@ export default function PromptSettingsModal({
   const [isActive, setIsActive] = useState(initialActive);
   const [location, setLocation] = useState(initialLocation || "US");
   const [tagIds, setTagIds] = useState<Set<string>>(new Set(selectedTagIds));
-  const [locationOpen, setLocationOpen] = useState(false);
   const [, startTransition] = useTransition();
-
-  const locRef = useRef<HTMLDivElement>(null);
-
-  // Close location dropdown on outside click
-  useEffect(() => {
-    if (!locationOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (locRef.current && !locRef.current.contains(e.target as Node)) {
-        setLocationOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [locationOpen]);
 
   // Close modal on Escape
   useEffect(() => {
@@ -118,7 +81,6 @@ export default function PromptSettingsModal({
 
   const handleLocationSelect = (code: string) => {
     setLocation(code);
-    setLocationOpen(false);
     persist({ isActive, location: code, tagIds });
   };
 
@@ -129,8 +91,6 @@ export default function PromptSettingsModal({
     setTagIds(next);
     persist({ isActive, location, tagIds: next });
   };
-
-  const currentLocation = LOCATIONS.find((l) => l.code === location) ?? LOCATIONS[0];
 
   return (
     <div className="ps-modal-backdrop" onClick={onClose}>
@@ -161,54 +121,7 @@ export default function PromptSettingsModal({
 
           <div className="ps-field">
             <label className="ps-field-label">Location</label>
-            <div className="ps-loc-wrap" ref={locRef}>
-              <button
-                type="button"
-                className="ps-loc-trigger"
-                onClick={() => setLocationOpen((v) => !v)}
-                aria-haspopup="listbox"
-                aria-expanded={locationOpen}
-              >
-                <img
-                  src={flagUrl(currentLocation.code)}
-                  alt=""
-                  width={20}
-                  height={15}
-                  className="ps-loc-flag"
-                  loading="lazy"
-                />
-                <span className="ps-loc-name">{currentLocation.label}</span>
-                <ChevronsUpDown size={14} className="ps-loc-caret" />
-              </button>
-              {locationOpen && (
-                <div className="ps-loc-menu" role="listbox">
-                  {LOCATIONS.map((opt) => {
-                    const on = opt.code === location;
-                    return (
-                      <button
-                        key={opt.code}
-                        type="button"
-                        role="option"
-                        aria-selected={on}
-                        className={`ps-loc-item ${on ? "ps-loc-item-active" : ""}`}
-                        onClick={() => handleLocationSelect(opt.code)}
-                      >
-                        <img
-                          src={flagUrl(opt.code)}
-                          alt=""
-                          width={20}
-                          height={15}
-                          className="ps-loc-flag"
-                          loading="lazy"
-                        />
-                        <span className="ps-loc-name">{opt.label}</span>
-                        {on && <Check size={14} className="ps-loc-check" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <CountrySelect value={location} valueType="code" onChange={handleLocationSelect} />
           </div>
 
           <div className="ps-field">
