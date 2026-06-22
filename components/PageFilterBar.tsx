@@ -75,6 +75,11 @@ interface Props {
   initialDateRange?: PageFilterDateRange;
   initialModels?: string[];
   initialBrands?: string[] | null;
+  /** When true (default) the bar renders a full-bleed bottom separator that
+   *  spans the full content width (cancels the page's p-6 / 24px padding).
+   *  Set false where the bar sits inside an already-padded wrapper such as the
+   *  prompt detail page. Applied inline so it never depends on CSS hot-reload. */
+  fullBleed?: boolean;
 }
 
 const ALL_ENGINES = ["ChatGPT", "Claude", "Perplexity", "Gemini", "AI Overviews"];
@@ -655,6 +660,7 @@ export default function PageFilterBar({
   initialDateRange,
   initialModels,
   initialBrands,
+  fullBleed = true,
 }: Props) {
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[] | null>(
     initialBrands !== undefined ? initialBrands : null,
@@ -752,7 +758,22 @@ export default function PageFilterBar({
     dateRange.preset !== defaultDate.preset;
 
   return (
-    <div className="pp-filter-bar">
+    <div
+      className="pp-filter-bar"
+      style={
+        fullBleed
+          ? {
+              // Pull up by the content area's p-6 top padding (24px) so the bar
+              // sits flush under the page-title header as its own band, then
+              // full-bleed horizontally and divide from the content below — two
+              // distinct sections, like Peec.
+              margin: "-24px -24px 16px",
+              padding: "8px 24px",
+              borderBottom: "1px solid #e4e4e7",
+            }
+          : undefined
+      }
+    >
       <BrandFilterDropdown
         projectName={projectName}
         brands={projectBrands}

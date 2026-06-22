@@ -1591,3 +1591,7 @@
   border-radius: 8px;
   margin: 0;
 }
+
+.max-w-\[728px\] {
+  max-width: 728px;
+}

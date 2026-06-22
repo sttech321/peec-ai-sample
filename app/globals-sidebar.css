@@ -393,3 +393,64 @@
 /* ── Scrollbar hidden ─────────────────────────────────────────────────────── */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* ── Collapsible sidebar — mini icon rail (toggled by PageHeader) ──────────── */
+.app-sidebar {
+  transition: width 0.3s ease;
+  will-change: width;
+}
+
+/* When the toggle is active the <html> element carries `.sidebar-collapsed`,
+   shrinking the sidebar to an icon-only rail: the active project favicon sits
+   at the top, every nav item shows just its icon, and the main content
+   (flex-1) expands to fill the freed space. */
+html.sidebar-collapsed .app-sidebar {
+  width: 3.5rem;
+  min-width: 3.5rem;
+}
+
+/* Hide every text element — section labels, item labels, sub-nav groups. */
+html.sidebar-collapsed .app-sidebar .sidebar-section-label,
+html.sidebar-collapsed .app-sidebar .sidebar-sub-group,
+html.sidebar-collapsed .app-sidebar .sidebar-nav-label {
+  display: none !important;
+}
+
+/* Center the remaining icons within the rail. */
+html.sidebar-collapsed .app-sidebar .sidebar-nav-item {
+  position: relative;
+  justify-content: center;
+  gap: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Pin the notification dot to the corner instead of pushing the icon aside. */
+html.sidebar-collapsed .app-sidebar .sidebar-nav-dot {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+}
+
+/* Project switcher → favicon only, centered. */
+html.sidebar-collapsed .app-sidebar .sidebar-top {
+  padding-left: 0;
+  padding-right: 0;
+}
+html.sidebar-collapsed .app-sidebar .ps-trigger {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+html.sidebar-collapsed .app-sidebar .ps-trigger-name,
+html.sidebar-collapsed .app-sidebar .ps-trigger-chevron {
+  display: none;
+}
+
+/* Center the bottom "Refer & Earn" icon. */
+html.sidebar-collapsed .app-sidebar .sidebar-bottom {
+  display: flex;
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}

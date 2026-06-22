@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { utils as xlsxUtils, writeFile as xlsxWriteFile } from "xlsx";
 import { useRouter } from "next/navigation";
 import {
@@ -126,6 +127,12 @@ export default function PromptDetailClient({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<string | null>(null);
+  // Portal target in the shared header (DashboardLayout) for the top-right
+  // action buttons; resolved after mount so SSR markup stays in sync.
+  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setHeaderSlot(document.getElementById("page-header-actions"));
+  }, []);
   const [selectedDomainType, setSelectedDomainType] = useState<string | null>(null);
   const [typeOverrides, setTypeOverrides] = useState<Map<string, string>>(() =>
     new Map(Object.entries(initialDomainTypeOverrides ?? {}))
@@ -826,56 +833,47 @@ export default function PromptDetailClient({
           onClose={() => setIsSettingsOpen(false)}
         />
       )}
-      {/* ── Top bar ───────────────────────────────────────── */}
-      <div className="pd-topbar">
-        <div className="pd-breadcrumb">
-          <MessageSquare size={13} className="pd-breadcrumb-icon" />
-          <a href="/prompts" className="pd-breadcrumb-link">Prompts</a>
-          <span className="pd-breadcrumb-sep">›</span>
-          <span className="pd-breadcrumb-current">
-            {prompt.query.length > 52
-              ? prompt.query.slice(0, 52) + "..."
-              : prompt.query}
-          </span>
-        </div>
-
-        <div className="pd-topbar-actions">
-          {scanStatus && (
-            <span
-              className={`pd-scan-status ${scanStatus.startsWith("Error") ? "pd-scan-status-error" : ""}`}
-            >
-              {scanStatus}
-            </span>
-          )}
-          <button
-            className="pd-run-scan-btn"
-            onClick={runScan}
-            disabled={isScanning || selectedModels.length === 0}
-            title="Query selected AI engines now and refresh data"
-          >
-            {isScanning ? (
-              <>
-                <Loader2 size={14} strokeWidth={2} className="pd-spin" />
-                <span>Running…</span>
-              </>
-            ) : (
-              <>
-                <Play size={14} strokeWidth={2} />
-                <span>Run scan</span>
-              </>
+      {/* ── Top-bar actions — portaled into the shared header (top-right) ──── */}
+      {headerSlot &&
+        createPortal(
+          <div className="pd-topbar-actions">
+            {scanStatus && (
+              <span
+                className={`pd-scan-status ${scanStatus.startsWith("Error") ? "pd-scan-status-error" : ""}`}
+              >
+                {scanStatus}
+              </span>
             )}
-          </button>
-          <button
-            className="pd-settings-btn"
-            onClick={() => setIsSettingsOpen(true)}
-          >
-            <Settings size={14} strokeWidth={2} />
-            <span>Settings</span>
-          </button>
-        </div>
-      </div>
+            <button
+              className="pd-run-scan-btn"
+              onClick={runScan}
+              disabled={isScanning || selectedModels.length === 0}
+              title="Query selected AI engines now and refresh data"
+            >
+              {isScanning ? (
+                <>
+                  <Loader2 size={14} strokeWidth={2} className="pd-spin" />
+                  <span>Running…</span>
+                </>
+              ) : (
+                <>
+                  <Play size={14} strokeWidth={2} />
+                  <span>Run scan</span>
+                </>
+              )}
+            </button>
+            <button
+              className="pd-settings-btn"
+              onClick={() => setIsSettingsOpen(true)}
+            >
+              <Settings size={14} strokeWidth={2} />
+              <span>Settings</span>
+            </button>
+          </div>,
+          headerSlot
+        )}
 
-      <div className="pd-filters">
+      <div className="pd-filters" style={{ display: "block", padding: 0, border: "none", gap: 0 }}>
         <PageFilterBar
           projectName={prompt.projectName}
           projectBrands={pageFilterBrands}

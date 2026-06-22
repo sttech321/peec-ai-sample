@@ -37,6 +37,13 @@ export default function RootLayout({
   const body = (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-full flex flex-col`}>
+        {/* Restore the sidebar collapsed state before paint to avoid a flash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{if(localStorage.getItem('sidebar-collapsed')==='1'){document.documentElement.classList.add('sidebar-collapsed')}}catch(e){}",
+          }}
+        />
         {children}
       </body>
     </html>

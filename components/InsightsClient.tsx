@@ -7,7 +7,30 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
 import { Check, ChevronDown, Copy, Download, Grid2X2, ImageIcon, MoreHorizontal, RotateCcw, Search } from "lucide-react";
+import { LuEye, LuSmile, LuChartPie } from "react-icons/lu";
 import EngineIcon from "./EngineIcon";
+
+type MetricKey = "visibility" | "sentiment" | "position" | "sov";
+const METRIC_LABELS: Record<MetricKey, string> = {
+  visibility: "Visibility", sentiment: "Sentiment", position: "Position", sov: "SoV",
+};
+
+/** Exact Peec "Position" icon (two stacked circles + up/down arrow) — not a stock Lucide icon. */
+function PositionIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path fillRule="evenodd" clipRule="evenodd" d="M4.66699 8.66797C6.13856 8.66815 7.33186 9.86139 7.33203 11.333C7.33203 12.8048 6.13867 13.9979 4.66699 13.998C3.19516 13.998 2.00195 12.8049 2.00195 11.333C2.00213 9.86128 3.19527 8.66797 4.66699 8.66797ZM11.6338 2.27734C11.8918 2.10698 12.2435 2.13523 12.4707 2.3623L14.4707 4.3623C14.7303 4.62195 14.7302 5.044 14.4707 5.30371C14.211 5.56341 13.789 5.56341 13.5293 5.30371L12.665 4.43945V11.5605L13.5293 10.6963C13.789 10.4366 14.211 10.4366 14.4707 10.6963C14.7302 10.956 14.7303 11.378 14.4707 11.6377L12.4707 13.6377C12.211 13.8972 11.789 13.8972 11.5293 13.6377L9.5293 11.6377C9.26965 11.378 9.26976 10.956 9.5293 10.6963C9.789 10.4366 10.211 10.4366 10.4707 10.6963L11.335 11.5605V4.43945L10.4707 5.30371C10.211 5.56341 9.789 5.56341 9.5293 5.30371C9.26976 5.044 9.26965 4.62195 9.5293 4.3623L11.5293 2.3623L11.6338 2.27734ZM4.66699 9.99805C3.92979 9.99805 3.3322 10.5958 3.33203 11.333C3.33203 12.0703 3.92969 12.668 4.66699 12.668C5.40415 12.6678 6.00195 12.0702 6.00195 11.333C6.00178 10.5959 5.40404 9.99822 4.66699 9.99805ZM4.66699 2.00195C6.13868 2.00213 7.33203 3.19527 7.33203 4.66699C7.33186 6.13857 6.13857 7.33185 4.66699 7.33203C3.19526 7.33203 2.00213 6.13868 2.00195 4.66699C2.00195 3.19516 3.19516 2.00195 4.66699 2.00195ZM4.66699 3.33203C3.92969 3.33203 3.33203 3.92969 3.33203 4.66699C3.3322 5.40414 3.9298 6.00195 4.66699 6.00195C5.40403 6.00178 6.00178 5.40403 6.00195 4.66699C6.00195 3.9298 5.40414 3.33221 4.66699 3.33203Z" fill="currentColor"/>
+    </svg>
+  );
+}
+
+/** Metric tab icon matching the Peec design (react-icons Lucide + inline Position). */
+function MetricIcon({ metric, size = 15 }: { metric: MetricKey; size?: number }) {
+  if (metric === "visibility") return <LuEye size={size} />;
+  if (metric === "sentiment") return <LuSmile size={size} />;
+  if (metric === "position") return <PositionIcon size={size} />;
+  return <LuChartPie size={size} />;
+}
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
 import BrandsDropdown from "./BrandsDropdown";
 import {
@@ -717,7 +740,7 @@ export default function InsightsClient({
                   className={`ins-chart-tab ${chartTab === tab.key ? "ins-chart-tab--active" : ""}`}
                   onClick={() => setChartTab(tab.key)}
                 >
-                  <span>{tab.icon}</span>
+                  <MetricIcon metric={tab.key} />
                   {chartTab === tab.key && <span style={{ marginLeft: 4 }}>{tab.label}</span>}
                 </button>
               ))}
@@ -1025,10 +1048,8 @@ export default function InsightsClient({
                   className={`ins-chart-tab ${matrixTab === tab ? "ins-chart-tab--active" : ""}`}
                   onClick={() => setMatrixTab(tab)}
                 >
-                  {tab === "visibility" && <><span className="ins-eye">👁</span> Visibility</>}
-                  {tab === "sentiment" && "😊 Sentiment"}
-                  {tab === "position" && "📏 Position"}
-                  {tab === "sov" && "🥧 SoV"}
+                  <MetricIcon metric={tab} />
+                  <span style={{ marginLeft: 4 }}>{METRIC_LABELS[tab]}</span>
                 </button>
               ))}
             </div>
@@ -1179,7 +1200,7 @@ export default function InsightsClient({
                   className={`ins-chart-tab ${rankingsTab === tab.key ? "ins-chart-tab--active" : ""}`}
                   onClick={() => setRankingsTab(tab.key)}
                 >
-                  <span>{tab.icon}</span>
+                  <MetricIcon metric={tab.key} />
                   {rankingsTab === tab.key && <span style={{ marginLeft: 4 }}>{tab.label}</span>}
                 </button>
               ))}

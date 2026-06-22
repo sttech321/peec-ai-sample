@@ -1325,16 +1325,17 @@ export default function PromptsComparisonClient({
 
   return (
     <div className="pp-page">
-      {/* ── Breadcrumb / title ─────────────────────────────────────────── */}
-      <div className="pp-breadcrumb">
-        <Layers size={14} />
-        <span>Prompts</span>
-      </div>
-
       <SetupHintsBanner hints={setupHints} promptCount={prompts.length} />
 
       {/* ── Filter bar ────────────────────────────────────────────────── */}
-      <div className="pp-filter-bar">
+      <div
+        className="pp-filter-bar"
+        style={{
+          margin: "-24px -24px 16px",
+          padding: "8px 24px",
+          borderBottom: "1px solid #e4e4e7",
+        }}
+      >
         <BrandFilterDropdown
           projectName={projectName}
           brands={availableBrands}
