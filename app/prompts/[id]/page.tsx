@@ -80,7 +80,13 @@ export default async function PromptDetail({ params }: { params: Promise<{ id: s
   };
 
   return (
-    <DashboardLayout currentPath="/prompts">
+    <DashboardLayout
+      currentPath="/prompts"
+      breadcrumbs={[
+        { label: "Prompts", href: "/prompts" },
+        { label: prompt.query },
+      ]}
+    >
       <PromptDetailClient
         prompt={promptInfo}
         chatFacts={chatFacts}

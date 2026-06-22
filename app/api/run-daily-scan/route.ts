@@ -4,6 +4,7 @@ import { prompts, projects } from "../../../db/schema";
 import { eq } from "drizzle-orm";
 import { DEFAULT_ENGINES } from "../../../lib/ai-clients";
 import { runPipelineForAllEngines, type PipelineJob } from "../../../lib/run-pipeline";
+import { timezoneForCountryName } from "../../../lib/setup-types";
 
 export const runtime = "nodejs";
 
@@ -60,13 +61,22 @@ async function handler(req: Request) {
         workspaceId: prompts.workspaceId,
         query: prompts.query,
         timezone: projects.timezone,
+        location: projects.location,
       })
       .from(prompts)
       .innerJoin(projects, eq(prompts.projectId, projects.id))
       .where(eq(prompts.isActive, true));
     const now = new Date();
     activePrompts = rows
-      .filter((r) => hourInTimezone(r.timezone ?? "America/New_York", now) === localHour)
+      .filter((r) => {
+        // Prefer the explicitly stored timezone; fall back to the timezone
+        // derived from the project's country (via countries-list) so that
+        // every country is handled correctly even when timezone was never set.
+        const tz = r.timezone
+          || timezoneForCountryName(r.location ?? "")
+          || "America/New_York";
+        return hourInTimezone(tz, now) === localHour;
+      })
       .map((r) => ({ id: r.id, workspaceId: r.workspaceId, query: r.query }));
   } else {
     activePrompts = await db

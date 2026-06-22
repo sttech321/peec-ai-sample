@@ -9,8 +9,6 @@
   color: #1a1a2e;
   background: #ffffff;
   min-height: 100%;
-  margin: -32px;
-  padding: 20px 28px 40px;
 }
 
 /* ── Top Bar: Breadcrumb + Settings ──────────────────────────────────────── */
@@ -331,9 +329,9 @@
 }
 
 /* ── Section ─────────────────────────────────────────────────────────────── */
-.pd-section {
+/* .pd-section {
   padding: 24px 0 0;
-}
+} */
 
 .pd-section-title {
   font-size: 16px;

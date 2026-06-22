@@ -116,7 +116,7 @@ export default function BrandProfileClient({ initialProfile }: Props) {
   const serviceTags = servicesToTags(profile.services);
 
   return (
-    <div className="bp-page">
+    <div className="bp-page max-w-[728px]">
       <header className="bp-page-header">
         <h1 className="bp-page-title">Brand profile</h1>
         <p className="bp-page-subtitle">

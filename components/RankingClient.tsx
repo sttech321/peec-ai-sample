@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import {
-  ChevronDown, ChevronUp, RotateCcw, ChevronRight,
+  ChevronDown, ChevronUp, RotateCcw,
 } from "lucide-react";
 import DateRangeDropdown, { DateRangeValue, makePresetRange } from "./DateRangeDropdown";
 import EngineIcon from "./EngineIcon";
@@ -221,22 +221,14 @@ export default function RankingClient({
 
   return (
     <div className="rk-page">
-      {/* Header */}
-      <div className={`rk-header${promptCrumb ? " rk-header--crumb" : ""}`}>
-        {promptCrumb ? (
-          <nav className="rk-breadcrumb">
-            <a href="/prompts" className="rk-breadcrumb-link">Prompts</a>
-            <span className="rk-breadcrumb-sep"><ChevronRight size={16} /></span>
-            <a href={`/prompts/${promptCrumb.id}`} className="rk-breadcrumb-link">
-              {promptCrumb.query}
-            </a>
-            <span className="rk-breadcrumb-sep"><ChevronRight size={16} /></span>
-            <h1 className="rk-breadcrumb-current">Ranking</h1>
-          </nav>
-        ) : (
+      {/* Header — the prompt breadcrumb (Prompts › [query] › Ranking) now lives
+          in the shared page-title bar; only the standalone /ranking page renders
+          its own title here. */}
+      {!promptCrumb && (
+        <div className="rk-header">
           <h1 className="rk-title">Ranking</h1>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="rk-filterbar">
